@@ -28,7 +28,8 @@ class DetectionModel(nn.Module):
   def __init__(self, args, embedding_dim=768):
       super().__init__()
       self.encoder = AvesEmbedding(args)
-      anchor_durs_aves_samples = (args.aves_sr * np.array(args.anchor_durs_sec)).astype(int)
+      aves_sr = args.sr // args.scale_factor
+      anchor_durs_aves_samples = (aves_sr * np.array(args.anchor_durs_sec)).astype(int)
       self.detection_head = DetectionHead(anchor_durs_aves_samples, embedding_dim = embedding_dim)
       
   def forward(self, x):

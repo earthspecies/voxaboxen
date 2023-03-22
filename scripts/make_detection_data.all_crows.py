@@ -41,10 +41,12 @@ if __name__ == "__main__":
         'nest': 'crow',
     }
 
-    out_info_dir = '/home/jupyter/storage/Datasets/spanish_carrion_crows/call_detection_data.revised_anno.all_crows/'
+    # out_info_dir = '/home/jupyter/storage/Datasets/spanish_carrion_crows/call_detection_data.revised_anno.all_crows/'
+    out_info_dir = '/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.all_crows/'
 
     # the root of the spanish_carrion_crows dataset
-    base_data_dir = '/home/jupyter/storage/Datasets/spanish_carrion_crows/raw/'
+    # base_data_dir = '/home/jupyter/storage/Datasets/spanish_carrion_crows/raw/'
+    base_data_dir = '/home/jupyter/carrion_crows_data/'
 
     # ### Main ###
     # base_anno_dir = '/home/jupyter/storage/Datasets/spanish_carrion_crows/raw/Annotations_revised_by_Daniela.cleaned/'

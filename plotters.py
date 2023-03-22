@@ -4,8 +4,7 @@ from pathlib import Path
 def plot_eval(train_evals, test_evals, args):
   # train_evals : list of dicts, one dict per epoch
   # test_evals : list of dicts, one dict per epoch
-  eval_output_dir = Path(args.output_dir)
-  plot_fp = Path(eval_output_dir, "train_progress.png")
+  plot_fp = Path(args.experiment_dir, "train_progress.png")
   train_keys = train_evals[0].keys()
   test_keys = test_evals[0].keys()
   
