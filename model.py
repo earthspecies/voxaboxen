@@ -47,8 +47,17 @@ class DetectionHead(nn.Module):
   def __init__(self, anchor_durs_aves_samples, embedding_dim=768):
       super().__init__()
       n_anchors = len(anchor_durs_aves_samples)
-      max_anchor_dur = int(np.amax(anchor_durs_aves_samples))
-      self.conv = torch.nn.Conv1d(embedding_dim, n_anchors, max_anchor_dur, stride=1, padding='same')
+      self.prediction_heads = []
+      # TODO: vectorize if we want many anchor sizes
+      for anchor_dur in anchor_durs_aves_samples: 
+        if anchor_dur % 2 == 0:
+          anchor_dur += 1
+        padding = (anchor_dur - 1) // 2 # padding = 'same'
+        pool = nn.AvgPool1d(anchor_dur, stride=1, padding=padding, ceil_mode=False, count_include_pad=False)
+        head = nn.Conv1d(embedding_dim, 1, 1, stride=1)
+        poolhead = nn.Sequential(pool, head)
+        self.prediction_heads.append(poolhead)
+      self.prediction_heads = nn.ModuleList(self.prediction_heads)
       
   def forward(self, x):
       """
@@ -58,7 +67,10 @@ class DetectionHead(nn.Module):
         y (Tensor): (batch, time, n_anchors) (time at 50 Hz, aves_sr)
       """
       x = rearrange(x, 'b t c -> b c t')
-      x = self.conv(x)
+      outputs = []
+      for prediction_head in self.prediction_heads:
+        outputs.append(prediction_head(x))
+      x = torch.cat(outputs, dim = 1)
       x = rearrange(x, 'b c t -> b t c')
       return x
       
