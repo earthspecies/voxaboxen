@@ -1,7 +1,7 @@
 import pandas as pd
 import librosa
 import os
-
+import soundfile as sf
 
 def process_anno(fn, anno_dir, out_ts_dir, label_mapping):
     anno_fp = os.path.join(anno_dir, f'{fn}.txt')
@@ -47,6 +47,9 @@ if __name__ == "__main__":
     # the root of the spanish_carrion_crows dataset
     # base_data_dir = '/home/jupyter/storage/Datasets/spanish_carrion_crows/raw/'
     base_data_dir = '/home/jupyter/carrion_crows_data/'
+    resampled_clips_dir = os.path.join(base_data_dir, 'resampled_clips')
+    if not os.path.exists(resampled_clips_dir):
+      os.makedirs(resampled_clips_dir)
 
     # ### Main ###
     # base_anno_dir = '/home/jupyter/storage/Datasets/spanish_carrion_crows/raw/Annotations_revised_by_Daniela.cleaned/'
@@ -71,9 +74,12 @@ if __name__ == "__main__":
         for fn in fns:
             audio_fp = os.path.join(base_data_dir, '/'.join(fn.split('_')) + '.wav')
             duration = librosa.get_duration(filename=audio_fp)
+            audio, sr = librosa.load(audio_fp, sr=16000)
+            resampled_audio_fp = os.path.join(base_data_dir, f"{fn}.wav")
+            sf.write(resampled_audio_fp, audio, sr)
 
             ts_fp = process_anno(fn, anno_dir, out_ts_dir, label_mapping)
 
-            out_info = out_info.append({'fn': fn, 'duration': duration, 'audio_fp': audio_fp, 'timestamp_fp': ts_fp}, ignore_index=True)
+            out_info = out_info.append({'fn': fn, 'duration': duration, 'audio_fp': resampled_audio_fp, 'timestamp_fp': ts_fp}, ignore_index=True)
 
         out_info.to_csv(out_info_fp, index=False)
