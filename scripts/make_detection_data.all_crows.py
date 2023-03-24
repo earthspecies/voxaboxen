@@ -2,6 +2,7 @@ import pandas as pd
 import librosa
 import os
 import soundfile as sf
+import tqdm
 
 def process_anno(fn, anno_dir, out_ts_dir, label_mapping):
     anno_fp = os.path.join(anno_dir, f'{fn}.txt')
@@ -71,11 +72,11 @@ if __name__ == "__main__":
         out_info_fp = os.path.join(out_info_dir, f'{split}_info.csv')
 
         out_info = pd.DataFrame(columns=['fn', 'duration', 'audio_fp', 'timestamp_fp'])
-        for fn in fns:
+        for fn in tqdm.tqdm(fns):
             audio_fp = os.path.join(base_data_dir, '/'.join(fn.split('_')) + '.wav')
             duration = librosa.get_duration(filename=audio_fp)
             audio, sr = librosa.load(audio_fp, sr=16000)
-            resampled_audio_fp = os.path.join(base_data_dir, f"{fn}.wav")
+            resampled_audio_fp = os.path.join(resampled_clips_dir, f"{fn}.wav")
             sf.write(resampled_audio_fp, audio, sr)
 
             ts_fp = process_anno(fn, anno_dir, out_ts_dir, label_mapping)
