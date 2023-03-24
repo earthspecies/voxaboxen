@@ -2,6 +2,7 @@ from data import get_dataloader
 from model import DetectionModel
 from train import train
 from util import parse_args, set_seed
+from evaluation import generate_predictions, export_to_selection_table
 import sys
 from pathlib import Path
 import os
@@ -20,7 +21,13 @@ def main(args):
   dataloader = get_dataloader(args)
   
   ## Training
-  trained_model = train(model, dataloader['train'], dataloader['test'], args)
+  trained_model = train(model, dataloader['train'], dataloader['val'], args)
+  
+  ## Evaluation
+  for fn in dataloader['test']:
+    print(fn)
+    predictions = generate_predictions(trained_model, dataloader['test'][fn], args)
+    export_to_selection_table(predictions, fn, args)
 
 if __name__ == "__main__":
   main(sys.argv[1:])

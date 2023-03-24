@@ -14,13 +14,13 @@ def normalize_sig_np(sig, eps=1e-8):
 
 
 class DetectionDataset(Dataset):
-    def __init__(self, info_df, args):
+    def __init__(self, info_df, clip_hop, args):
         self.info_df = info_df
         self.anchor_win_sizes = np.array(args.anchor_durs_sec)        
         self.label_set = args.label_set
         self.sr = args.sr
         self.clip_duration = args.clip_duration
-        self.clip_hop = args.clip_hop
+        self.clip_hop = clip_hop
         self.seed = args.seed
         self.amp_aug = args.amp_aug
         if self.amp_aug:
@@ -153,7 +153,7 @@ def get_dataloader(args):
   test_info_fp = args.test_info_fp
   test_info_df = pd.read_csv(test_info_fp)
   
-  train_dataset = DetectionDataset(train_info_df, args)
+  train_dataset = DetectionDataset(train_info_df, args.clip_hop, args)
   train_dataloader = DataLoader(train_dataset,
                                 batch_size=args.batch_size, 
                                 shuffle=True,
@@ -161,7 +161,7 @@ def get_dataloader(args):
                                 pin_memory=True, 
                                 drop_last = True)
   
-  val_dataset = DetectionDataset(val_info_df, args)
+  val_dataset = DetectionDataset(val_info_df, args.clip_duration, args)
   val_dataloader = DataLoader(val_dataset,
                               batch_size=args.batch_size, 
                               shuffle=False,
@@ -169,15 +169,22 @@ def get_dataloader(args):
                               pin_memory=True, 
                               drop_last = False)
   
-  test_dataset = DetectionDataset(test_info_df, args)
-  test_dataloader = DataLoader(test_dataset,
-                               batch_size=args.batch_size, 
-                               shuffle=False,
-                               num_workers=args.num_workers,
-                               pin_memory=True, 
-                               drop_last = False)
+  test_dataloaders = {}
   
-  return {'train': train_dataloader, 'val': val_dataloader, 'test': test_dataloader}
+  for i in range(len(test_info_df)):
+    fn = test_info_df.iloc[i]['fn']
+  
+    test_file_dataset = DetectionDataset(test_info_df.iloc[i:i+1], args.clip_duration, args)
+    test_file_dataloader = DataLoader(test_file_dataset,
+                                      batch_size=args.batch_size, 
+                                      shuffle=False,
+                                      num_workers=args.num_workers,
+                                      pin_memory=True, 
+                                      drop_last = False)
+    test_dataloaders[fn] = test_file_dataloader
+    
+  
+  return {'train': train_dataloader, 'val': val_dataloader, 'test': test_dataloaders}
   
   
   

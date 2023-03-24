@@ -35,8 +35,6 @@ def train_epoch(model, t, dataloader, loss_fn, optimizer, args):
     train_loss = 0; losses = []   
     data_iterator = tqdm.tqdm(dataloader)
     for i, (X, y, c) in enumerate(data_iterator):
-      # if i>10:
-      #   break
       num_batches_seen = i
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
       logits = model(X)
@@ -73,8 +71,6 @@ def test_epoch(model, t, dataloader, loss_fn, args):
     data_iterator = tqdm.tqdm(dataloader)
     with torch.no_grad():
       for i, (X, y, c) in enumerate(data_iterator):
-        # if i>10:
-        #   break
         num_batches_seen = i
         X = torch.Tensor(X).to(device = device, dtype = torch.float)
         logits = model(X)

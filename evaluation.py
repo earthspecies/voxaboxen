@@ -1,7 +1,10 @@
 import numpy as np
 import csv
+import torch
+import os
+import tqdm
 # import pdb
-
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def pred2bbox(anchor_preds, anchor_scores, anchor_win_sizes, pred_sr):
     '''
@@ -70,7 +73,10 @@ def soft_nms(bbox_preds, bbox_scores, sigma=0.5, thresh=0.001):
     N = bbox_preds.shape[0]
 
     assert (bbox_scores.shape[0] == N)
-
+    
+    if N == 0:
+      return None, []
+    
     bbox_preds = np.concatenate((bbox_preds, np.arange(0, N)[:, None]), axis=1)
 
     # The order of boxes coordinate is [start, end]
@@ -141,6 +147,9 @@ def nms(bbox_preds, bbox_scores, iou_thresh=0.5):
     N = bbox_preds.shape[0]
 
     assert (bbox_scores.shape[0] == N)
+    
+    if N == 0:
+      return None, []
 
     bbox_preds = np.concatenate((bbox_preds, np.arange(0, N)[:, None]), axis=1)
 
@@ -198,6 +207,9 @@ def bbox2raven(bboxes, labels=None):
     labels: str or list
 
     '''
+    if bboxes is None:
+      return [['Begin Time (s)', 'End Time (s)', 'Annotation']]
+    
     N = bboxes.shape[0]
 
     if labels is None:
@@ -216,7 +228,6 @@ def bbox2raven(bboxes, labels=None):
 
     return out
 
-
 def write_tsv(out_fp, data):
     '''
     out_fp:
@@ -231,7 +242,39 @@ def write_tsv(out_fp, data):
         for row in data:
             tsv_output.writerow(row)
 
+  
+def generate_predictions(model, dataloader, args):
+  model = model.to(device)
+  model.eval()
+  
+  all_predictions = []
+  with torch.no_grad():
+    for i, (X, _, _) in tqdm.tqdm(enumerate(dataloader)):
+      X = torch.Tensor(X).to(device = device, dtype = torch.float)
+      predictions = torch.sigmoid(model(X)) #[batch, time, channels]
+      all_predictions.append(predictions)
+  all_predictions = torch.cat(all_predictions)
+  all_predictions = torch.reshape(all_predictions, (-1, all_predictions.size(-1)))
+  return all_predictions.detach().cpu().numpy()
 
+def export_to_selection_table(predictions, fn, args):
+  anchor_preds = predictions > 0.5
+  print(f"found {np.sum(anchor_preds)} possible boxes")
+  anchor_scores = predictions
+  anchor_win_sizes = args.anchor_durs_sec
+  pred_sr = args.sr // args.scale_factor
+  bboxes, scores = pred2bbox(anchor_preds, anchor_scores, anchor_win_sizes, pred_sr)
+  snms_bboxes, _ = soft_nms(bboxes, scores, sigma=0.5, thresh=0.001)
+  nms_bboxes, _ = nms(bboxes, scores, iou_thresh=0.5)
+  
+  target_fp = os.path.join(args.experiment_dir, f"snms_pred_{fn}.txt")
+  st = bbox2raven(snms_bboxes, "crow")
+  write_tsv(target_fp, st)  
+  
+  target_fp = os.path.join(args.experiment_dir, f"nms_pred_{fn}.txt")
+  st = bbox2raven(nms_bboxes, "crow")
+  write_tsv(target_fp, st)  
+            
 if __name__ == "__main__":
     anchor_preds = np.array(
         [
