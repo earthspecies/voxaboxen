@@ -245,13 +245,16 @@ def write_tsv(out_fp, data):
   
 def generate_predictions(model, dataloader, args):
   model = model.to(device)
-  model.eval()
+  # model.eval()
   
   all_predictions = []
   with torch.no_grad():
     for i, (X, _, _) in tqdm.tqdm(enumerate(dataloader)):
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
+      # print(X)
+      # print(model(X)[0,:,0])
       predictions = torch.sigmoid(model(X)) #[batch, time, channels]
+      # print(predictions[0,:,0])
       all_predictions.append(predictions)
   all_predictions = torch.cat(all_predictions)
   all_predictions = torch.reshape(all_predictions, (-1, all_predictions.size(-1)))
@@ -262,7 +265,8 @@ def export_to_selection_table(predictions, fn, args):
   print(f"found {np.sum(anchor_preds)} possible boxes")
   anchor_scores = predictions
   anchor_win_sizes = args.anchor_durs_sec
-  pred_sr = args.sr // args.scale_factor
+  pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
+  
   bboxes, scores = pred2bbox(anchor_preds, anchor_scores, anchor_win_sizes, pred_sr)
   snms_bboxes, _ = soft_nms(bboxes, scores, sigma=0.5, thresh=0.001)
   nms_bboxes, _ = nms(bboxes, scores, iou_thresh=0.5)

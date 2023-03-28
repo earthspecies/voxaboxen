@@ -12,7 +12,7 @@ def parse_args(args):
   parser.add_argument('--seed', type=int, default=0) 
 
   # Data
-  parser.add_argument('--anchor-durs-sec', type=str, default = "0.5,1.0,1.5,2.0,2.5,3.0", help = "CSV: Duration of detection anchors, in seconds")
+  parser.add_argument('--anchor-durs-sec', type=str, default = "0.2,0.5,1.0,2.0,3.0", help = "CSV: Duration of detection anchors, in seconds")
   parser.add_argument('--label-set', type=str, default = "crow", help = "CSV: names of labels")
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
@@ -25,6 +25,7 @@ def parse_args(args):
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by aves")
   parser.add_argument('--model-weight-fp', type=str, default = "/home/jupyter/carrion_crows/clip/pretrained_weights/aves-base-bio.pt")
+  parser.add_argument('--prediction-scale-factor', type=int, default = 10, help = "downsampling rate from aves sr to prediction sr")
   
   # Training
   parser.add_argument('--batch-size', type=int, default=2) 

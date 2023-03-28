@@ -21,7 +21,7 @@ def main(args):
   dataloader = get_dataloader(args)
   
   ## Training
-  trained_model = train(model, dataloader['train'], dataloader['val'], args)
+  trained_model = train(model, dataloader['train'], dataloader['val'], args)  
   
   ## Evaluation
   for fn in dataloader['test']:

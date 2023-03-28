@@ -37,12 +37,12 @@ def train_epoch(model, t, dataloader, loss_fn, optimizer, args):
     for i, (X, y, c) in enumerate(data_iterator):
       num_batches_seen = i
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
+
       logits = model(X)
       
       # aves may have a 1 sample difference from targets
       y = torch.Tensor(y).to(device = device, dtype = torch.float)
       y = y[:,:logits.size(1),:]
-      
       
       logits = torch.reshape(logits, (-1, logits.size(-1)))
       y = torch.reshape(y, (-1, y.size(-1)))
@@ -73,10 +73,12 @@ def test_epoch(model, t, dataloader, loss_fn, args):
       for i, (X, y, c) in enumerate(data_iterator):
         num_batches_seen = i
         X = torch.Tensor(X).to(device = device, dtype = torch.float)
+
         logits = model(X)
         y = torch.Tensor(y).to(device = device, dtype = torch.float)
         y = y[:,:logits.size(1),:]
         logits = torch.reshape(logits, (-1, logits.size(-1)))
+        print(logits)
         y = torch.reshape(y, (-1, y.size(-1)))
         loss = loss_fn(logits, y)
         test_loss += loss.item()

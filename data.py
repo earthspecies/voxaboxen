@@ -12,9 +12,8 @@ def normalize_sig_np(sig, eps=1e-8):
     sig = sig / (np.max(np.abs(sig))+eps)
     return sig
 
-
 class DetectionDataset(Dataset):
-    def __init__(self, info_df, clip_hop, args):
+    def __init__(self, info_df, clip_hop, omit_empty_clip_probability, args):
         self.info_df = info_df
         self.anchor_win_sizes = np.array(args.anchor_durs_sec)        
         self.label_set = args.label_set
@@ -29,7 +28,10 @@ class DetectionDataset(Dataset):
           assert (self.amp_aug_low_r >= 0) and (self.amp_aug_high_r <= 1) and (self.amp_aug_low_r <= self.amp_aug_high_r)
 
         self.scale_factor = args.scale_factor
+        self.prediction_scale_factor = args.prediction_scale_factor
+        self.scale_factor_raw_to_prediction = self.scale_factor*self.prediction_scale_factor
         self.rs = RandomState(seed=self.seed)
+        self.omit_empty_clip_probability = omit_empty_clip_probability
         
         # make metadata
         self.make_metadata()
@@ -70,16 +72,17 @@ class DetectionDataset(Dataset):
 
             timestamp_dict[fn] = timestamps
 
-            num_clips = int(math.floor(duration - self.clip_duration) / self.clip_hop)
+            num_clips = int(np.floor((duration - self.clip_duration) // self.clip_hop))
 
             for tt in range(num_clips):
                 start = tt*self.clip_hop
                 end = start + self.clip_duration
 
                 ivs = timestamps[start:end]
-                # if no positive intervals, skip
+                # if no positive intervals, skip with specified probability
                 if not ivs:
-                    continue
+                  if self.omit_empty_clip_probability > np.random.uniform():
+                      continue
 
                 metadata.append([fn, audio_fp, start, end])
 
@@ -101,12 +104,12 @@ class DetectionDataset(Dataset):
 
         num_anchors = len(anchor_win_sizes)
 
-        seq_len = int(math.ceil(raw_seq_len / self.scale_factor))
+        seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
 
-        anchor_anno = np.zeros((seq_len, num_anchors), dtype=np.int64)
-        class_anno = np.zeros(seq_len, dtype=np.int64) - 1
+        anchor_anno = np.zeros((seq_len, num_anchors), dtype=np.int32)
+        class_anno = np.zeros(seq_len, dtype=np.int32) - 1
 
-        anno_sr = int(self.sr // self.scale_factor)
+        anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
 
         for iv in pos_intervals:
             start, end, class_idx = iv
@@ -153,7 +156,7 @@ def get_dataloader(args):
   test_info_fp = args.test_info_fp
   test_info_df = pd.read_csv(test_info_fp)
   
-  train_dataset = DetectionDataset(train_info_df, args.clip_hop, args)
+  train_dataset = DetectionDataset(train_info_df, args.clip_hop, .95, args)
   train_dataloader = DataLoader(train_dataset,
                                 batch_size=args.batch_size, 
                                 shuffle=True,
@@ -161,7 +164,7 @@ def get_dataloader(args):
                                 pin_memory=True, 
                                 drop_last = True)
   
-  val_dataset = DetectionDataset(val_info_df, args.clip_duration, args)
+  val_dataset = DetectionDataset(val_info_df, args.clip_duration, .95, args)
   val_dataloader = DataLoader(val_dataset,
                               batch_size=args.batch_size, 
                               shuffle=False,
@@ -174,7 +177,7 @@ def get_dataloader(args):
   for i in range(len(test_info_df)):
     fn = test_info_df.iloc[i]['fn']
   
-    test_file_dataset = DetectionDataset(test_info_df.iloc[i:i+1], args.clip_duration, args)
+    test_file_dataset = DetectionDataset(test_info_df.iloc[i:i+1], args.clip_duration, 0, args)
     test_file_dataloader = DataLoader(test_file_dataset,
                                       batch_size=args.batch_size, 
                                       shuffle=False,
