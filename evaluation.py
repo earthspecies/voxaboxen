@@ -3,6 +3,8 @@ import csv
 import torch
 import os
 import tqdm
+from raven_utils import Clip
+
 # import pdb
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -277,7 +279,77 @@ def export_to_selection_table(predictions, fn, args):
   
   target_fp = os.path.join(args.experiment_dir, f"nms_pred_{fn}.txt")
   st = bbox2raven(nms_bboxes, "crow")
-  write_tsv(target_fp, st)  
+  write_tsv(target_fp, st)
+  return target_fp
+  
+def get_metrics(predictions_fp, annotations_fp):
+  c = Clip()
+  
+  # Hard coded for now
+  label_mapping = {
+        'focal': 'crow',
+        'focal?': 'crow',
+        'not focal': 'crow',
+        'not focal LD': 'crow',
+        'not focal?': 'crow',
+        'crowchicks': 'crow',
+        'crow_undeter': 'crow',
+        'nest': 'crow',
+    }
+  
+  c.load_predictions(predictions_fp)
+  c.load_annotations(annotations_fp, label_mapping = label_mapping)
+  
+  metrics = {}
+  
+  for iou_thresh in [0.2, 0.5, 0.8]:
+    c.compute_matching(IoU_minimum = iou_thresh)
+    metrics[iou_thresh] = c.evaluate()
+  
+  return metrics
+
+def summarize_metrics(metrics):
+  # metrics (dict) : {fp : fp_metrics}
+  # where
+  # metrics_dict (dict) : {iou_thresh : {'TP': int, 'FP' : int, 'FN' : int}}
+  # import pdb; pdb.set_trace()
+  
+  fps = sorted(metrics.keys())
+  iou_thresholds = sorted(metrics[fps[0]].keys())
+  
+  overall = {iou_thresh : {'TP' : 0, 'FP' : 0, 'FN' : 0} for iou_thresh in iou_thresholds}
+  
+  for fp in fps:
+    for iou_thresh in iou_thresholds:
+      counts = metrics[fp][iou_thresh]
+      overall[iou_thresh]['TP'] += counts['TP']
+      overall[iou_thresh]['FP'] += counts['FP']
+      overall[iou_thresh]['FN'] += counts['FN']
+      
+  for iou_thresh in iou_thresholds:
+    tp = overall[iou_thresh]['TP']
+    fp = overall[iou_thresh]['FP']
+    fn = overall[iou_thresh]['FN']
+    
+    if tp + fp == 0:
+      prec = 1
+    else:
+      prec = tp / (tp + fp)
+    overall[iou_thresh]['precision'] = prec
+    
+    if tp + fn == 0:
+      rec = 1
+    else:
+      rec = tp / (tp + fn)
+    overall[iou_thresh]['recall'] = rec
+      
+    if prec + rec == 0:
+      f1 = 0
+    else:
+      f1 = 2*prec*rec / (prec + rec)
+    overall[iou_thresh]['f1'] = f1
+  
+  return overall
             
 if __name__ == "__main__":
     anchor_preds = np.array(

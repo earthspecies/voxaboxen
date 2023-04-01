@@ -9,7 +9,8 @@ def parse_args(args):
   # General
   parser.add_argument('--output-dir', type=str, default="/home/jupyter/sound_event_detection/logs")
   parser.add_argument('--name', type = str, required=True)
-  parser.add_argument('--seed', type=int, default=0) 
+  parser.add_argument('--seed', type=int, default=0)
+  parser.add_argument('--annotation-selection-tables-dir', type = str, default = '/home/jupyter/carrion_crows_data/Annotations_revised_by_Daniela.cleaned/selection_tables')
 
   # Data
   parser.add_argument('--anchor-durs-sec', type=str, default = "0.2,0.5,1.0,2.0,3.0", help = "CSV: Duration of detection anchors, in seconds")

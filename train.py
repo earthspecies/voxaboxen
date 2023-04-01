@@ -78,7 +78,6 @@ def test_epoch(model, t, dataloader, loss_fn, args):
         y = torch.Tensor(y).to(device = device, dtype = torch.float)
         y = y[:,:logits.size(1),:]
         logits = torch.reshape(logits, (-1, logits.size(-1)))
-        print(logits)
         y = torch.reshape(y, (-1, y.size(-1)))
         loss = loss_fn(logits, y)
         test_loss += loss.item()
