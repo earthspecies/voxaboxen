@@ -4,6 +4,7 @@ from torch import nn
 import torch.nn as nn
 import tqdm
 from plotters import plot_eval
+from evaluation import predict_and_evaluate
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -66,23 +67,30 @@ def train_epoch(model, t, dataloader, loss_fn, optimizer, args):
                         
 def test_epoch(model, t, dataloader, loss_fn, args):
     model.eval()
-    evals = {}
-    test_loss = 0 
-    data_iterator = tqdm.tqdm(dataloader)
-    with torch.no_grad():
-      for i, (X, y, c) in enumerate(data_iterator):
-        num_batches_seen = i
-        X = torch.Tensor(X).to(device = device, dtype = torch.float)
-
-        logits = model(X)
-        y = torch.Tensor(y).to(device = device, dtype = torch.float)
-        y = y[:,:logits.size(1),:]
-        logits = torch.reshape(logits, (-1, logits.size(-1)))
-        y = torch.reshape(y, (-1, y.size(-1)))
-        loss = loss_fn(logits, y)
-        test_loss += loss.item()
-    
-    test_loss = test_loss / num_batches_seen
-    evals['loss'] = float(test_loss)
-    print(f"Epoch {t} | Test loss: {test_loss:1.3f}")
+    e = predict_and_evaluate(model, dataloader, args)['summary'][0.5]
+    evals = {k:e[k] for k in ['precision','recall','f1']}
+    print(f"Epoch {t} | Test scores @0.5IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
+    
+    
+    
+#     evals = {}
+#     test_loss = 0 
+#     data_iterator = tqdm.tqdm(dataloader)
+#     with torch.no_grad():
+#       for i, (X, y, c) in enumerate(data_iterator):
+#         num_batches_seen = i
+#         X = torch.Tensor(X).to(device = device, dtype = torch.float)
+
+#         logits = model(X)
+#         y = torch.Tensor(y).to(device = device, dtype = torch.float)
+#         y = y[:,:logits.size(1),:]
+#         logits = torch.reshape(logits, (-1, logits.size(-1)))
+#         y = torch.reshape(y, (-1, y.size(-1)))
+#         loss = loss_fn(logits, y)
+#         test_loss += loss.item()
+    
+#     test_loss = test_loss / num_batches_seen
+#     evals['loss'] = float(test_loss)
+    # print(f"Epoch {t} | Test loss: {test_loss:1.3f}")
+    # return evals

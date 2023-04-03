@@ -22,5 +22,6 @@ def plot_eval(train_evals, test_evals, args):
       plot_number += 1
       
   plt.savefig(plot_fp)
+  plt.close()
     
   

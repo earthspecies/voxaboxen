@@ -263,7 +263,7 @@ def generate_predictions(model, dataloader, args):
   return all_predictions.detach().cpu().numpy()
 
 def export_to_selection_table(predictions, fn, args):
-  anchor_preds = predictions > 0.5
+  anchor_preds = predictions > args.detection_threshold
   print(f"found {np.sum(anchor_preds)} possible boxes")
   anchor_scores = predictions
   anchor_win_sizes = args.anchor_durs_sec
@@ -350,42 +350,15 @@ def summarize_metrics(metrics):
     overall[iou_thresh]['f1'] = f1
   
   return overall
-            
-if __name__ == "__main__":
-    anchor_preds = np.array(
-        [
-            [0, 1, 1],
-            [1, 1, 0],
-            [1, 0, 0],
-            [0, 1, 0],
-        ]
-    )
 
-    anchor_scores = np.array(
-        [
-            [0, 0.6, 0.7],
-            [0.5, 0.4, 0],
-            [0.9, 0, 0],
-            [0, 0.8, 0],
-        ]
-    )
-
-    anchor_win_sizes = [0.1, 0.3, 0.5]
-
-    labels = 'crow'
-
-    pred_sr = 5
-
-    bboxes, scores = pred2bbox(anchor_preds, anchor_scores, anchor_win_sizes, pred_sr)
-    print(bboxes)
-    print(scores)
-
-    snms_bboxes, _ = soft_nms(bboxes, scores, sigma=0.5, thresh=0.001)
-    nms_bboxes, _ = nms(bboxes, scores, iou_thresh=0.5)
-
-    print(snms_bboxes)
-    print(nms_bboxes)
-
-    st = bbox2raven(snms_bboxes, labels)
-    print(st)
-    write_tsv('st.txt', st)
+def predict_and_evaluate(model, dataloader_dict, args):
+  metrics = {}
+  for fn in dataloader_dict:
+    predictions = generate_predictions(model, dataloader_dict[fn], args)
+    predictions_fp = export_to_selection_table(predictions, fn, args)
+    annotations_fp = os.path.join(args.annotation_selection_tables_dir, f"{fn}.txt")
+    metrics[fn] = get_metrics(predictions_fp, annotations_fp)
+  
+  summary = summarize_metrics(metrics)
+  metrics['summary'] = summary
+  return metrics

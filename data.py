@@ -156,7 +156,7 @@ def get_dataloader(args):
   test_info_fp = args.test_info_fp
   test_info_df = pd.read_csv(test_info_fp)
   
-  train_dataset = DetectionDataset(train_info_df, args.clip_hop, .95, args)
+  train_dataset = DetectionDataset(train_info_df, args.clip_hop, args.omit_empty_clip_prob, args)
   train_dataloader = DataLoader(train_dataset,
                                 batch_size=args.batch_size, 
                                 shuffle=True,
@@ -164,13 +164,19 @@ def get_dataloader(args):
                                 pin_memory=True, 
                                 drop_last = True)
   
-  val_dataset = DetectionDataset(val_info_df, args.clip_duration, .95, args)
-  val_dataloader = DataLoader(val_dataset,
-                              batch_size=args.batch_size, 
-                              shuffle=False,
-                              num_workers=args.num_workers,
-                              pin_memory=True, 
-                              drop_last = False)
+  val_dataloaders = {}
+  
+  for i in range(len(val_info_df)):
+    fn = val_info_df.iloc[i]['fn']
+  
+    val_file_dataset = DetectionDataset(val_info_df.iloc[i:i+1], args.clip_duration, 0, args)
+    val_file_dataloader = DataLoader(val_file_dataset,
+                                      batch_size=args.batch_size, 
+                                      shuffle=False,
+                                      num_workers=args.num_workers,
+                                      pin_memory=True, 
+                                      drop_last = False)
+    val_dataloaders[fn] = val_file_dataloader
   
   test_dataloaders = {}
   
@@ -187,7 +193,7 @@ def get_dataloader(args):
     test_dataloaders[fn] = test_file_dataloader
     
   
-  return {'train': train_dataloader, 'val': val_dataloader, 'test': test_dataloaders}
+  return {'train': train_dataloader, 'val': val_dataloaders, 'test': test_dataloaders}
   
   
   

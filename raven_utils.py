@@ -75,7 +75,7 @@ class Clip():
         self.matching = metrics.match_events(ref, est, min_iou=IoU_minimum, method="fast")
         self.matched_annotations = [p[0] for p in self.matching]
         self.matched_predictions = [p[1] for p in self.matching]
-        print("Computed matching between predictions and annotations based on IoU > %1.3f" % IoU_minimum)
+        # print("Computed matching between predictions and annotations based on IoU > %1.3f" % IoU_minimum)
         
     def refine_matching(self, start_tolerance_sec = 0.2, dur_tolerance_percent = 0.1):
         # After matching, we may want to throw out some predictions because their start and end times are too incorrect

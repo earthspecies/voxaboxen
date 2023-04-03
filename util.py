@@ -13,7 +13,7 @@ def parse_args(args):
   parser.add_argument('--annotation-selection-tables-dir', type = str, default = '/home/jupyter/carrion_crows_data/Annotations_revised_by_Daniela.cleaned/selection_tables')
 
   # Data
-  parser.add_argument('--anchor-durs-sec', type=str, default = "0.2,0.5,1.0,2.0,3.0", help = "CSV: Duration of detection anchors, in seconds")
+  parser.add_argument('--anchor-durs-sec', type=str, default = "0.33, 1.0", help = "CSV: Duration of detection anchors, in seconds")
   parser.add_argument('--label-set', type=str, default = "crow", help = "CSV: names of labels")
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
@@ -27,12 +27,14 @@ def parse_args(args):
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by aves")
   parser.add_argument('--model-weight-fp', type=str, default = "/home/jupyter/carrion_crows/clip/pretrained_weights/aves-base-bio.pt")
   parser.add_argument('--prediction-scale-factor', type=int, default = 10, help = "downsampling rate from aves sr to prediction sr")
+  parser.add_argument('--detection-threshold', type=float, default = 0.5, help = "output probability to count as positive detection")
   
   # Training
   parser.add_argument('--batch-size', type=int, default=2) 
   parser.add_argument('--pos-weight', type=float, default=1.0, help="Weight for positive classes in binary cross entropy")
   parser.add_argument('--lr', type=float, required=True) 
   parser.add_argument('--n-epochs', type=int, required=True)
+  parser.add_argument('--omit-empty-clip-prob', type=float, default=0.95, help="if a clip has no annotations, do not use for training with this probability")
   
   # Augmentations
   parser.add_argument('--amp-aug', action ="store_true", help="Whether to use amplitude augmentation") 

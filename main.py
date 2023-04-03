@@ -2,7 +2,7 @@ from data import get_dataloader
 from model import DetectionModel
 from train import train
 from util import parse_args, set_seed
-from evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics
+from evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_evaluate
 
 import yaml
 import sys
@@ -25,17 +25,7 @@ def main(args):
   trained_model = train(model, dataloader['train'], dataloader['val'], args)  
   
   ## Evaluation
-  metrics = {}
-  
-  for fn in dataloader['test']:
-    print(fn)
-    predictions = generate_predictions(trained_model, dataloader['test'][fn], args)
-    predictions_fp = export_to_selection_table(predictions, fn, args)
-    annotations_fp = os.path.join(args.annotation_selection_tables_dir, f"{fn}.txt")
-    metrics[fn] = get_metrics(predictions_fp, annotations_fp)
-  
-  summary = summarize_metrics(metrics)
-  metrics['summary'] = summary
+  metrics = predict_and_evaluate(trained_model, dataloader['test'], args)
   
   metrics_fp = os.path.join(args.experiment_dir, 'metrics.yaml')
   with open(metrics_fp, 'w') as f:
