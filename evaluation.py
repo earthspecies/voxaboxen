@@ -71,14 +71,18 @@ def soft_nms(bbox_preds, bbox_scores, sigma=0.5, thresh=0.001):
         the index of the selected boxes
     """
 
+    bbox_preds0 = bbox_preds
+    bbox_preds = bbox_preds.copy()
+    bbox_scores = bbox_scores.copy()
+
     # Indexes concatenate boxes with the last column
     N = bbox_preds.shape[0]
 
     assert (bbox_scores.shape[0] == N)
-    
+
     if N == 0:
-      return None, []
-    
+        return None, []
+
     bbox_preds = np.concatenate((bbox_preds, np.arange(0, N)[:, None]), axis=1)
 
     # The order of boxes coordinate is [start, end]
@@ -117,7 +121,7 @@ def soft_nms(bbox_preds, bbox_scores, sigma=0.5, thresh=0.001):
 
     # select the boxes and keep the corresponding indexes
     keep_indices = bbox_preds[:, 2][scores > thresh].astype(int)
-    new_bbox_preds = bbox_preds[keep_indices, :2]
+    new_bbox_preds = bbox_preds0[keep_indices, :2]
 
     return new_bbox_preds, keep_indices
 
@@ -145,13 +149,17 @@ def nms(bbox_preds, bbox_scores, iou_thresh=0.5):
         the index of the selected boxes
     """
 
+    bbox_preds0 = bbox_preds
+    bbox_preds = bbox_preds.copy()
+    bbox_scores = bbox_scores.copy()
+
     # Indexes concatenate boxes with the last column
     N = bbox_preds.shape[0]
 
     assert (bbox_scores.shape[0] == N)
-    
+
     if N == 0:
-      return None, []
+        return None, []
 
     bbox_preds = np.concatenate((bbox_preds, np.arange(0, N)[:, None]), axis=1)
 
@@ -191,7 +199,7 @@ def nms(bbox_preds, bbox_scores, iou_thresh=0.5):
 
     # select the boxes and keep the corresponding indexes
     keep_indices = bbox_preds[:, 2][scores > 0].astype(int)
-    new_bbox_preds = bbox_preds[keep_indices, :2]
+    new_bbox_preds = bbox_preds0[keep_indices, :2]
 
     return new_bbox_preds, keep_indices
 
