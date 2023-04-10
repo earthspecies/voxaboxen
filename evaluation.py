@@ -100,7 +100,7 @@ def soft_nms(bbox_preds, bbox_scores, sigma=0.5, thresh=0.001):
 
         if i != N - 1:
             maxpos = np.argmax(scores[pos:], axis=0)
-            maxscore = scores[maxpos]
+            maxscore = scores[maxpos + i + 1]
 
             if tscore < maxscore:
                 bbox_preds[i], bbox_preds[maxpos + i + 1] = bbox_preds[maxpos + i + 1].copy(), bbox_preds[i].copy()
@@ -178,7 +178,7 @@ def nms(bbox_preds, bbox_scores, iou_thresh=0.5):
 
         if i != N - 1:
             maxpos = np.argmax(scores[pos:], axis=0)
-            maxscore = scores[maxpos]
+            maxscore = scores[maxpos + i + 1]
 
             if tscore < maxscore:
                 bbox_preds[i], bbox_preds[maxpos + i + 1] = bbox_preds[maxpos + i + 1].copy(), bbox_preds[i].copy()
@@ -238,6 +238,7 @@ def bbox2raven(bboxes, labels=None):
 
     return out
 
+
 def write_tsv(out_fp, data):
     '''
     out_fp:
@@ -252,7 +253,7 @@ def write_tsv(out_fp, data):
         for row in data:
             tsv_output.writerow(row)
 
-  
+
 def generate_predictions(model, dataloader, args):
   model = model.to(device)
   # model.eval()
