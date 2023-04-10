@@ -99,13 +99,14 @@ def soft_nms(bbox_preds, bbox_scores, sigma=0.5, thresh=0.001):
         pos = i + 1
 
         if i != N - 1:
-            maxpos = np.argmax(scores[pos:], axis=0)
-            maxscore = scores[maxpos + i + 1]
+            rel_maxpos = np.argmax(scores[pos:], axis=0)
+            maxpos = pos + rel_maxpos
+            maxscore = scores[maxpos]
 
             if tscore < maxscore:
-                bbox_preds[i], bbox_preds[maxpos + i + 1] = bbox_preds[maxpos + i + 1].copy(), bbox_preds[i].copy()
-                scores[i], scores[maxpos + i + 1] = scores[maxpos + i + 1].copy(), scores[i].copy()
-                areas[i], areas[maxpos + i + 1] = areas[maxpos + i + 1].copy(), areas[i].copy()
+                bbox_preds[i], bbox_preds[maxpos] = bbox_preds[maxpos].copy(), bbox_preds[i].copy()
+                scores[i], scores[maxpos] = scores[maxpos].copy(), scores[i].copy()
+                areas[i], areas[maxpos] = areas[maxpos].copy(), areas[i].copy()
 
         # IoU calculate
         xx1 = np.maximum(bbox_preds[i, 0], bbox_preds[pos:, 0])
@@ -177,13 +178,14 @@ def nms(bbox_preds, bbox_scores, iou_thresh=0.5):
         pos = i + 1
 
         if i != N - 1:
-            maxpos = np.argmax(scores[pos:], axis=0)
-            maxscore = scores[maxpos + i + 1]
+            rel_maxpos = np.argmax(scores[pos:], axis=0)
+            maxpos = pos + rel_maxpos
+            maxscore = scores[maxpos]
 
             if tscore < maxscore:
-                bbox_preds[i], bbox_preds[maxpos + i + 1] = bbox_preds[maxpos + i + 1].copy(), bbox_preds[i].copy()
-                scores[i], scores[maxpos + i + 1] = scores[maxpos + i + 1].copy(), scores[i].copy()
-                areas[i], areas[maxpos + i + 1] = areas[maxpos + i + 1].copy(), areas[i].copy()
+                bbox_preds[i], bbox_preds[maxpos] = bbox_preds[maxpos].copy(), bbox_preds[i].copy()
+                scores[i], scores[maxpos] = scores[maxpos].copy(), scores[i].copy()
+                areas[i], areas[maxpos] = areas[maxpos].copy(), areas[i].copy()
 
         # IoU calculate
         xx1 = np.maximum(bbox_preds[i, 0], bbox_preds[pos:, 0])
