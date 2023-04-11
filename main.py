@@ -1,7 +1,7 @@
 from data import get_dataloader
 from model import DetectionModel
 from train import train
-from util import parse_args, set_seed
+from util import parse_args, set_seed, save_params
 from evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_evaluate
 
 import yaml
@@ -17,6 +17,8 @@ def main(args):
   setattr(args, 'experiment_dir', str(experiment_dir))
   if not os.path.exists(args.experiment_dir):
     os.makedirs(args.experiment_dir)
+  
+  save_params(args)
   
   model = DetectionModel(args)
   dataloader = get_dataloader(args)

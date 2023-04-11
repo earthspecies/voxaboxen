@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import librosa
 
-from numpy.random import RandomState
+from numpy.random import default_rng
 from intervaltree import IntervalTree
 from torch.utils.data import Dataset, DataLoader
 
@@ -13,25 +13,32 @@ def normalize_sig_np(sig, eps=1e-8):
     return sig
 
 class DetectionDataset(Dataset):
-    def __init__(self, info_df, clip_hop, omit_empty_clip_probability, args):
+    def __init__(self, info_df, clip_hop, train, args):
         self.info_df = info_df
         self.anchor_win_sizes = np.array(args.anchor_durs_sec)        
         self.label_set = args.label_set
         self.sr = args.sr
         self.clip_duration = args.clip_duration
         self.clip_hop = clip_hop
+        assert (self.clip_hop*args.sr).is_integer()
         self.seed = args.seed
         self.amp_aug = args.amp_aug
         if self.amp_aug:
           self.amp_aug_low_r = args.amp_aug_low_r
           self.amp_aug_high_r = args.amp_aug_high_r
-          assert (self.amp_aug_low_r >= 0) and (self.amp_aug_high_r <= 1) and (self.amp_aug_low_r <= self.amp_aug_high_r)
+          assert (self.amp_aug_low_r >= 0) #and (self.amp_aug_high_r <= 1) and 
+          assert (self.amp_aug_low_r <= self.amp_aug_high_r)
 
         self.scale_factor = args.scale_factor
         self.prediction_scale_factor = args.prediction_scale_factor
         self.scale_factor_raw_to_prediction = self.scale_factor*self.prediction_scale_factor
-        self.rs = RandomState(seed=self.seed)
-        self.omit_empty_clip_probability = omit_empty_clip_probability
+        self.rng = default_rng(seed=self.seed)
+        self.train=train
+        
+        if self.train:
+          self.omit_empty_clip_prob = args.omit_empty_clip_prob
+        else:
+          self.omit_empty_clip_prob = 0
         
         # make metadata
         self.make_metadata()
@@ -40,7 +47,7 @@ class DetectionDataset(Dataset):
         if not self.amp_aug:
             return signal
         else:
-            r = self.rs.uniform(self.amp_aug_low_r, self.amp_aug_high_r)
+            r = self.rng.uniform(self.amp_aug_low_r, self.amp_aug_high_r)
             aug_signal = r*signal
             return aug_signal
 
@@ -81,7 +88,7 @@ class DetectionDataset(Dataset):
                 ivs = timestamps[start:end]
                 # if no positive intervals, skip with specified probability
                 if not ivs:
-                  if self.omit_empty_clip_probability > np.random.uniform():
+                  if self.omit_empty_clip_prob > self.rng.uniform():
                       continue
 
                 metadata.append([fn, audio_fp, start, end])
@@ -133,12 +140,14 @@ class DetectionDataset(Dataset):
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
         audio, _ = librosa.load(audio_fp, sr=self.sr, offset=start, duration=end-start, mono=True)
+        audio = audio-np.mean(audio)
         pos_intervals = self.get_pos_intervals(fn, start, end)
         anchor_anno, class_anno = self.get_annotation(self.anchor_win_sizes, pos_intervals, audio)
 
         # ### Data Aug: amplitude ###
-        if self.amp_aug:
-            audio = normalize_sig_np(audio)
+        # audio = normalize_sig_np(audio)
+
+        if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)
 
         return audio, anchor_anno, class_anno
@@ -156,7 +165,7 @@ def get_dataloader(args):
   test_info_fp = args.test_info_fp
   test_info_df = pd.read_csv(test_info_fp)
   
-  train_dataset = DetectionDataset(train_info_df, args.clip_hop, args.omit_empty_clip_prob, args)
+  train_dataset = DetectionDataset(train_info_df, args.clip_hop, True, args)
   train_dataloader = DataLoader(train_dataset,
                                 batch_size=args.batch_size, 
                                 shuffle=True,
@@ -169,7 +178,7 @@ def get_dataloader(args):
   for i in range(len(val_info_df)):
     fn = val_info_df.iloc[i]['fn']
   
-    val_file_dataset = DetectionDataset(val_info_df.iloc[i:i+1], args.clip_duration, 0, args)
+    val_file_dataset = DetectionDataset(val_info_df.iloc[i:i+1], args.clip_duration / 2, False, args)
     val_file_dataloader = DataLoader(val_file_dataset,
                                       batch_size=args.batch_size, 
                                       shuffle=False,
@@ -183,7 +192,7 @@ def get_dataloader(args):
   for i in range(len(test_info_df)):
     fn = test_info_df.iloc[i]['fn']
   
-    test_file_dataset = DetectionDataset(test_info_df.iloc[i:i+1], args.clip_duration, 0, args)
+    test_file_dataset = DetectionDataset(test_info_df.iloc[i:i+1], args.clip_duration / 2, False, args)
     test_file_dataloader = DataLoader(test_file_dataset,
                                       batch_size=args.batch_size, 
                                       shuffle=False,

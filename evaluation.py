@@ -247,19 +247,28 @@ def write_tsv(out_fp, data):
   
 def generate_predictions(model, dataloader, args):
   model = model.to(device)
-  # model.eval()
+  model.eval()
   
   all_predictions = []
   with torch.no_grad():
     for i, (X, _, _) in tqdm.tqdm(enumerate(dataloader)):
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
-      # print(X)
-      # print(model(X)[0,:,0])
       predictions = torch.sigmoid(model(X)) #[batch, time, channels]
-      # print(predictions[0,:,0])
       all_predictions.append(predictions)
-  all_predictions = torch.cat(all_predictions)
-  all_predictions = torch.reshape(all_predictions, (-1, all_predictions.size(-1)))
+    all_predictions = torch.cat(all_predictions)
+
+    # we use half overlapping windows, need to throw aray boundary predictions
+    assert all_predictions.size(dim=1) % 2 == 0
+    first_quarter_window_dur_samples=all_predictions.size(dim=1)//4
+    last_quarter_window_dur_samples=(all_predictions.size(dim=1)//2)-first_quarter_window_dur_samples
+    
+    beginning_bit = all_predictions[0,:first_quarter_window_dur_samples,:]
+    end_bit = all_predictions[-1,-last_quarter_window_dur_samples:,:]
+    predictions_clipped = all_predictions[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
+    all_predictions = torch.reshape(predictions_clipped, (-1, predictions_clipped.size(-1)))
+    all_predictions = torch.cat([beginning_bit, all_predictions, end_bit])
+    # all_predictions = torch.reshape(all_predictions, (-1, all_predictions.size(-1)))
+    # print(all_predictions.size())
   return all_predictions.detach().cpu().numpy()
 
 def export_to_selection_table(predictions, fn, args):

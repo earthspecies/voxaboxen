@@ -2,6 +2,8 @@ import argparse
 import torch
 import numpy as np
 import random
+import logging
+import os
 
 def parse_args(args):
   parser = argparse.ArgumentParser()
@@ -13,7 +15,7 @@ def parse_args(args):
   parser.add_argument('--annotation-selection-tables-dir', type = str, default = '/home/jupyter/carrion_crows_data/Annotations_revised_by_Daniela.cleaned/selection_tables')
 
   # Data
-  parser.add_argument('--anchor-durs-sec', type=str, default = "0.33, 1.0", help = "CSV: Duration of detection anchors, in seconds")
+  parser.add_argument('--anchor-durs-sec', type=str, default = "0.33,1.0", help = "CSV: Duration of detection anchors, in seconds")
   parser.add_argument('--label-set', type=str, default = "crow", help = "CSV: names of labels")
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
@@ -34,11 +36,14 @@ def parse_args(args):
   parser.add_argument('--pos-weight', type=float, default=1.0, help="Weight for positive classes in binary cross entropy")
   parser.add_argument('--lr', type=float, required=True) 
   parser.add_argument('--n-epochs', type=int, required=True)
+  parser.add_argument('--unfreeze-encoder-epoch', type=int, default=1)
+
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0.95, help="if a clip has no annotations, do not use for training with this probability")
+  parser.add_argument('--gamma', type=float, default=0, help="parameter controlling strength of focal loss") 
   
   # Augmentations
   parser.add_argument('--amp-aug', action ="store_true", help="Whether to use amplitude augmentation") 
-  parser.add_argument('--amp-aug-low-r', type=float, default = 0.1) 
+  parser.add_argument('--amp-aug-low-r', type=float, default = 0.8) 
   parser.add_argument('--amp-aug-high-r', type=float, default = 1.0) 
   
   args = parser.parse_args()
@@ -59,3 +64,14 @@ def set_seed(seed):
   torch.manual_seed(seed)
   np.random.seed(seed)
   random.seed(seed)
+
+def save_params(args):
+    """ Save a copy of the params used for this experiment """
+    logging.info("Params:")
+    params_file = os.path.join(args.experiment_dir, "params.txt")
+    with open(params_file, "w") as f:
+        for name in sorted(vars(args)):
+            val = getattr(args, name)
+            logging.info(f"  {name}: {val}")
+            f.write(f"{name}: {val}\n")
+            

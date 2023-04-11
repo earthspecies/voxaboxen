@@ -9,7 +9,7 @@ def plot_eval(train_evals, test_evals, args):
   test_keys = test_evals[0].keys()
   
   n_plots = len(train_keys)+len(test_keys)
-  fig, ax = plt.subplots(nrows=n_plots, sharex=True)
+  fig, ax = plt.subplots(nrows=n_plots, sharex=True, figsize = (12, 4*n_plots))
   
   plot_number = 0
   for i, eval_dict_list in enumerate([train_evals, test_evals]):

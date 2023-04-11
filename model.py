@@ -12,8 +12,6 @@ class AvesEmbedding(nn.Module):
         super().__init__()
         models, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task([args.model_weight_fp])
         self.model = models[0]
-        # for param in self.model.parameters():
-        #   param.requires_grad = False
         self.sr=args.sr
 
     def forward(self, x):
@@ -25,6 +23,16 @@ class AvesEmbedding(nn.Module):
         """
         feats = self.model.extract_features(x)[0]
         return feats
+      
+    def freeze(self):
+      for param in self.model.parameters():
+          param.requires_grad = False
+          
+    def unfreeze(self):
+      for param in self.model.parameters():
+          param.requires_grad = True
+      
+      
       
 class DetectionModel(nn.Module):
   def __init__(self, args, embedding_dim=768):
@@ -46,6 +54,13 @@ class DetectionModel(nn.Module):
       feats = self.encoder(x)
       logits = self.detection_head(feats)
       return logits
+    
+  def freeze_encoder(self):
+      self.encoder.freeze()
+          
+  def unfreeze_encoder(self):
+      self.encoder.unfreeze()
+
     
 class DetectionHead(nn.Module):
   def __init__(self, anchor_durs_aves_samples, prediction_scale_factor, embedding_dim=768):
