@@ -71,14 +71,18 @@ def soft_nms(bbox_preds, bbox_scores, sigma=0.5, thresh=0.001):
         the index of the selected boxes
     """
 
+    bbox_preds0 = bbox_preds
+    bbox_preds = bbox_preds.copy()
+    bbox_scores = bbox_scores.copy()
+
     # Indexes concatenate boxes with the last column
     N = bbox_preds.shape[0]
 
     assert (bbox_scores.shape[0] == N)
-    
+
     if N == 0:
-      return None, []
-    
+        return None, []
+
     bbox_preds = np.concatenate((bbox_preds, np.arange(0, N)[:, None]), axis=1)
 
     # The order of boxes coordinate is [start, end]
@@ -95,13 +99,14 @@ def soft_nms(bbox_preds, bbox_scores, sigma=0.5, thresh=0.001):
         pos = i + 1
 
         if i != N - 1:
-            maxpos = np.argmax(scores[pos:], axis=0)
+            rel_maxpos = np.argmax(scores[pos:], axis=0)
+            maxpos = pos + rel_maxpos
             maxscore = scores[maxpos]
 
             if tscore < maxscore:
-                bbox_preds[i], bbox_preds[maxpos + i + 1] = bbox_preds[maxpos + i + 1].copy(), bbox_preds[i].copy()
-                scores[i], scores[maxpos + i + 1] = scores[maxpos + i + 1].copy(), scores[i].copy()
-                areas[i], areas[maxpos + i + 1] = areas[maxpos + i + 1].copy(), areas[i].copy()
+                bbox_preds[i], bbox_preds[maxpos] = bbox_preds[maxpos].copy(), bbox_preds[i].copy()
+                scores[i], scores[maxpos] = scores[maxpos].copy(), scores[i].copy()
+                areas[i], areas[maxpos] = areas[maxpos].copy(), areas[i].copy()
 
         # IoU calculate
         xx1 = np.maximum(bbox_preds[i, 0], bbox_preds[pos:, 0])
@@ -117,7 +122,7 @@ def soft_nms(bbox_preds, bbox_scores, sigma=0.5, thresh=0.001):
 
     # select the boxes and keep the corresponding indexes
     keep_indices = bbox_preds[:, 2][scores > thresh].astype(int)
-    new_bbox_preds = bbox_preds[keep_indices, :2]
+    new_bbox_preds = bbox_preds0[keep_indices, :2]
 
     return new_bbox_preds, keep_indices
 
@@ -145,13 +150,17 @@ def nms(bbox_preds, bbox_scores, iou_thresh=0.5):
         the index of the selected boxes
     """
 
+    bbox_preds0 = bbox_preds
+    bbox_preds = bbox_preds.copy()
+    bbox_scores = bbox_scores.copy()
+
     # Indexes concatenate boxes with the last column
     N = bbox_preds.shape[0]
 
     assert (bbox_scores.shape[0] == N)
-    
+
     if N == 0:
-      return None, []
+        return None, []
 
     bbox_preds = np.concatenate((bbox_preds, np.arange(0, N)[:, None]), axis=1)
 
@@ -169,13 +178,14 @@ def nms(bbox_preds, bbox_scores, iou_thresh=0.5):
         pos = i + 1
 
         if i != N - 1:
-            maxpos = np.argmax(scores[pos:], axis=0)
+            rel_maxpos = np.argmax(scores[pos:], axis=0)
+            maxpos = pos + rel_maxpos
             maxscore = scores[maxpos]
 
             if tscore < maxscore:
-                bbox_preds[i], bbox_preds[maxpos + i + 1] = bbox_preds[maxpos + i + 1].copy(), bbox_preds[i].copy()
-                scores[i], scores[maxpos + i + 1] = scores[maxpos + i + 1].copy(), scores[i].copy()
-                areas[i], areas[maxpos + i + 1] = areas[maxpos + i + 1].copy(), areas[i].copy()
+                bbox_preds[i], bbox_preds[maxpos] = bbox_preds[maxpos].copy(), bbox_preds[i].copy()
+                scores[i], scores[maxpos] = scores[maxpos].copy(), scores[i].copy()
+                areas[i], areas[maxpos] = areas[maxpos].copy(), areas[i].copy()
 
         # IoU calculate
         xx1 = np.maximum(bbox_preds[i, 0], bbox_preds[pos:, 0])
@@ -191,7 +201,7 @@ def nms(bbox_preds, bbox_scores, iou_thresh=0.5):
 
     # select the boxes and keep the corresponding indexes
     keep_indices = bbox_preds[:, 2][scores > 0].astype(int)
-    new_bbox_preds = bbox_preds[keep_indices, :2]
+    new_bbox_preds = bbox_preds0[keep_indices, :2]
 
     return new_bbox_preds, keep_indices
 
@@ -230,6 +240,7 @@ def bbox2raven(bboxes, labels=None):
 
     return out
 
+
 def write_tsv(out_fp, data):
     '''
     out_fp:
@@ -244,7 +255,7 @@ def write_tsv(out_fp, data):
         for row in data:
             tsv_output.writerow(row)
 
-  
+
 def generate_predictions(model, dataloader, args):
   model = model.to(device)
   model.eval()
