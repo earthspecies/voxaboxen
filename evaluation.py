@@ -27,17 +27,20 @@ def pred2bbox(anchor_preds, anchor_scores, anchor_win_sizes, pred_sr):
 
     bboxes = []
     scores = []
-    for center_idx, pred in enumerate(anchor_preds):
+    for start_idx, pred in enumerate(anchor_preds):
         for anchor_idx in pred.nonzero()[0]:
             win_size = anchor_win_sizes[anchor_idx]
 
-            half_win_size = win_size / 2.
+            # half_win_size = win_size / 2.
 
-            center = center_idx / pred_sr
+            # center = center_idx / pred_sr
+            start = start_idx / pred_sr
 
-            bbox = [max(0, center-half_win_size), center+half_win_size]
+            # bbox = [max(0, center-half_win_size), center+half_win_size]
+            bbox = [start, start+win_size]
 
-            score = anchor_scores[center_idx, anchor_idx]
+            # score = anchor_scores[center_idx, anchor_idx]
+            score = anchor_scores[start_idx, anchor_idx]
 
             bboxes.append(bbox)
             scores.append(score)

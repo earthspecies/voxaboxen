@@ -28,7 +28,7 @@ def parse_args(args):
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by aves")
   parser.add_argument('--model-weight-fp', type=str, default = "/home/jupyter/carrion_crows/clip/pretrained_weights/aves-base-bio.pt")
-  parser.add_argument('--prediction-scale-factor', type=int, default = 10, help = "downsampling rate from aves sr to prediction sr")
+  parser.add_argument('--prediction-scale-factor', type=int, default = 5, help = "downsampling rate from aves sr to prediction sr")
   parser.add_argument('--detection-threshold', type=float, default = 0.5, help = "output probability to count as positive detection")
   
   # Training

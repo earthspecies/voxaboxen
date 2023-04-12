@@ -123,17 +123,22 @@ class DetectionDataset(Dataset):
             # start_idx = int(math.ceil(start*anno_sr))
             # end_idx = int(math.floor(end*anno_sr))
 
-            center = (start+end) / 2
-            center_idx = int(round(center*anno_sr))
-            center_idx = max(min(center_idx, seq_len-1), 0)
+            # center = (start+end) / 2
+            # center_idx = int(round(center*anno_sr))
+            # center_idx = max(min(center_idx, seq_len-1), 0)
+            
+            start_idx = int(math.floor(start*anno_sr))
+            start_idx = max(min(start_idx, seq_len-1), 0)
 
             # ### Anchors ###
             interval_win_size = end-start
             anchor_idx = np.argmin(np.abs(self.anchor_win_sizes-interval_win_size))
-            anchor_anno[center_idx, anchor_idx] = 1
+            # anchor_anno[center_idx, anchor_idx] = 1
+            anchor_anno[start_idx, anchor_idx] = 1
+            
 
             # ### Class ###
-            class_anno[center_idx] = class_idx
+            class_anno[start_idx] = class_idx
 
         return anchor_anno, class_anno
 
@@ -205,43 +210,3 @@ def get_dataloader(args):
   return {'train': train_dataloader, 'val': val_dataloaders, 'test': test_dataloaders}
   
   
-  
-
-# Example, old use:
-      
-
-
-# if __name__ == "__main__":
-
-#     anchor_win_sizes = [0.1, 0.3, 0.5]
-
-#     label_set = [
-#         'crow',
-#     ]
-
-#     amp_aug_config = {
-#         'r_range': [0.1, 1],
-#         'seed': 123
-#     }
-
-#     sr = 16000
-#     clip_duration = 30
-#     clip_hop = 15
-
-#     scale_factor = 320
-
-#     info_dir = '/home/jupyter/storage/Datasets/spanish_carrion_crows/call_detection_data.revised_anno.all_crows/'
-
-#     info_fp = os.path.join(info_dir, 'dev_info.csv')
-#     # info_fp = os.path.join(info_dir, 'test_info.csv')
-#     info = pd.read_csv(info_fp)
-#     num_files_va = 1
-#     info_tr = info.iloc[:-num_files_va]
-#     info_va = info.iloc[-num_files_va:]
-
-#     dataset = DetectionDataset(anchor_win_sizes, info_va, label_set, sr, clip_duration, clip_hop, scale_factor, amp_aug_config=amp_aug_config)
-
-#     item = dataset.__getitem__(0)
-
-#     # for ii in range(100):
-#     #     item = dataset.__getitem__(ii)
