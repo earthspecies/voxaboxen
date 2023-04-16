@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import fairseq
+import math
 from einops import rearrange
 
 class AvesEmbedding(nn.Module):
@@ -32,16 +33,14 @@ class AvesEmbedding(nn.Module):
       for param in self.model.parameters():
           param.requires_grad = True
       
-      
-      
 class DetectionModel(nn.Module):
   def __init__(self, args, embedding_dim=768):
       super().__init__()
       self.encoder = AvesEmbedding(args)
+      self.args = args
       aves_sr = args.sr // args.scale_factor
       prediction_scale_factor = args.prediction_scale_factor
-      anchor_durs_aves_samples = (aves_sr * np.array(args.anchor_durs_sec)).astype(int)
-      self.detection_head = DetectionHead(anchor_durs_aves_samples, prediction_scale_factor, embedding_dim = embedding_dim)
+      self.detection_head = DetectionHead(args, embedding_dim = embedding_dim)
       
   def forward(self, x):
       """
@@ -50,10 +49,19 @@ class DetectionModel(nn.Module):
       Returns
         y (Tensor): (batch, time, n_anchors) (time at 50 Hz, aves_sr)
       """
+      
+      expected_dur_output = math.ceil(x.size(1)/self.args.scale_factor)
+            
       x = x-torch.mean(x,axis=1,keepdim=True)
       feats = self.encoder(x)
-      logits = self.detection_head(feats)
-      return logits
+      
+      #aves may be off by 1 sample from expected
+      pad = expected_dur_output - feats.size(1)
+      if pad>0:
+        feats = F.pad(feats, (0,0,0,pad), mode='reflect')
+      
+      logits, regression = self.detection_head(feats)
+      return logits, regression
     
   def freeze_encoder(self):
       self.encoder.freeze()
@@ -61,37 +69,34 @@ class DetectionModel(nn.Module):
   def unfreeze_encoder(self):
       self.encoder.unfreeze()
 
-    
 class DetectionHead(nn.Module):
-  def __init__(self, anchor_durs_aves_samples, prediction_scale_factor, embedding_dim=768):
+  def __init__(self, args, embedding_dim=768):
       super().__init__()
-      n_anchors = len(anchor_durs_aves_samples)
-      self.prediction_heads = []
-      # TODO: vectorize if we want many anchor sizes
-      for anchor_dur in anchor_durs_aves_samples: 
-        if (anchor_dur - prediction_scale_factor) % 2 != 0:
-          anchor_dur += 1
-        padding = (anchor_dur - 1) // 2 # padding = 'same'
-        pool = nn.AvgPool1d(anchor_dur, stride=prediction_scale_factor, padding=padding, ceil_mode=False, count_include_pad=False)
-        head = nn.Conv1d(embedding_dim, 1, 1, stride=1)
-        poolhead = nn.Sequential(pool, head)
-        self.prediction_heads.append(poolhead)
-      self.prediction_heads = nn.ModuleList(self.prediction_heads)
+      self.head = nn.Conv1d(embedding_dim, 3, args.prediction_scale_factor, stride=args.prediction_scale_factor, padding=0)
+      self.args=args
       
   def forward(self, x):
       """
       Input
         x (Tensor): (batch, time, embedding_dim) (time at 50 Hz, aves_sr)
       Returns
-        y (Tensor): (batch, time, n_anchors) (time at 50 Hz, aves_sr)
+        logits (Tensor): (batch, time) (time at 50 Hz, aves_sr)
+        reg (Tensor): (batch, time, 2) (time at 50 Hz, aves_sr)
       """
       x = rearrange(x, 'b t c -> b c t')
-      outputs = []
-      for prediction_head in self.prediction_heads:
-        outputs.append(prediction_head(x))
-      x = torch.cat(outputs, dim = 1)
+      x = self.head(x)
       x = rearrange(x, 'b c t -> b t c')
-      return x
+      logits = x[:,:,0]
+      
+      max_dur = 1. #todo add as param
+      max_offset = (self.args.scale_factor*self.args.prediction_scale_factor)/self.args.sr
+      
+      # start_offset = max_offset * torch.sigmoid(x[:,:,1])
+      # dur = max_dur * torch.sigmoid(x[:,:,2])
+      # reg = torch.stack([start_offset, dur], dim=-1) ##### TODO add rescaling beyond 1; this ensures regression values aren't totally weird
+      # reg = torch.sigmoid(x[:,:,1:])
+      reg = x[:,:,1:]
+      return logits, reg
       
       
       

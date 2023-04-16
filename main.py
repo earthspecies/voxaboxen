@@ -1,4 +1,4 @@
-from data import get_dataloader
+from data import get_test_dataloader
 from model import DetectionModel
 from train import train
 from util import parse_args, set_seed, save_params
@@ -21,13 +21,13 @@ def main(args):
   save_params(args)
   
   model = DetectionModel(args)
-  dataloader = get_dataloader(args)
   
   ## Training
-  trained_model = train(model, dataloader['train'], dataloader['val'], args)  
+  trained_model = train(model, args)  
   
   ## Evaluation
-  metrics = predict_and_evaluate(trained_model, dataloader['test'], args)
+  test_dataloader = get_test_dataloader(args)
+  metrics = predict_and_evaluate(trained_model, test_dataloader, args)
   
   metrics_fp = os.path.join(args.experiment_dir, 'metrics.yaml')
   with open(metrics_fp, 'w') as f:

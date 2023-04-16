@@ -7,25 +7,31 @@ import tqdm
 from plotters import plot_eval
 from evaluation import predict_and_evaluate
 from functools import partial
+from data import get_train_dataloader, get_val_dataloader
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def train(model, train_dataloader, test_dataloader, args):
+def train(model, args):
+
   model = model.to(device)
   n_anchors = len(args.anchor_durs_sec)
-  pos_weight = torch.full([n_anchors], args.pos_weight, device = device) # default pos_weight = 1
+  pos_weight = torch.full([1], args.pos_weight, device = device) # default pos_weight = 1
   gamma = args.gamma # gamma = 0 means normal BCE loss
-  loss_fn = partial(focal_loss, pos_weight=pos_weight, gamma=gamma) # nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
+  class_loss_fn = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
+  reg_loss_fn = masked_reg_loss
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
   
   train_evals = []
   test_evals = []
   
+  val_dataloader = get_val_dataloader(args)
+  
   for t in range(args.n_epochs):
       print(f"Epoch {t}\n-------------------------------")
-      model, train_eval = train_epoch(model, t, train_dataloader, loss_fn, optimizer, args)
-      test_eval = test_epoch(model, t, test_dataloader, loss_fn, args)
+      train_dataloader = get_train_dataloader(args, random_seed_shift = t) # reinitialize dataloader with different negatives each epoch
+      model, train_eval = train_epoch(model, t, train_dataloader, class_loss_fn, reg_loss_fn, optimizer, args)
+      test_eval = test_epoch(model, t, val_dataloader, class_loss_fn, reg_loss_fn, args)
       train_evals.append(train_eval.copy())
       test_evals.append(test_eval.copy())
       plot_eval(train_evals, test_evals, args)
@@ -33,7 +39,7 @@ def train(model, train_dataloader, test_dataloader, args):
   print("Done!")
   return model  
   
-def train_epoch(model, t, dataloader, loss_fn, optimizer, args):
+def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, args):
     model.train()
     if t < args.unfreeze_encoder_epoch:
       model.freeze_encoder()
@@ -44,19 +50,25 @@ def train_epoch(model, t, dataloader, loss_fn, optimizer, args):
     evals = {}
     train_loss = 0; losses = []   
     data_iterator = tqdm.tqdm(dataloader)
-    for i, (X, y, c) in enumerate(data_iterator):
+    for i, (X, y, r, c) in enumerate(data_iterator):
       num_batches_seen = i
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
-
-      logits = model(X)
+            
+      logits, regression = model(X)
       
-      # aves may have a 1 sample difference from targets
       y = torch.Tensor(y).to(device = device, dtype = torch.float)
-      y = y[:,:logits.size(1),:]
+      r = torch.Tensor(r).to(device = device, dtype = torch.float)
       
-      logits = torch.reshape(logits, (-1, logits.size(-1)))
-      y = torch.reshape(y, (-1, y.size(-1)))
-      loss = loss_fn(logits, y)
+      end_mask_perc = args.end_mask_perc
+      end_mask_dur = int(logits.size(1)*end_mask_perc) 
+      
+      logits_flat = torch.reshape(logits[:,end_mask_dur:-end_mask_dur], (-1,1))
+      y_flat = torch.reshape(y[:,end_mask_dur:-end_mask_dur], (-1, 1))
+      
+      class_loss = class_loss_fn(logits_flat, y_flat)
+      reg_loss = reg_loss_fn(regression[:,end_mask_dur:-end_mask_dur,:], r[:,end_mask_dur:-end_mask_dur,:], y[:,end_mask_dur:-end_mask_dur])
+      
+      loss = class_loss + args.lamb* reg_loss
       train_loss += loss.item()
       losses.append(loss.item())
       
@@ -74,66 +86,14 @@ def train_epoch(model, t, dataloader, loss_fn, optimizer, args):
     print(f"Epoch {t} | Train loss: {train_loss:1.3f}")
     return model, evals
                         
-def test_epoch(model, t, dataloader, loss_fn, args):
+def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     model.eval()
     e = predict_and_evaluate(model, dataloader, args)
-#     ## temporary
-#     evals = {}
-#     keys = list(e.keys())
-#     from matplotlib import pyplot as plt
-#     for key in keys:
-#       counts = e[key][0.5]
-      
-#       tp = counts['TP']
-#       fp = counts['FP']
-#       fn = counts['FN']
-
-#       if tp + fp == 0:
-#         prec = 1
-#       else:
-#         prec = tp / (tp + fp)
-
-#       if tp + fn == 0:
-#         rec = 1
-#       else:
-#         rec = tp / (tp + fn)
-
-#       if prec + rec == 0:
-#         f1 = 0
-#       else:
-#         f1 = 2*prec*rec / (prec + rec)      
-        
-#       evals[key] = f1
-      
-#     ##
     
     summary = e['summary'][0.2]
     evals = {k:summary[k] for k in ['precision','recall','f1']}
     print(f"Epoch {t} | Test scores @0.5IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
-    
-    
-    
-#     evals = {}
-#     test_loss = 0 
-#     data_iterator = tqdm.tqdm(dataloader)
-#     with torch.no_grad():
-#       for i, (X, y, c) in enumerate(data_iterator):
-#         num_batches_seen = i
-#         X = torch.Tensor(X).to(device = device, dtype = torch.float)
-
-#         logits = model(X)
-#         y = torch.Tensor(y).to(device = device, dtype = torch.float)
-#         y = y[:,:logits.size(1),:]
-#         logits = torch.reshape(logits, (-1, logits.size(-1)))
-#         y = torch.reshape(y, (-1, y.size(-1)))
-#         loss = loss_fn(logits, y)
-#         test_loss += loss.item()
-    
-#     test_loss = test_loss / num_batches_seen
-#     evals['loss'] = float(test_loss)
-    # print(f"Epoch {t} | Test loss: {test_loss:1.3f}")
-    # return evals
     
 def focal_loss(logits, y, pos_weight=1, gamma=0):
   # https://arxiv.org/pdf/1708.02002.pdf 
@@ -144,3 +104,13 @@ def focal_loss(logits, y, pos_weight=1, gamma=0):
     pt = torch.exp(-bce)
     fl = ((1-pt)**gamma)*bce
     return torch.mean(fl)
+  
+def masked_reg_loss(regression, r, y):
+  # regression, r (Tensor): [batch, time, 2]
+  # y (Tensor) : [batch, time], binary tensor of class probs
+  
+  reg_loss = F.mse_loss(regression, r, reduction='none')
+  reg_loss = reg_loss * torch.unsqueeze(y,-1) # mask
+  reg_loss = torch.sum(reg_loss, -1) # sum last dim
+  reg_loss = torch.mean(reg_loss)
+  return reg_loss

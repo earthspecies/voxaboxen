@@ -5,45 +5,37 @@ import os
 import tqdm
 from raven_utils import Clip
 
-# import pdb
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def pred2bbox(anchor_preds, anchor_scores, anchor_win_sizes, pred_sr):
+def pred2bbox(anchor_preds, anchor_scores, regressions, pred_sr):
     '''
     anchor_preds:
-        shape=(num_frames, num_anchors)
+        shape=(num_frames,)
 
     anchor_scores:
-        shape=(num_frames, num_anchors)
+        shape=(num_frames,)
 
-    anchor_win_sizes: list
-        anchor window sizes in seconds
-        len(anchor_win_sizes) == num_anchors
+    regressions:
+        shape=(num_frames, 2)
 
     pred_sr:
         prediction sampling rate in Hz
 
     '''
-
     bboxes = []
     scores = []
-    for start_idx, pred in enumerate(anchor_preds):
-        for anchor_idx in pred.nonzero()[0]:
-            win_size = anchor_win_sizes[anchor_idx]
+    for start_idx, pred in enumerate(anchor_preds):   
+        if pred:
+          duration = regressions[start_idx,1]
+          start_offset = regressions[start_idx,0] 
 
-            # half_win_size = win_size / 2.
+          start = start_offset+start_idx / pred_sr
+          bbox = [start, start+duration]
 
-            # center = center_idx / pred_sr
-            start = start_idx / pred_sr
+          score = anchor_scores[start_idx]
 
-            # bbox = [max(0, center-half_win_size), center+half_win_size]
-            bbox = [start, start+win_size]
-
-            # score = anchor_scores[center_idx, anchor_idx]
-            score = anchor_scores[start_idx, anchor_idx]
-
-            bboxes.append(bbox)
-            scores.append(score)
+          bboxes.append(bbox)
+          scores.append(score)
 
     bboxes = np.array(bboxes)
     scores = np.array(scores)
@@ -264,35 +256,48 @@ def generate_predictions(model, dataloader, args):
   model.eval()
   
   all_predictions = []
+  all_regressions = []
   with torch.no_grad():
-    for i, (X, _, _) in tqdm.tqdm(enumerate(dataloader)):
+    for i, (X, _, _, _) in tqdm.tqdm(enumerate(dataloader)):
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
-      predictions = torch.sigmoid(model(X)) #[batch, time, channels]
+      logits, regression = model(X)
+      predictions = torch.sigmoid(logits)
       all_predictions.append(predictions)
+      all_regressions.append(regression)
     all_predictions = torch.cat(all_predictions)
+    all_regressions = torch.cat(all_regressions)
 
-    # we use half overlapping windows, need to throw aray boundary predictions
+    # we use half overlapping windows, need to throw away boundary predictions
+    
+    ######## Need better checking that preds are the correct dur    
     assert all_predictions.size(dim=1) % 2 == 0
     first_quarter_window_dur_samples=all_predictions.size(dim=1)//4
     last_quarter_window_dur_samples=(all_predictions.size(dim=1)//2)-first_quarter_window_dur_samples
     
-    beginning_bit = all_predictions[0,:first_quarter_window_dur_samples,:]
-    end_bit = all_predictions[-1,-last_quarter_window_dur_samples:,:]
-    predictions_clipped = all_predictions[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
-    all_predictions = torch.reshape(predictions_clipped, (-1, predictions_clipped.size(-1)))
+    # assemble predictions
+    beginning_bit = all_predictions[0,:first_quarter_window_dur_samples]
+    end_bit = all_predictions[-1,-last_quarter_window_dur_samples:]
+    predictions_clipped = all_predictions[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples]
+    all_predictions = torch.flatten(predictions_clipped)
     all_predictions = torch.cat([beginning_bit, all_predictions, end_bit])
-    # all_predictions = torch.reshape(all_predictions, (-1, all_predictions.size(-1)))
-    # print(all_predictions.size())
-  return all_predictions.detach().cpu().numpy()
+    
+    # assemble regressions
+    beginning_bit = all_regressions[0,:first_quarter_window_dur_samples,:]
+    end_bit = all_regressions[-1,-last_quarter_window_dur_samples:,:]
+    regressions_clipped = all_regressions[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
+    all_regressions = torch.reshape(regressions_clipped, (-1, regressions_clipped.size(-1)))
+    all_regressions = torch.cat([beginning_bit, all_regressions, end_bit])
+    
+  return all_predictions.detach().cpu().numpy(), all_regressions.detach().cpu().numpy()
 
-def export_to_selection_table(predictions, fn, args):
+def export_to_selection_table(predictions, regressions, fn, args):
   anchor_preds = predictions > args.detection_threshold
   print(f"found {np.sum(anchor_preds)} possible boxes")
   anchor_scores = predictions
-  anchor_win_sizes = args.anchor_durs_sec
   pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
   
-  bboxes, scores = pred2bbox(anchor_preds, anchor_scores, anchor_win_sizes, pred_sr)
+  bboxes, scores = pred2bbox(anchor_preds, anchor_scores, regressions, pred_sr)
+  
   snms_bboxes, _ = soft_nms(bboxes, scores, sigma=0.5, thresh=0.001)
   nms_bboxes, _ = nms(bboxes, scores, iou_thresh=0.5)
   
@@ -335,7 +340,6 @@ def summarize_metrics(metrics):
   # metrics (dict) : {fp : fp_metrics}
   # where
   # metrics_dict (dict) : {iou_thresh : {'TP': int, 'FP' : int, 'FN' : int}}
-  # import pdb; pdb.set_trace()
   
   fps = sorted(metrics.keys())
   iou_thresholds = sorted(metrics[fps[0]].keys())
@@ -377,8 +381,8 @@ def summarize_metrics(metrics):
 def predict_and_evaluate(model, dataloader_dict, args):
   metrics = {}
   for fn in dataloader_dict:
-    predictions = generate_predictions(model, dataloader_dict[fn], args)
-    predictions_fp = export_to_selection_table(predictions, fn, args)
+    predictions, regressions = generate_predictions(model, dataloader_dict[fn], args)
+    predictions_fp = export_to_selection_table(predictions, regressions, fn, args)
     annotations_fp = os.path.join(args.annotation_selection_tables_dir, f"{fn}.txt")
     metrics[fn] = get_metrics(predictions_fp, annotations_fp)
   

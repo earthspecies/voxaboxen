@@ -28,7 +28,7 @@ def parse_args(args):
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by aves")
   parser.add_argument('--model-weight-fp', type=str, default = "/home/jupyter/carrion_crows/clip/pretrained_weights/aves-base-bio.pt")
-  parser.add_argument('--prediction-scale-factor', type=int, default = 5, help = "downsampling rate from aves sr to prediction sr")
+  parser.add_argument('--prediction-scale-factor', type=int, default = 1, help = "downsampling rate from aves sr to prediction sr")
   parser.add_argument('--detection-threshold', type=float, default = 0.5, help = "output probability to count as positive detection")
   
   # Training
@@ -37,9 +37,10 @@ def parse_args(args):
   parser.add_argument('--lr', type=float, required=True) 
   parser.add_argument('--n-epochs', type=int, required=True)
   parser.add_argument('--unfreeze-encoder-epoch', type=int, default=1)
-
+  parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the final frames") 
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0.95, help="if a clip has no annotations, do not use for training with this probability")
-  parser.add_argument('--gamma', type=float, default=0, help="parameter controlling strength of focal loss") 
+  parser.add_argument('--gamma', type=float, default=0, help="parameter controlling strength of focal loss")
+  parser.add_argument('--lamb', type=float, default=50, help="parameter controlling strength regression loss")                     
   
   # Augmentations
   parser.add_argument('--amp-aug', action ="store_true", help="Whether to use amplitude augmentation") 

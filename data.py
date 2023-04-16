@@ -13,7 +13,7 @@ def normalize_sig_np(sig, eps=1e-8):
     return sig
 
 class DetectionDataset(Dataset):
-    def __init__(self, info_df, clip_hop, train, args):
+    def __init__(self, info_df, clip_hop, train, args, random_seed_shift = 0):
         self.info_df = info_df
         self.anchor_win_sizes = np.array(args.anchor_durs_sec)        
         self.label_set = args.label_set
@@ -21,7 +21,7 @@ class DetectionDataset(Dataset):
         self.clip_duration = args.clip_duration
         self.clip_hop = clip_hop
         assert (self.clip_hop*args.sr).is_integer()
-        self.seed = args.seed
+        self.seed = args.seed + random_seed_shift
         self.amp_aug = args.amp_aug
         if self.amp_aug:
           self.amp_aug_low_r = args.amp_aug_low_r
@@ -37,8 +37,10 @@ class DetectionDataset(Dataset):
         
         if self.train:
           self.omit_empty_clip_prob = args.omit_empty_clip_prob
+          self.clip_start_offset = self.rng.integers(0, np.floor(self.clip_hop*self.sr)) / self.sr
         else:
           self.omit_empty_clip_prob = 0
+          self.clip_start_offset = 0
         
         # make metadata
         self.make_metadata()
@@ -61,7 +63,6 @@ class DetectionDataset(Dataset):
             label_idx = self.label_set.index(row['label'])
 
             tree.addi(start, end, label_idx)
-            # print(start, end, label_idx)
 
         return tree
 
@@ -79,10 +80,10 @@ class DetectionDataset(Dataset):
 
             timestamp_dict[fn] = timestamps
 
-            num_clips = int(np.floor((duration - self.clip_duration) // self.clip_hop))
+            num_clips = int(np.floor((duration - self.clip_duration - self.clip_start_offset) // self.clip_hop))
 
             for tt in range(num_clips):
-                start = tt*self.clip_hop
+                start = tt*self.clip_hop + self.clip_start_offset
                 end = start + self.clip_duration
 
                 ivs = timestamps[start:end]
@@ -113,8 +114,9 @@ class DetectionDataset(Dataset):
 
         seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
 
-        anchor_anno = np.zeros((seq_len, num_anchors), dtype=np.int32)
+        anchor_anno = np.zeros(seq_len, dtype=np.int32)
         class_anno = np.zeros(seq_len, dtype=np.int32) - 1
+        regression_anno = np.zeros((seq_len, 2))
 
         anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
 
@@ -129,54 +131,66 @@ class DetectionDataset(Dataset):
             
             start_idx = int(math.floor(start*anno_sr))
             start_idx = max(min(start_idx, seq_len-1), 0)
+            
 
             # ### Anchors ###
-            interval_win_size = end-start
-            anchor_idx = np.argmin(np.abs(self.anchor_win_sizes-interval_win_size))
-            # anchor_anno[center_idx, anchor_idx] = 1
-            anchor_anno[start_idx, anchor_idx] = 1
+            anchor_anno[start_idx] = 1
             
+            # ### Regression ###
+            
+            start_reg_offset = max(start-start_idx*anno_sr, 0)
+            dur_reg = end-start
+            regression_anno[start_idx,0] = start_reg_offset
+            regression_anno[start_idx,1] = dur_reg
 
             # ### Class ###
             class_anno[start_idx] = class_idx
 
-        return anchor_anno, class_anno
+        return anchor_anno, regression_anno, class_anno
 
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
-        audio, _ = librosa.load(audio_fp, sr=self.sr, offset=start, duration=end-start, mono=True)
+        audio, _ = librosa.load(audio_fp, sr=self.sr, offset=start, duration=self.clip_duration, mono=True)
         audio = audio-np.mean(audio)
         pos_intervals = self.get_pos_intervals(fn, start, end)
-        anchor_anno, class_anno = self.get_annotation(self.anchor_win_sizes, pos_intervals, audio)
+        anchor_anno, regression_anno, class_anno = self.get_annotation(self.anchor_win_sizes, pos_intervals, audio)
 
         # ### Data Aug: amplitude ###
         # audio = normalize_sig_np(audio)
 
         if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)
-
-        return audio, anchor_anno, class_anno
+                        
+        return audio, anchor_anno, regression_anno, class_anno
 
     def __len__(self):
         return len(self.metadata)
       
       
-def get_dataloader(args):
+def get_train_dataloader(args, random_seed_shift = 0):
   dev_info_fp = args.dev_info_fp
   dev_info_df = pd.read_csv(dev_info_fp)
   num_files_val = args.num_files_val
-  train_info_df = dev_info_df.iloc[:-args.num_files_val]
-  val_info_df = dev_info_df.iloc[-args.num_files_val:]
-  test_info_fp = args.test_info_fp
-  test_info_df = pd.read_csv(test_info_fp)
+  if args.num_files_val>0:
+    train_info_df = dev_info_df.iloc[:-args.num_files_val]
+  else:
+    train_info_df = dev_info_df
   
-  train_dataset = DetectionDataset(train_info_df, args.clip_hop, True, args)
+  train_dataset = DetectionDataset(train_info_df, args.clip_hop, True, args, random_seed_shift = random_seed_shift)
   train_dataloader = DataLoader(train_dataset,
                                 batch_size=args.batch_size, 
                                 shuffle=True,
                                 num_workers=args.num_workers,
                                 pin_memory=True, 
                                 drop_last = True)
+  
+  return train_dataloader
+
+def get_val_dataloader(args):
+  dev_info_fp = args.dev_info_fp
+  dev_info_df = pd.read_csv(dev_info_fp)
+  num_files_val = args.num_files_val
+  val_info_df = dev_info_df.iloc[-args.num_files_val:]
   
   val_dataloaders = {}
   
@@ -191,6 +205,12 @@ def get_dataloader(args):
                                       pin_memory=True, 
                                       drop_last = False)
     val_dataloaders[fn] = val_file_dataloader
+    
+  return val_dataloaders
+
+def get_test_dataloader(args):
+  test_info_fp = args.test_info_fp
+  test_info_df = pd.read_csv(test_info_fp)
   
   test_dataloaders = {}
   
@@ -207,6 +227,6 @@ def get_dataloader(args):
     test_dataloaders[fn] = test_file_dataloader
     
   
-  return {'train': train_dataloader, 'val': val_dataloaders, 'test': test_dataloaders}
+  return test_dataloaders
   
   
