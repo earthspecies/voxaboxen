@@ -8,6 +8,7 @@ from plotters import plot_eval
 from evaluation import predict_and_evaluate
 from functools import partial
 from data import get_train_dataloader, get_val_dataloader
+from model import preprocess_and_augment
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -53,11 +54,11 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
     for i, (X, y, r, c) in enumerate(data_iterator):
       num_batches_seen = i
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
-            
-      logits, regression = model(X)
-      
       y = torch.Tensor(y).to(device = device, dtype = torch.float)
       r = torch.Tensor(r).to(device = device, dtype = torch.float)
+      
+      X = preprocess_and_augment(X, y, r, True, args)
+      logits, regression = model(X)
       
       end_mask_perc = args.end_mask_perc
       end_mask_dur = int(logits.size(1)*end_mask_perc) 

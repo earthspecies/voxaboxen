@@ -4,6 +4,7 @@ import torch
 import os
 import tqdm
 from raven_utils import Clip
+from model import preprocess_and_augment
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -260,6 +261,7 @@ def generate_predictions(model, dataloader, args):
   with torch.no_grad():
     for i, (X, _, _, _) in tqdm.tqdm(enumerate(dataloader)):
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
+      X = preprocess_and_augment(X, None, None, False, args)
       logits, regression = model(X)
       predictions = torch.sigmoid(logits)
       all_predictions.append(predictions)
@@ -291,6 +293,12 @@ def generate_predictions(model, dataloader, args):
   return all_predictions.detach().cpu().numpy(), all_regressions.detach().cpu().numpy()
 
 def export_to_selection_table(predictions, regressions, fn, args):
+  target_fp = os.path.join(args.experiment_dir, f"probs_{fn}.npy")
+  np.save(target_fp, predictions)
+  
+  target_fp = os.path.join(args.experiment_dir, f"regressions_{fn}.npy")
+  np.save(target_fp, regressions)
+  
   anchor_preds = predictions > args.detection_threshold
   print(f"found {np.sum(anchor_preds)} possible boxes")
   anchor_scores = predictions

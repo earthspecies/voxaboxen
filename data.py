@@ -122,12 +122,6 @@ class DetectionDataset(Dataset):
 
         for iv in pos_intervals:
             start, end, class_idx = iv
-            # start_idx = int(math.ceil(start*anno_sr))
-            # end_idx = int(math.floor(end*anno_sr))
-
-            # center = (start+end) / 2
-            # center_idx = int(round(center*anno_sr))
-            # center_idx = max(min(center_idx, seq_len-1), 0)
             
             start_idx = int(math.floor(start*anno_sr))
             start_idx = max(min(start_idx, seq_len-1), 0)
@@ -154,9 +148,6 @@ class DetectionDataset(Dataset):
         audio = audio-np.mean(audio)
         pos_intervals = self.get_pos_intervals(fn, start, end)
         anchor_anno, regression_anno, class_anno = self.get_annotation(self.anchor_win_sizes, pos_intervals, audio)
-
-        # ### Data Aug: amplitude ###
-        # audio = normalize_sig_np(audio)
 
         if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)

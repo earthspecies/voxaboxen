@@ -86,18 +86,25 @@ class DetectionHead(nn.Module):
       x = rearrange(x, 'b t c -> b c t')
       x = self.head(x)
       x = rearrange(x, 'b c t -> b t c')
-      logits = x[:,:,0]
-      
-      max_dur = 1. #todo add as param
-      max_offset = (self.args.scale_factor*self.args.prediction_scale_factor)/self.args.sr
-      
-      # start_offset = max_offset * torch.sigmoid(x[:,:,1])
-      # dur = max_dur * torch.sigmoid(x[:,:,2])
-      # reg = torch.stack([start_offset, dur], dim=-1) ##### TODO add rescaling beyond 1; this ensures regression values aren't totally weird
-      # reg = torch.sigmoid(x[:,:,1:])
+      logits = x[:,:,0]      
       reg = x[:,:,1:]
       return logits, reg
       
       
-      
+
+def preprocess_and_augment(X, y, r, train, args):
+  if args.rms_norm:
+    rms = torch.mean(X ** 2, dim = 1, keepdim = True) ** (-1/2)
+    X = X * rms
+    
+  if args.mixup and train:
+    X_aug = torch.flip(X, (0,))
+    r_aug = torch.flip(r, (0,))
+    y_aug = torch.flip(y, (0,))
+    
+    X = (X + X_aug) / 2
+    r = torch.maximum(r, r_aug)
+    y = torch.maximum(y, y_aug)
+    
+  return X
       
