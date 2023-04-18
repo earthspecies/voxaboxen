@@ -72,7 +72,7 @@ class DetectionModel(nn.Module):
 class DetectionHead(nn.Module):
   def __init__(self, args, embedding_dim=768):
       super().__init__()
-      self.head = nn.Conv1d(embedding_dim, 3, args.prediction_scale_factor, stride=args.prediction_scale_factor, padding=0)
+      self.head = nn.Conv1d(embedding_dim, 2, args.prediction_scale_factor, stride=args.prediction_scale_factor, padding=0)
       self.args=args
       
   def forward(self, x):
@@ -87,7 +87,7 @@ class DetectionHead(nn.Module):
       x = self.head(x)
       x = rearrange(x, 'b c t -> b t c')
       logits = x[:,:,0]      
-      reg = x[:,:,1:]
+      reg = x[:,:,1]
       return logits, reg
       
       

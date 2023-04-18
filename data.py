@@ -114,33 +114,41 @@ class DetectionDataset(Dataset):
 
         seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
 
-        anchor_anno = np.zeros(seq_len, dtype=np.int32)
+        # anchor_anno = np.zeros(seq_len, dtype=np.int32)
         class_anno = np.zeros(seq_len, dtype=np.int32) - 1
-        regression_anno = np.zeros((seq_len, 2))
+        regression_anno = np.zeros(seq_len)
 
         anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
+        
+        soft_anchors = []
 
         for iv in pos_intervals:
             start, end, class_idx = iv
+            dur = end-start
+            
             
             start_idx = int(math.floor(start*anno_sr))
             start_idx = max(min(start_idx, seq_len-1), 0)
             
-
             # ### Anchors ###
-            anchor_anno[start_idx] = 1
+            dur_samples = np.ceil(dur * anno_sr)
+            soft_anchor = get_soft_anchor(start_idx, dur_samples, seq_len)
+            soft_anchors.append(soft_anchor)
+            # anchor_anno[start_idx] = 1
             
             # ### Regression ###
-            
-            start_reg_offset = max(start-start_idx*anno_sr, 0)
-            dur_reg = end-start
-            regression_anno[start_idx,0] = start_reg_offset
-            regression_anno[start_idx,1] = dur_reg
+            regression_anno[start_idx] = dur
 
             # ### Class ###
             class_anno[start_idx] = class_idx
+            
+        if len(soft_anchors)>0:
+          soft_anchors = np.stack(soft_anchors)
+          soft_anchors = np.amax(soft_anchors, axis = 0)
+        else:
+          soft_anchors = np.zeros(seq_len)
 
-        return anchor_anno, regression_anno, class_anno
+        return soft_anchors, regression_anno, class_anno
 
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
@@ -220,4 +228,10 @@ def get_test_dataloader(args):
   
   return test_dataloaders
   
+def get_soft_anchor(start_idx, dur_samples, seq_len):
+  std = dur_samples / 6
+  x = (np.arange(seq_len) - start_idx) ** 2
+  x = x / (2 * std**2)
+  x = np.exp(-x)
+  return x
   

@@ -5,6 +5,7 @@ import os
 import tqdm
 from raven_utils import Clip
 from model import preprocess_and_augment
+from scipy.signal import find_peaks
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -27,10 +28,12 @@ def pred2bbox(anchor_preds, anchor_scores, regressions, pred_sr):
     scores = []
     for start_idx, pred in enumerate(anchor_preds):   
         if pred:
-          duration = regressions[start_idx,1]
-          start_offset = regressions[start_idx,0] 
+          duration = regressions[start_idx]
+          
+          if duration <= 0:
+            continue
 
-          start = start_offset+start_idx / pred_sr
+          start = start_idx / pred_sr
           bbox = [start, start+duration]
 
           score = anchor_scores[start_idx]
@@ -109,7 +112,7 @@ def soft_nms(bbox_preds, bbox_scores, sigma=0.5, thresh=0.001):
         xx2 = np.minimum(bbox_preds[i, 1], bbox_preds[pos:, 1])
 
         inter = np.maximum(0.0, xx2 - xx1)
-
+        
         ovr = np.divide(inter, (areas[i] + areas[pos:] - inter))
 
         # Gaussian decay
@@ -284,10 +287,10 @@ def generate_predictions(model, dataloader, args):
     all_predictions = torch.cat([beginning_bit, all_predictions, end_bit])
     
     # assemble regressions
-    beginning_bit = all_regressions[0,:first_quarter_window_dur_samples,:]
-    end_bit = all_regressions[-1,-last_quarter_window_dur_samples:,:]
-    regressions_clipped = all_regressions[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
-    all_regressions = torch.reshape(regressions_clipped, (-1, regressions_clipped.size(-1)))
+    beginning_bit = all_regressions[0,:first_quarter_window_dur_samples]
+    end_bit = all_regressions[-1,-last_quarter_window_dur_samples:]
+    regressions_clipped = all_regressions[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples]
+    all_regressions = torch.flatten(regressions_clipped)
     all_regressions = torch.cat([beginning_bit, all_regressions, end_bit])
     
   return all_predictions.detach().cpu().numpy(), all_regressions.detach().cpu().numpy()
@@ -299,15 +302,24 @@ def export_to_selection_table(predictions, regressions, fn, args):
   target_fp = os.path.join(args.experiment_dir, f"regressions_{fn}.npy")
   np.save(target_fp, regressions)
   
+  # nms
   anchor_preds = predictions > args.detection_threshold
-  print(f"found {np.sum(anchor_preds)} possible boxes")
+  print(f"NMS: found {np.sum(anchor_preds)} possible boxes")
   anchor_scores = predictions
   pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
-  
   bboxes, scores = pred2bbox(anchor_preds, anchor_scores, regressions, pred_sr)
-  
   snms_bboxes, _ = soft_nms(bboxes, scores, sigma=0.5, thresh=0.001)
   nms_bboxes, _ = nms(bboxes, scores, iou_thresh=0.5)
+  print(f"SNMS found {len(snms_bboxes)} boxes")
+  print(f"NMS found {len(nms_bboxes)} boxes")
+  
+  # peaks
+  peaks, _ = find_peaks(predictions, height=args.detection_threshold, distance=5)
+  print(f"Peaks found {len(peaks)} boxes")
+  anchor_peak_preds = np.zeros(predictions.shape, dtype='bool')
+  anchor_peak_preds[peaks] = True
+  anchor_scores = predictions
+  peaks_bboxes, scores = pred2bbox(anchor_peak_preds, anchor_scores, regressions, pred_sr)
   
   target_fp = os.path.join(args.experiment_dir, f"snms_pred_{fn}.txt")
   st = bbox2raven(snms_bboxes, "crow")
@@ -316,6 +328,11 @@ def export_to_selection_table(predictions, regressions, fn, args):
   target_fp = os.path.join(args.experiment_dir, f"nms_pred_{fn}.txt")
   st = bbox2raven(nms_bboxes, "crow")
   write_tsv(target_fp, st)
+  
+  target_fp = os.path.join(args.experiment_dir, f"peaks_pred_{fn}.txt")
+  st = bbox2raven(peaks_bboxes, "crow")
+  write_tsv(target_fp, st)
+  
   return target_fp
   
 def get_metrics(predictions_fp, annotations_fp):

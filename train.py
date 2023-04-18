@@ -49,7 +49,7 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
     
     
     evals = {}
-    train_loss = 0; losses = []   
+    train_loss = 0; losses = []; detection_losses = []; regression_losses = []
     data_iterator = tqdm.tqdm(dataloader)
     for i, (X, y, r, c) in enumerate(data_iterator):
       num_batches_seen = i
@@ -67,11 +67,13 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
       y_flat = torch.reshape(y[:,end_mask_dur:-end_mask_dur], (-1, 1))
       
       class_loss = class_loss_fn(logits_flat, y_flat)
-      reg_loss = reg_loss_fn(regression[:,end_mask_dur:-end_mask_dur,:], r[:,end_mask_dur:-end_mask_dur,:], y[:,end_mask_dur:-end_mask_dur])
+      reg_loss = reg_loss_fn(regression[:,end_mask_dur:-end_mask_dur], r[:,end_mask_dur:-end_mask_dur], y[:,end_mask_dur:-end_mask_dur])
       
       loss = class_loss + args.lamb* reg_loss
       train_loss += loss.item()
       losses.append(loss.item())
+      detection_losses.append(class_loss.item())
+      regression_losses.append(args.lamb * reg_loss.item())
       
       # Backpropagation
       optimizer.zero_grad()
@@ -79,7 +81,7 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
       
       optimizer.step()
       if i > 10:
-        data_iterator.set_description(f"Loss {np.mean(losses[-10:]):.7f}")
+        data_iterator.set_description(f"Loss {np.mean(losses[-10:]):.7f}, Detection Loss {np.mean(detection_losses[-10:]):.7f}, Regression Loss {np.mean(regression_losses[-10:]):.7f}")
     
     train_loss = train_loss / num_batches_seen
     evals['loss'] = float(train_loss)
@@ -91,7 +93,7 @@ def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     model.eval()
     e = predict_and_evaluate(model, dataloader, args)
     
-    summary = e['summary'][0.2]
+    summary = e['summary'][0.5]
     evals = {k:summary[k] for k in ['precision','recall','f1']}
     print(f"Epoch {t} | Test scores @0.5IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
@@ -107,11 +109,10 @@ def focal_loss(logits, y, pos_weight=1, gamma=0):
     return torch.mean(fl)
   
 def masked_reg_loss(regression, r, y):
-  # regression, r (Tensor): [batch, time, 2]
+  # regression, r (Tensor): [batch, time]
   # y (Tensor) : [batch, time], binary tensor of class probs
   
-  reg_loss = F.mse_loss(regression, r, reduction='none')
-  reg_loss = reg_loss * torch.unsqueeze(y,-1) # mask
-  reg_loss = torch.sum(reg_loss, -1) # sum last dim
+  reg_loss = F.l1_loss(regression, r, reduction='none')
+  reg_loss = reg_loss * (y > .99) # mask
   reg_loss = torch.mean(reg_loss)
   return reg_loss
