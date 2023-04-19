@@ -265,8 +265,8 @@ def generate_predictions(model, dataloader, args):
     for i, (X, _, _, _) in tqdm.tqdm(enumerate(dataloader)):
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
       X = preprocess_and_augment(X, None, None, False, args)
-      logits, regression = model(X)
-      predictions = torch.sigmoid(logits)
+      predictions, regression = model(X)
+      # predictions = torch.sigmoid(logits)
       all_predictions.append(predictions)
       all_regressions.append(regression)
     all_predictions = torch.cat(all_predictions)
@@ -302,32 +302,33 @@ def export_to_selection_table(predictions, regressions, fn, args):
   target_fp = os.path.join(args.experiment_dir, f"regressions_{fn}.npy")
   np.save(target_fp, regressions)
   
-  # nms
-  anchor_preds = predictions > args.detection_threshold
-  print(f"NMS: found {np.sum(anchor_preds)} possible boxes")
-  anchor_scores = predictions
-  pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
-  bboxes, scores = pred2bbox(anchor_preds, anchor_scores, regressions, pred_sr)
-  snms_bboxes, _ = soft_nms(bboxes, scores, sigma=0.5, thresh=0.001)
-  nms_bboxes, _ = nms(bboxes, scores, iou_thresh=0.5)
-  print(f"SNMS found {len(snms_bboxes)} boxes")
-  print(f"NMS found {len(nms_bboxes)} boxes")
+  # # nms
+  # anchor_preds = predictions > args.detection_threshold
+  # print(f"NMS: found {np.sum(anchor_preds)} possible boxes")
+  # anchor_scores = predictions
+  # pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
+  # bboxes, scores = pred2bbox(anchor_preds, anchor_scores, regressions, pred_sr)
+  # snms_bboxes, _ = soft_nms(bboxes, scores, sigma=0.5, thresh=0.001)
+  # nms_bboxes, _ = nms(bboxes, scores, iou_thresh=0.5)
+  # print(f"SNMS found {len(snms_bboxes)} boxes")
+  # print(f"NMS found {len(nms_bboxes)} boxes")
   
   # peaks
   peaks, _ = find_peaks(predictions, height=args.detection_threshold, distance=5)
+  pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
   print(f"Peaks found {len(peaks)} boxes")
   anchor_peak_preds = np.zeros(predictions.shape, dtype='bool')
   anchor_peak_preds[peaks] = True
   anchor_scores = predictions
   peaks_bboxes, scores = pred2bbox(anchor_peak_preds, anchor_scores, regressions, pred_sr)
   
-  target_fp = os.path.join(args.experiment_dir, f"snms_pred_{fn}.txt")
-  st = bbox2raven(snms_bboxes, "crow")
-  write_tsv(target_fp, st)  
+#   target_fp = os.path.join(args.experiment_dir, f"snms_pred_{fn}.txt")
+#   st = bbox2raven(snms_bboxes, "crow")
+#   write_tsv(target_fp, st)  
   
-  target_fp = os.path.join(args.experiment_dir, f"nms_pred_{fn}.txt")
-  st = bbox2raven(nms_bboxes, "crow")
-  write_tsv(target_fp, st)
+#   target_fp = os.path.join(args.experiment_dir, f"nms_pred_{fn}.txt")
+#   st = bbox2raven(nms_bboxes, "crow")
+#   write_tsv(target_fp, st)
   
   target_fp = os.path.join(args.experiment_dir, f"peaks_pred_{fn}.txt")
   st = bbox2raven(peaks_bboxes, "crow")

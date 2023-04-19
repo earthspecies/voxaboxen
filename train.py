@@ -19,15 +19,17 @@ def train(model, args):
   n_anchors = len(args.anchor_durs_sec)
   pos_weight = torch.full([1], args.pos_weight, device = device) # default pos_weight = 1
   gamma = args.gamma # gamma = 0 means normal BCE loss
-  class_loss_fn = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
+  class_loss_fn = modified_focal_loss #nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
   reg_loss_fn = masked_reg_loss
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
+  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
   
   train_evals = []
   test_evals = []
+  learning_rates = []
   
   val_dataloader = get_val_dataloader(args)
-  
+      
   for t in range(args.n_epochs):
       print(f"Epoch {t}\n-------------------------------")
       train_dataloader = get_train_dataloader(args, random_seed_shift = t) # reinitialize dataloader with different negatives each epoch
@@ -35,7 +37,11 @@ def train(model, args):
       test_eval = test_epoch(model, t, val_dataloader, class_loss_fn, reg_loss_fn, args)
       train_evals.append(train_eval.copy())
       test_evals.append(test_eval.copy())
-      plot_eval(train_evals, test_evals, args)
+      learning_rates.append(optimizer.param_groups[0]["lr"])
+      plot_eval(train_evals, test_evals, learning_rates, args)
+
+      scheduler.step()
+
   
   print("Done!")
   return model  
@@ -98,21 +104,59 @@ def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     print(f"Epoch {t} | Test scores @0.5IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
     
-def focal_loss(logits, y, pos_weight=1, gamma=0):
-  # https://arxiv.org/pdf/1708.02002.pdf 
-  if gamma==0:
-    return F.binary_cross_entropy_with_logits(logits, y, reduction='mean', pos_weight=pos_weight)
+# def focal_loss(logits, y, pos_weight=1, gamma=0):
+#   # https://arxiv.org/pdf/1708.02002.pdf 
+#   if gamma==0:
+#     return F.binary_cross_entropy_with_logits(logits, y, reduction='mean', pos_weight=pos_weight)
+#   else:
+#     bce = F.binary_cross_entropy_with_logits(logits, y, reduction='none', pos_weight=pos_weight)
+#     pt = torch.exp(-bce)
+#     fl = ((1-pt)**gamma)*bce
+#     return torch.mean(fl)
+  
+def modified_focal_loss(pred, gt):
+  # Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
+  ''' 
+      pred (batch x t)
+      gt_regr (batch x t)
+  '''
+  pos_inds = gt.eq(1).float()
+  neg_inds = gt.lt(1).float()
+
+  neg_weights = torch.pow(1 - gt, 4)
+
+  loss = 0
+
+  pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds
+  neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
+  
+  
+  # loss = -1.*(neg_loss + pos_loss).mean()
+    
+  num_pos  = pos_inds.float().sum()
+  pos_loss = pos_loss.sum()
+  neg_loss = neg_loss.sum()
+  
+  # print(f"pos {-1.*pos_loss} neg {-1.*neg_loss}")
+
+  if num_pos == 0:
+    loss = loss - neg_loss
   else:
-    bce = F.binary_cross_entropy_with_logits(logits, y, reduction='none', pos_weight=pos_weight)
-    pt = torch.exp(-bce)
-    fl = ((1-pt)**gamma)*bce
-    return torch.mean(fl)
+    loss = loss - (pos_loss + neg_loss) / num_pos
+  return loss
+  
   
 def masked_reg_loss(regression, r, y):
   # regression, r (Tensor): [batch, time]
   # y (Tensor) : [batch, time], binary tensor of class probs
   
   reg_loss = F.l1_loss(regression, r, reduction='none')
-  reg_loss = reg_loss * (y > .99) # mask
-  reg_loss = torch.mean(reg_loss)
+  mask = y.eq(1).float()
+  reg_loss = reg_loss * mask
+  reg_loss = torch.sum(reg_loss)
+  n_pos = mask.sum()
+  
+  if n_pos>0:
+    reg_loss = reg_loss / n_pos
+    
   return reg_loss

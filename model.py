@@ -61,7 +61,8 @@ class DetectionModel(nn.Module):
         feats = F.pad(feats, (0,0,0,pad), mode='reflect')
       
       logits, regression = self.detection_head(feats)
-      return logits, regression
+      preds = torch.sigmoid(logits)
+      return preds, regression
     
   def freeze_encoder(self):
       self.encoder.freeze()
