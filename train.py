@@ -14,12 +14,8 @@ from model import preprocess_and_augment
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def train(model, args):
-
   model = model.to(device)
-  n_anchors = len(args.anchor_durs_sec)
-  pos_weight = torch.full([1], args.pos_weight, device = device) # default pos_weight = 1
-  gamma = args.gamma # gamma = 0 means normal BCE loss
-  class_loss_fn = modified_focal_loss #nn.BCEWithLogitsLoss(reduction='mean', pos_weight=pos_weight)
+  class_loss_fn = modified_focal_loss
   reg_loss_fn = masked_reg_loss
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
@@ -39,10 +35,8 @@ def train(model, args):
       test_evals.append(test_eval.copy())
       learning_rates.append(optimizer.param_groups[0]["lr"])
       plot_eval(train_evals, test_evals, learning_rates, args)
-
       scheduler.step()
 
-  
   print("Done!")
   return model  
   
@@ -63,7 +57,7 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
       y = torch.Tensor(y).to(device = device, dtype = torch.float)
       r = torch.Tensor(r).to(device = device, dtype = torch.float)
       
-      X = preprocess_and_augment(X, y, r, True, args)
+      X, y, r = preprocess_and_augment(X, y, r, True, args)
       logits, regression = model(X)
       
       end_mask_perc = args.end_mask_perc
@@ -103,17 +97,7 @@ def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     evals = {k:summary[k] for k in ['precision','recall','f1']}
     print(f"Epoch {t} | Test scores @0.5IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
-    
-# def focal_loss(logits, y, pos_weight=1, gamma=0):
-#   # https://arxiv.org/pdf/1708.02002.pdf 
-#   if gamma==0:
-#     return F.binary_cross_entropy_with_logits(logits, y, reduction='mean', pos_weight=pos_weight)
-#   else:
-#     bce = F.binary_cross_entropy_with_logits(logits, y, reduction='none', pos_weight=pos_weight)
-#     pt = torch.exp(-bce)
-#     fl = ((1-pt)**gamma)*bce
-#     return torch.mean(fl)
-  
+
 def modified_focal_loss(pred, gt):
   # Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
   ''' 
@@ -131,18 +115,18 @@ def modified_focal_loss(pred, gt):
   neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
   
   
-  # loss = -1.*(neg_loss + pos_loss).mean()
+  loss = -1.*(neg_loss + pos_loss).mean()
     
-  num_pos  = pos_inds.float().sum()
-  pos_loss = pos_loss.sum()
-  neg_loss = neg_loss.sum()
-  
-  # print(f"pos {-1.*pos_loss} neg {-1.*neg_loss}")
+#   num_pos  = pos_inds.float().sum()
+#   pos_loss = pos_loss.sum()
+#   neg_loss = neg_loss.sum()
+    
+#   # print(f"pos {-1.*pos_loss} neg {-1.*neg_loss}")
 
-  if num_pos == 0:
-    loss = loss - neg_loss
-  else:
-    loss = loss - (pos_loss + neg_loss) / num_pos
+#   if num_pos == 0:
+#     loss = loss - neg_loss
+#   else:
+#     loss = loss - (pos_loss + neg_loss) / num_pos
   return loss
   
   

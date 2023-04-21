@@ -264,7 +264,7 @@ def generate_predictions(model, dataloader, args):
   with torch.no_grad():
     for i, (X, _, _, _) in tqdm.tqdm(enumerate(dataloader)):
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
-      X = preprocess_and_augment(X, None, None, False, args)
+      X, _, _ = preprocess_and_augment(X, None, None, False, args)
       predictions, regression = model(X)
       # predictions = torch.sigmoid(logits)
       all_predictions.append(predictions)

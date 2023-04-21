@@ -47,7 +47,8 @@ class DetectionModel(nn.Module):
       Input
         x (Tensor): (batch, time) (time at 16000 Hz, audio_sr)
       Returns
-        y (Tensor): (batch, time, n_anchors) (time at 50 Hz, aves_sr)
+        preds (Tensor): (batch, time) (time at 50 Hz, aves_sr)
+        regression (Tensor): (batch, time) (time at 50 Hz, aves_sr)
       """
       
       expected_dur_output = math.ceil(x.size(1)/self.args.scale_factor)
@@ -82,7 +83,7 @@ class DetectionHead(nn.Module):
         x (Tensor): (batch, time, embedding_dim) (time at 50 Hz, aves_sr)
       Returns
         logits (Tensor): (batch, time) (time at 50 Hz, aves_sr)
-        reg (Tensor): (batch, time, 2) (time at 50 Hz, aves_sr)
+        reg (Tensor): (batch, time) (time at 50 Hz, aves_sr)
       """
       x = rearrange(x, 'b t c -> b c t')
       x = self.head(x)
@@ -90,8 +91,6 @@ class DetectionHead(nn.Module):
       logits = x[:,:,0]      
       reg = x[:,:,1]
       return logits, reg
-      
-      
 
 def preprocess_and_augment(X, y, r, train, args):
   if args.rms_norm:
@@ -107,5 +106,5 @@ def preprocess_and_augment(X, y, r, train, args):
     r = torch.maximum(r, r_aug)
     y = torch.maximum(y, y_aug)
     
-  return X
+  return X, y, r
       

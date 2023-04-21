@@ -19,7 +19,6 @@ def main(args):
     os.makedirs(args.experiment_dir)
   
   save_params(args)
-  
   model = DetectionModel(args)
   
   ## Training
@@ -37,5 +36,4 @@ def main(args):
 if __name__ == "__main__":
   main(sys.argv[1:])
   
-  
-# python main.py --name=debug --lr=0.001 --n-epochs=5
+# python main.py --name=debug --lr=0.0001 --n-epochs=6 --clip-duration=4 --batch-size=100 --omit-empty-clip-prob=0.5 --clip-hop=2

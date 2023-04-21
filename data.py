@@ -15,7 +15,6 @@ def normalize_sig_np(sig, eps=1e-8):
 class DetectionDataset(Dataset):
     def __init__(self, info_df, clip_hop, train, args, random_seed_shift = 0):
         self.info_df = info_df
-        self.anchor_win_sizes = np.array(args.anchor_durs_sec)        
         self.label_set = args.label_set
         self.sr = args.sr
         self.clip_duration = args.clip_duration
@@ -107,11 +106,8 @@ class DetectionDataset(Dataset):
 
         return intervals
 
-    def get_annotation(self, anchor_win_sizes, pos_intervals, audio):
+    def get_annotation(self, pos_intervals, audio):
         raw_seq_len = audio.shape[0]
-
-        num_anchors = len(anchor_win_sizes)
-
         seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
 
         # anchor_anno = np.zeros(seq_len, dtype=np.int32)
@@ -155,7 +151,7 @@ class DetectionDataset(Dataset):
         audio, _ = librosa.load(audio_fp, sr=self.sr, offset=start, duration=self.clip_duration, mono=True)
         audio = audio-np.mean(audio)
         pos_intervals = self.get_pos_intervals(fn, start, end)
-        anchor_anno, regression_anno, class_anno = self.get_annotation(self.anchor_win_sizes, pos_intervals, audio)
+        anchor_anno, regression_anno, class_anno = self.get_annotation(pos_intervals, audio)
 
         if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)

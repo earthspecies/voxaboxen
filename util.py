@@ -15,7 +15,6 @@ def parse_args(args):
   parser.add_argument('--annotation-selection-tables-dir', type = str, default = '/home/jupyter/carrion_crows_data/Annotations_revised_by_Daniela.cleaned/selection_tables')
 
   # Data
-  parser.add_argument('--anchor-durs-sec', type=str, default = "0.33,1.0", help = "DEPRECATED CSV: Duration of detection anchors, in seconds")
   parser.add_argument('--label-set', type=str, default = "crow", help = "CSV: names of labels")
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
@@ -33,33 +32,25 @@ def parse_args(args):
   parser.add_argument('--rms-norm', action="store_true", help = "If true, apply rms normalization to each clip")
   
   # Training
-  parser.add_argument('--batch-size', type=int, default=2) 
-  parser.add_argument('--pos-weight', type=float, default=1.0, help="Weight for positive classes in binary cross entropy")
+  parser.add_argument('--batch-size', type=int, required=True) 
   parser.add_argument('--lr', type=float, required=True) 
   parser.add_argument('--n-epochs', type=int, required=True)
   parser.add_argument('--unfreeze-encoder-epoch', type=int, default=1)
   parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the final frames") 
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0.95, help="if a clip has no annotations, do not use for training with this probability")
-  parser.add_argument('--gamma', type=float, default=0, help="parameter controlling strength of focal loss")
-  parser.add_argument('--lamb', type=float, default=50, help="parameter controlling strength regression loss")                 
+  parser.add_argument('--lamb', type=float, default=.003, help="parameter controlling strength regression loss")                 
   
   # Augmentations
   parser.add_argument('--amp-aug', action ="store_true", help="Whether to use amplitude augmentation") 
   parser.add_argument('--amp-aug-low-r', type=float, default = 0.8) 
-  parser.add_argument('--amp-aug-high-r', type=float, default = 1.0) 
+  parser.add_argument('--amp-aug-high-r', type=float, default = 1.2) 
   parser.add_argument('--mixup', action ="store_true", help="Whether to use mixup augmentation") 
   
   args = parser.parse_args()
-  csv_attrs = ["anchor_durs_sec", "label_set"]
+  csv_attrs = ["label_set"]
   for attr in csv_attrs:
       if isinstance(getattr(args, attr), str):
           setattr(args, attr, getattr(args, attr).split(","))
-          
-  float_attrs = ["anchor_durs_sec"]
-  for attr in float_attrs:
-      orig = getattr(args, attr)
-      cast = [float(x) for x in orig]
-      setattr(args, attr, cast)
       
   return args
 
