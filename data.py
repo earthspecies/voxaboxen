@@ -3,6 +3,7 @@ import math
 import numpy as np
 import pandas as pd
 import librosa
+import warnings
 
 from numpy.random import default_rng
 from intervaltree import IntervalTree
@@ -16,6 +17,7 @@ class DetectionDataset(Dataset):
     def __init__(self, info_df, clip_hop, train, args, random_seed_shift = 0):
         self.info_df = info_df
         self.label_set = args.label_set
+        self.n_classes = len(self.label_set)
         self.sr = args.sr
         self.clip_duration = args.clip_duration
         self.clip_hop = clip_hop
@@ -107,56 +109,54 @@ class DetectionDataset(Dataset):
         return intervals
 
     def get_annotation(self, pos_intervals, audio):
+        
         raw_seq_len = audio.shape[0]
         seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
-
-        # anchor_anno = np.zeros(seq_len, dtype=np.int32)
-        class_anno = np.zeros(seq_len, dtype=np.int32) - 1
-        regression_anno = np.zeros(seq_len)
+        regression_anno = np.zeros((seq_len, self.n_classes))
 
         anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
         
-        soft_anchors = []
+        anchor_annos_dict = {i : [] for i in range(self.n_classes)}
 
         for iv in pos_intervals:
             start, end, class_idx = iv
             dur = end-start
-            
             
             start_idx = int(math.floor(start*anno_sr))
             start_idx = max(min(start_idx, seq_len-1), 0)
             
             # ### Anchors ###
             dur_samples = np.ceil(dur * anno_sr)
-            soft_anchor = get_soft_anchor(start_idx, dur_samples, seq_len)
-            soft_anchors.append(soft_anchor)
-            # anchor_anno[start_idx] = 1
+            anchor_anno = get_anchor_anno(start_idx, dur_samples, seq_len)
+            anchor_annos_dict[class_idx].append(anchor_anno)
             
             # ### Regression ###
-            regression_anno[start_idx] = dur
+            regression_anno[start_idx, class_idx] = dur
+        
+        anchor_annos = []
+        for i in range(self.n_classes):
+          if len(anchor_annos_dict[i])>0:
+            x = np.stack(anchor_annos_dict[i])
+            x = np.amax(x, axis = 0)
+          else:
+            x = np.zeros(seq_len)
+          anchor_annos.append(x)
+          
+        anchor_annos = np.stack(anchor_annos, axis = -1)
 
-            # ### Class ###
-            class_anno[start_idx] = class_idx
-            
-        if len(soft_anchors)>0:
-          soft_anchors = np.stack(soft_anchors)
-          soft_anchors = np.amax(soft_anchors, axis = 0)
-        else:
-          soft_anchors = np.zeros(seq_len)
-
-        return soft_anchors, regression_anno, class_anno
+        return anchor_annos, regression_anno # both of shape (time_steps, n_classes)
 
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
         audio, _ = librosa.load(audio_fp, sr=self.sr, offset=start, duration=self.clip_duration, mono=True)
         audio = audio-np.mean(audio)
         pos_intervals = self.get_pos_intervals(fn, start, end)
-        anchor_anno, regression_anno, class_anno = self.get_annotation(pos_intervals, audio)
+        anchor_anno, regression_anno = self.get_annotation(pos_intervals, audio)
 
         if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)
                         
-        return audio, anchor_anno, regression_anno, class_anno
+        return audio, anchor_anno, regression_anno
 
     def __len__(self):
         return len(self.metadata)
@@ -185,7 +185,11 @@ def get_val_dataloader(args):
   dev_info_fp = args.dev_info_fp
   dev_info_df = pd.read_csv(dev_info_fp)
   num_files_val = args.num_files_val
-  val_info_df = dev_info_df.iloc[-args.num_files_val:]
+  if args.num_files_val>0:
+    val_info_df = dev_info_df.iloc[-args.num_files_val:]
+  else:
+    val_info_df = dev_info_df.iloc[-1:]
+    warnings.warn("num_files_val was set to 0. I am using last dev file as validation, but this is also in the train set.")
   
   val_dataloaders = {}
   
@@ -224,7 +228,8 @@ def get_test_dataloader(args):
   
   return test_dataloaders
   
-def get_soft_anchor(start_idx, dur_samples, seq_len):
+def get_anchor_anno(start_idx, dur_samples, seq_len):
+  # start times plus gaussian blur
   std = dur_samples / 6
   x = (np.arange(seq_len) - start_idx) ** 2
   x = x / (2 * std**2)

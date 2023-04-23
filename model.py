@@ -74,7 +74,8 @@ class DetectionModel(nn.Module):
 class DetectionHead(nn.Module):
   def __init__(self, args, embedding_dim=768):
       super().__init__()
-      self.head = nn.Conv1d(embedding_dim, 2, args.prediction_scale_factor, stride=args.prediction_scale_factor, padding=0)
+      self.n_classes = len(args.label_set)
+      self.head = nn.Conv1d(embedding_dim, 2*self.n_classes, args.prediction_scale_factor, stride=args.prediction_scale_factor, padding=0)
       self.args=args
       
   def forward(self, x):
@@ -82,14 +83,14 @@ class DetectionHead(nn.Module):
       Input
         x (Tensor): (batch, time, embedding_dim) (time at 50 Hz, aves_sr)
       Returns
-        logits (Tensor): (batch, time) (time at 50 Hz, aves_sr)
-        reg (Tensor): (batch, time) (time at 50 Hz, aves_sr)
+        logits (Tensor): (batch, time, n_classes) (time at 50 Hz, aves_sr)
+        reg (Tensor): (batch, time, n_classes) (time at 50 Hz, aves_sr)
       """
       x = rearrange(x, 'b t c -> b c t')
       x = self.head(x)
       x = rearrange(x, 'b c t -> b t c')
-      logits = x[:,:,0]      
-      reg = x[:,:,1]
+      logits = x[:,:,:self.n_classes]      
+      reg = x[:,:,self.n_classes:]
       return logits, reg
 
 def preprocess_and_augment(X, y, r, train, args):

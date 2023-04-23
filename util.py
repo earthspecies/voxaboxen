@@ -18,8 +18,8 @@ def parse_args(args):
   parser.add_argument('--label-set', type=str, default = "crow", help = "CSV: names of labels")
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
-  parser.add_argument('--dev-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.all_crows/dev_info.csv")
-  parser.add_argument('--test-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.all_crows/test_info.csv")
+  parser.add_argument('--dev-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.crow_and_cuckoo/dev_info.csv")
+  parser.add_argument('--test-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.crow_and_cuckoo/test_info.csv")
   parser.add_argument('--num-workers', type=int, default=8)
   parser.add_argument('--num-files-val', type=int, default=1)
   

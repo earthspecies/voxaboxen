@@ -13,7 +13,7 @@ import metrics
 import warnings
 
 class Clip():
-    def __init__(self):
+    def __init__(self, label_set = None):
         self.sr = None
         self.samples = None
         self.duration = None
@@ -22,6 +22,10 @@ class Clip():
         self.matching = None
         self.matched_annotations = None
         self.matched_predictions = None
+        self.label_set = label_set
+        
+    def define_label_set(self, label_set):
+        self.label_set = label_set
         
     def load_selection_table(self, fp, view = None, label_mapping = None):
         # view (str) : If applicable, Waveform or Spectrogram to avoid double counting
@@ -102,10 +106,28 @@ class Clip():
         print("Removed %d predictions whose start was off by %1.3f seconds or whose duration was off by %1.3f" % (count, start_tolerance_sec, dur_tolerance_percent))
         
     def evaluate(self):
-        TP = len(self.matching)
-        FP = len(self.predictions) - TP
-        FN = len(self.annotations) - TP
-        return {'TP' : TP, 'FP' : FP, 'FN' : FN}
+        if self.label_set is None:
+          TP = len(self.matching)
+          FP = len(self.predictions) - TP
+          FN = len(self.annotations) - TP
+          return {'all' : {'TP' : TP, 'FP' : FP, 'FN' : FN}}
+        
+        else:
+          out = {label : {'TP':0} for label in self.label_set}
+          pred_label = np.array(self.predictions['Annotation'])
+          annot_label = np.array(self.annotations['Annotation'])
+          for p in self.matching:
+            if annot_label[p[0]] == pred_label[p[1]]:
+              out[annot_label[p[0]]]['TP'] += 1
+              
+          for label in self.label_set:
+            n_annot = int((annot_label == label).sum())
+            n_pred = int((pred_label == label).sum())
+            out[label]['FP'] = n_pred - out[label]['TP']
+            out[label]['FN'] = n_annot - out[label]['TP']
+            
+          return out
+            
         
     def show_spec(self, start_sec, end_sec, show_annotations = False, show_predictions = False, show_matched = False):
         start_sample = int(self.sr * start_sec)

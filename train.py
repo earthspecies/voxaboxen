@@ -51,7 +51,7 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
     evals = {}
     train_loss = 0; losses = []; detection_losses = []; regression_losses = []
     data_iterator = tqdm.tqdm(dataloader)
-    for i, (X, y, r, c) in enumerate(data_iterator):
+    for i, (X, y, r) in enumerate(data_iterator):
       num_batches_seen = i
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
       y = torch.Tensor(y).to(device = device, dtype = torch.float)
@@ -63,11 +63,8 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
       end_mask_perc = args.end_mask_perc
       end_mask_dur = int(logits.size(1)*end_mask_perc) 
       
-      logits_flat = torch.reshape(logits[:,end_mask_dur:-end_mask_dur], (-1,1))
-      y_flat = torch.reshape(y[:,end_mask_dur:-end_mask_dur], (-1, 1))
-      
-      class_loss = class_loss_fn(logits_flat, y_flat)
-      reg_loss = reg_loss_fn(regression[:,end_mask_dur:-end_mask_dur], r[:,end_mask_dur:-end_mask_dur], y[:,end_mask_dur:-end_mask_dur])
+      class_loss = class_loss_fn(logits[:,end_mask_dur:-end_mask_dur,:], y[:,end_mask_dur:-end_mask_dur,:])
+      reg_loss = reg_loss_fn(regression[:,end_mask_dur:-end_mask_dur,:], r[:,end_mask_dur:-end_mask_dur,:], y[:,end_mask_dur:-end_mask_dur,:])
       
       loss = class_loss + args.lamb* reg_loss
       train_loss += loss.item()
@@ -94,16 +91,26 @@ def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     e = predict_and_evaluate(model, dataloader, args)
     
     summary = e['summary'][0.5]
-    evals = {k:summary[k] for k in ['precision','recall','f1']}
+    
+    evals = {k:[] for k in ['precision','recall','f1']}
+    for k in ['precision','recall','f1']:
+      for l in args.label_set:
+        m = summary[l][k]
+        evals[k].append(m)
+      evals[k] = float(np.mean(evals[k]))
+        
     print(f"Epoch {t} | Test scores @0.5IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
 
 def modified_focal_loss(pred, gt):
   # Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
   ''' 
-      pred (batch x t)
-      gt_regr (batch x t)
+      pred [batch, time, n_classes]
+      gt [batch, time, n_classes]
   '''
+  
+  n_classes = pred.size(-1)  
+  
   pos_inds = gt.eq(1).float()
   neg_inds = gt.lt(1).float()
 
@@ -114,8 +121,7 @@ def modified_focal_loss(pred, gt):
   pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds
   neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
   
-  
-  loss = -1.*(neg_loss + pos_loss).mean()
+  loss = -1.*n_classes*(neg_loss + pos_loss).mean()
     
 #   num_pos  = pos_inds.float().sum()
 #   pos_loss = pos_loss.sum()
@@ -131,8 +137,8 @@ def modified_focal_loss(pred, gt):
   
   
 def masked_reg_loss(regression, r, y):
-  # regression, r (Tensor): [batch, time]
-  # y (Tensor) : [batch, time], binary tensor of class probs
+  # regression, r (Tensor): [batch, time, n_classes]
+  # y (Tensor) : [batch, time, n_classes], binary tensor
   
   reg_loss = F.l1_loss(regression, r, reduction='none')
   mask = y.eq(1).float()
