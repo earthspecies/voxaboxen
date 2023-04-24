@@ -93,7 +93,7 @@ class DetectionHead(nn.Module):
       reg = x[:,:,self.n_classes:]
       return logits, reg
 
-def preprocess_and_augment(X, y, r, train, args):
+def preprocess_and_augment(X, y, r, mask, train, args):
   if args.rms_norm:
     rms = torch.mean(X ** 2, dim = 1, keepdim = True) ** (-1/2)
     X = X * rms
@@ -102,10 +102,12 @@ def preprocess_and_augment(X, y, r, train, args):
     X_aug = torch.flip(X, (0,))
     r_aug = torch.flip(r, (0,))
     y_aug = torch.flip(y, (0,))
+    mask_aug = torch.flip(mask, (0,))
     
     X = (X + X_aug) / 2
     r = torch.maximum(r, r_aug)
     y = torch.maximum(y, y_aug)
+    mask = torch.minimum(mask, mask_aug)
     
-  return X, y, r
+  return X, y, r, mask
       

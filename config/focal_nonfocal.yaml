@@ -1,0 +1,20 @@
+label_mapping:
+  'focal': 'focal'
+  'focal?': 'focal'
+  'not focal': 'not_focal'
+  'not focal LD': 'not_focal_ld'
+  'not focal?': 'not_focal'
+  'crowchicks': 'crowchicks'
+  'crow_undeter': 'Unknown'
+  'nest': 'Unknown'
+  'cuckoo' : 'cuckoo'
+  '?' : 'Unknown'
+  
+label_set:
+  - focal
+  - not_focal
+  - not_focal_ld
+  - crowchicks
+  - cuckoo
+  
+unknown_label: 'Unknown'

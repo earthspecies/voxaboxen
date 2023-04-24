@@ -131,9 +131,9 @@ def generate_predictions(model, dataloader, args):
   all_predictions = []
   all_regressions = []
   with torch.no_grad():
-    for i, (X, _, _) in tqdm.tqdm(enumerate(dataloader)):
+    for i, (X, _, _, _) in tqdm.tqdm(enumerate(dataloader)):
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
-      X, _, _ = preprocess_and_augment(X, None, None, False, args)
+      X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
       predictions, regression = model(X)
       # predictions = torch.sigmoid(logits)
       all_predictions.append(predictions)
@@ -205,24 +205,11 @@ def export_to_selection_table(predictions, regressions, fn, args):
   
   return target_fp
   
-def get_metrics(predictions_fp, annotations_fp, label_set):
-  c = Clip(label_set=label_set)
-  
-  # Hard coded for now
-  label_mapping = {
-        'focal': 'crow',
-        'focal?': 'crow',
-        'not focal': 'crow',
-        'not focal LD': 'crow',
-        'not focal?': 'crow',
-        'crowchicks': 'crow',
-        'crow_undeter': 'crow',
-        'nest': 'crow',
-        'cuckoo':'cuckoo'
-    }
+def get_metrics(predictions_fp, annotations_fp, args):
+  c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
   
   c.load_predictions(predictions_fp)
-  c.load_annotations(annotations_fp, label_mapping = label_mapping)
+  c.load_annotations(annotations_fp, label_mapping = args.label_mapping)
   
   metrics = {}
   
@@ -283,7 +270,7 @@ def predict_and_evaluate(model, dataloader_dict, args):
     predictions, regressions = generate_predictions(model, dataloader_dict[fn], args)
     predictions_fp = export_to_selection_table(predictions, regressions, fn, args)
     annotations_fp = os.path.join(args.annotation_selection_tables_dir, f"{fn}.txt")
-    metrics[fn] = get_metrics(predictions_fp, annotations_fp, args.label_set)
+    metrics[fn] = get_metrics(predictions_fp, annotations_fp, args)
   
   summary = summarize_metrics(metrics)
   metrics['summary'] = summary

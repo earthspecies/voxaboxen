@@ -4,6 +4,7 @@ import numpy as np
 import random
 import logging
 import os
+import yaml
 
 def parse_args(args):
   parser = argparse.ArgumentParser()
@@ -15,11 +16,12 @@ def parse_args(args):
   parser.add_argument('--annotation-selection-tables-dir', type = str, default = '/home/jupyter/carrion_crows_data/Annotations_revised_by_Daniela.cleaned/selection_tables')
 
   # Data
-  parser.add_argument('--label-set', type=str, default = "crow", help = "CSV: names of labels")
+  # parser.add_argument('--label-set', type=str, default = "crow", help = "CSV: names of labels")
+  parser.add_argument('--label-mapping-config-fp', type = str, default = "/home/jupyter/sound_event_detection/config/focal_nonfocal.yaml")
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
-  parser.add_argument('--dev-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.crow_and_cuckoo/dev_info.csv")
-  parser.add_argument('--test-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.crow_and_cuckoo/test_info.csv")
+  parser.add_argument('--dev-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.all/dev_info.csv")
+  parser.add_argument('--test-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.all/test_info.csv")
   parser.add_argument('--num-workers', type=int, default=8)
   parser.add_argument('--num-files-val', type=int, default=1)
   
@@ -47,11 +49,22 @@ def parse_args(args):
   parser.add_argument('--mixup', action ="store_true", help="Whether to use mixup augmentation") 
   
   args = parser.parse_args()
-  csv_attrs = ["label_set"]
-  for attr in csv_attrs:
-      if isinstance(getattr(args, attr), str):
-          setattr(args, attr, getattr(args, attr).split(","))
-      
+  # csv_attrs = ["label_set"]
+  # for attr in csv_attrs:
+  #     if isinstance(getattr(args, attr), str):
+  #         setattr(args, attr, getattr(args, attr).split(","))
+  
+  args = read_config(args)
+  
+  return args
+
+def read_config(args):
+  with open(args.label_mapping_config_fp, 'r') as f:
+    label_mapping_config = yaml.safe_load(f)
+    
+  for key in label_mapping_config:
+    setattr(args,key,label_mapping_config[key])
+    
   return args
 
 def set_seed(seed):

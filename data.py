@@ -17,6 +17,11 @@ class DetectionDataset(Dataset):
     def __init__(self, info_df, clip_hop, train, args, random_seed_shift = 0):
         self.info_df = info_df
         self.label_set = args.label_set
+        if hasattr(args, 'unknown_label'):
+          self.unknown_label = args.unknown_label
+        else:
+          self.unknown_label = None
+        self.label_mapping = args.label_mapping
         self.n_classes = len(self.label_set)
         self.sr = args.sr
         self.clip_duration = args.clip_duration
@@ -61,8 +66,16 @@ class DetectionDataset(Dataset):
         for ii, row in timestamp.iterrows():
             start = row['start']
             end = row['end']
-            label_idx = self.label_set.index(row['label'])
-
+            label = row['label']
+            if label in self.label_mapping:
+              label = self.label_mapping[label]
+            else:
+              continue
+            
+            if label == self.unknown_label:
+              label_idx = -1
+            else:
+              label_idx = self.label_set.index(label)
             tree.addi(start, end, label_idx)
 
         return tree
@@ -88,7 +101,7 @@ class DetectionDataset(Dataset):
                 end = start + self.clip_duration
 
                 ivs = timestamps[start:end]
-                # if no positive intervals, skip with specified probability
+                # if no annotated intervals, skip with specified probability
                 if not ivs:
                   if self.omit_empty_clip_prob > self.rng.uniform():
                       continue
@@ -117,6 +130,8 @@ class DetectionDataset(Dataset):
         anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
         
         anchor_annos_dict = {i : [] for i in range(self.n_classes)}
+        
+        mask = [np.ones(seq_len)]
 
         for iv in pos_intervals:
             start, end, class_idx = iv
@@ -124,14 +139,15 @@ class DetectionDataset(Dataset):
             
             start_idx = int(math.floor(start*anno_sr))
             start_idx = max(min(start_idx, seq_len-1), 0)
-            
-            # ### Anchors ###
             dur_samples = np.ceil(dur * anno_sr)
-            anchor_anno = get_anchor_anno(start_idx, dur_samples, seq_len)
-            anchor_annos_dict[class_idx].append(anchor_anno)
             
-            # ### Regression ###
-            regression_anno[start_idx, class_idx] = dur
+            # ### Start idx anchors and regression targets ###
+            if class_idx != -1:
+              anchor_anno = get_anchor_anno(start_idx, dur_samples, seq_len)
+              anchor_annos_dict[class_idx].append(anchor_anno)
+              regression_anno[start_idx, class_idx] = dur
+            else:
+              mask.append(get_unknown_mask(start_idx, dur_samples, seq_len))      
         
         anchor_annos = []
         for i in range(self.n_classes):
@@ -141,22 +157,25 @@ class DetectionDataset(Dataset):
           else:
             x = np.zeros(seq_len)
           anchor_annos.append(x)
-          
+        
         anchor_annos = np.stack(anchor_annos, axis = -1)
+          
+        mask = np.stack(mask)
+        mask = np.amin(mask, axis = 0)
 
-        return anchor_annos, regression_anno # both of shape (time_steps, n_classes)
+        return anchor_annos, regression_anno, mask # shapes [time_steps, n_classes], [time_steps, n_classes], [time_steps,]
 
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
         audio, _ = librosa.load(audio_fp, sr=self.sr, offset=start, duration=self.clip_duration, mono=True)
         audio = audio-np.mean(audio)
         pos_intervals = self.get_pos_intervals(fn, start, end)
-        anchor_anno, regression_anno = self.get_annotation(pos_intervals, audio)
+        anchor_anno, regression_anno, mask = self.get_annotation(pos_intervals, audio)
 
         if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)
                         
-        return audio, anchor_anno, regression_anno
+        return audio, anchor_anno, regression_anno, mask
 
     def __len__(self):
         return len(self.metadata)
@@ -236,3 +255,8 @@ def get_anchor_anno(start_idx, dur_samples, seq_len):
   x = np.exp(-x)
   return x
   
+def get_unknown_mask(start_idx, dur_samples, seq_len):
+  unknown_radius = 1 + int(dur_samples / 6)
+  x = np.ones(seq_len)
+  x[start_idx - unknown_radius:start_idx + unknown_radius] = 0
+  return x
