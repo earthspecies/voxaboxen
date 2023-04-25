@@ -18,7 +18,7 @@ def train(model, args):
   class_loss_fn = modified_focal_loss
   reg_loss_fn = masked_reg_loss
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
-  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
+  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=args.lr/100, last_epoch=- 1, verbose=False)
   
   train_evals = []
   test_evals = []
@@ -95,7 +95,7 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
                         
 def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     model.eval()
-    e, _ = predict_and_evaluate(model, dataloader, args, save = False)
+    e, _ = predict_and_evaluate(model, dataloader, args, save = True)
     
     summary = e['summary'][0.5]
     

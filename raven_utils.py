@@ -137,13 +137,13 @@ class Clip():
         return None
       else:
         confusion_matrix_labels = self.label_set.copy()
-        confusion_matrix_labels.append('FP')
         if self.unknown_label is not None:
           confusion_matrix_labels.append(self.unknown_label)
+        confusion_matrix_labels.append('None')
         confusion_matrix_size = len(confusion_matrix_labels)
 
         confusion_matrix = np.zeros((confusion_matrix_size, confusion_matrix_size))
-        cm_fp_idx = confusion_matrix_labels.index('FP')
+        cm_nobox_idx = confusion_matrix_labels.index('None')
         
         pred_label = np.array(self.predictions['Annotation'])
         annot_label = np.array(self.annotations['Annotation'])
@@ -156,12 +156,20 @@ class Clip():
           confusion_matrix[cm_pred_idx, cm_annot_idx] += 1
 
         for label in self.label_set:
-          # count false positive detections, regardless of class
+          # count false positive and false negative detections, regardless of class
           cm_label_idx = confusion_matrix_labels.index(label)
+          
+          #fp
           n_pred = int((pred_label == label).sum())
-          n_pred_positive_detections = confusion_matrix.sum(1)[cm_label_idx]
-          n_false_detections = n_pred - n_pred_positive_detections
-          confusion_matrix[cm_label_idx, cm_fp_idx] = n_false_detections
+          n_positive_detections_row = confusion_matrix.sum(1)[cm_label_idx]
+          n_false_detections = n_pred - n_positive_detections_row
+          confusion_matrix[cm_label_idx, cm_nobox_idx] = n_false_detections
+          
+          #fn
+          n_annot = int((annot_label == label).sum())
+          n_positive_detections_col = confusion_matrix.sum(0)[cm_label_idx]
+          n_missed_detections = n_annot - n_positive_detections_col
+          confusion_matrix[cm_nobox_idx, cm_label_idx] = n_missed_detections
           
       return confusion_matrix, confusion_matrix_labels
         
