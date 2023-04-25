@@ -103,9 +103,7 @@ class Clip():
     #     self.matched_predictions = [p[1] for p in self.matching]
     #     print("Removed %d predictions whose start was off by %1.3f seconds or whose duration was off by %1.3f" % (count, start_tolerance_sec, dur_tolerance_percent))
         
-    def evaluate(self):
-      ### Stopped here
-      
+    def evaluate(self):     
       
         if self.label_set is None:
           TP = len(self.matching)
@@ -118,10 +116,13 @@ class Clip():
           pred_label = np.array(self.predictions['Annotation'])
           annot_label = np.array(self.annotations['Annotation'])
           for p in self.matching:
-            if annot_label[p[0]] == pred_label[p[1]]:
-              out[annot_label[p[0]]]['TP'] += 1
-            elif self.unknown_label is not None and annot_label[p[0]] == self.unknown_label:
-              out[pred_label[p[1]]]['FP'] -= 1 #adjust FP for unknown labels
+            annotation = annot_label[p[0]]
+            prediction = pred_label[p[1]]
+            
+            if annotation == prediction:
+              out[annotation]['TP'] += 1
+            elif self.unknown_label is not None and annotation == self.unknown_label:
+              out[prediction]['FP'] -= 1 #adjust FP for unknown labels
               
           for label in self.label_set:
             n_annot = int((annot_label == label).sum())
@@ -130,6 +131,40 @@ class Clip():
             out[label]['FN'] = out[label]['FN'] + n_annot - out[label]['TP']
             
           return out
+              
+    def confusion_matrix(self):
+      if self.label_set is None:
+        return None
+      else:
+        confusion_matrix_labels = self.label_set.copy()
+        confusion_matrix_labels.append('FP')
+        if self.unknown_label is not None:
+          confusion_matrix_labels.append(self.unknown_label)
+        confusion_matrix_size = len(confusion_matrix_labels)
+
+        confusion_matrix = np.zeros((confusion_matrix_size, confusion_matrix_size))
+        cm_fp_idx = confusion_matrix_labels.index('FP')
+        
+        pred_label = np.array(self.predictions['Annotation'])
+        annot_label = np.array(self.annotations['Annotation'])
+        
+        for p in self.matching:
+          annotation = annot_label[p[0]]
+          prediction = pred_label[p[1]]
+          cm_annot_idx = confusion_matrix_labels.index(annotation)
+          cm_pred_idx = confusion_matrix_labels.index(prediction)
+          confusion_matrix[cm_pred_idx, cm_annot_idx] += 1
+
+        for label in self.label_set:
+          # count false positive detections, regardless of class
+          cm_label_idx = confusion_matrix_labels.index(label)
+          n_pred = int((pred_label == label).sum())
+          n_pred_positive_detections = confusion_matrix.sum(1)[cm_label_idx]
+          n_false_detections = n_pred - n_pred_positive_detections
+          confusion_matrix[cm_label_idx, cm_fp_idx] = n_false_detections
+          
+      return confusion_matrix, confusion_matrix_labels
+        
             
         
 #     def show_spec(self, start_sec, end_sec, show_annotations = False, show_predictions = False, show_matched = False):

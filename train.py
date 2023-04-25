@@ -95,7 +95,7 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
                         
 def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     model.eval()
-    e = predict_and_evaluate(model, dataloader, args)
+    e, _ = predict_and_evaluate(model, dataloader, args, save = False)
     
     summary = e['summary'][0.5]
     

@@ -26,12 +26,8 @@ def main(args):
   
   ## Evaluation
   test_dataloader = get_test_dataloader(args)
-  metrics = predict_and_evaluate(trained_model, test_dataloader, args)
-  
-  metrics_fp = os.path.join(args.experiment_dir, 'metrics.yaml')
-  with open(metrics_fp, 'w') as f:
-    yaml.dump(metrics, f)
-    
+  predict_and_evaluate(trained_model, test_dataloader, args)
+ 
 
 if __name__ == "__main__":
   main(sys.argv[1:])

@@ -6,6 +6,10 @@ import tqdm
 from raven_utils import Clip
 from model import preprocess_and_augment
 from scipy.signal import find_peaks
+import yaml
+from matplotlib import pyplot as plt
+import seaborn as sns
+from pathlib import Path
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -219,10 +223,24 @@ def get_metrics(predictions_fp, annotations_fp, args):
   
   return metrics
 
+def get_confusion_matrix(predictions_fp, annotations_fp, args):
+  c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
+  
+  c.load_predictions(predictions_fp)
+  c.load_annotations(annotations_fp, label_mapping = args.label_mapping)
+  
+  confusion_matrix = {}
+  
+  for iou_thresh in [0.2, 0.5, 0.8]:
+    c.compute_matching(IoU_minimum = iou_thresh)
+    confusion_matrix[iou_thresh], confusion_matrix_labels = c.confusion_matrix()
+  
+  return confusion_matrix, confusion_matrix_labels
+
 def summarize_metrics(metrics):
   # metrics (dict) : {fp : fp_metrics}
   # where
-  # metrics_dict (dict) : {iou_thresh : {'TP': int, 'FP' : int, 'FN' : int}}
+  # fp_metrics (dict) : {iou_thresh : {'TP': int, 'FP' : int, 'FN' : int}}
   
   fps = sorted(metrics.keys())
   iou_thresholds = sorted(metrics[fps[0]].keys())
@@ -264,17 +282,68 @@ def summarize_metrics(metrics):
   
   return overall
 
-def predict_and_evaluate(model, dataloader_dict, args):
+def plot_confusion_matrix(data, label_names, target_dir, name=""):   
+    fig = plt.figure(num=None, figsize=(12, 8), dpi=80, facecolor='w', edgecolor='k')
+    plt.clf()
+    ax = fig.add_subplot(111)
+    ax.set_aspect(1)
+    sns.heatmap(data, annot=True, fmt='d', cmap = 'magma', cbar = True, ax = ax)
+    ax.set_title('Confusion Matrix')
+    ax.set_yticks([i + 0.5 for i in range(len(label_names))])
+    ax.set_yticklabels(label_names, rotation = 0)
+    ax.set_xticks([i + 0.5 for i in range(len(label_names))])
+    ax.set_xticklabels(label_names, rotation = -15)
+    ax.set_ylabel('Prediction')
+    ax.set_xlabel('Annotation')
+    plt.title(name)
+    
+    plt.savefig(Path(target_dir, f"{name}_confusion_matrix.png"))
+
+def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
+  # confusion_matrix (dict) : {fp : fp_cm}
+  # where
+  # fp_cm (dict) : {iou_thresh : numpy array}
+  
+  fps = sorted(confusion_matrix.keys())
+  iou_thresholds = sorted(confusion_matrix[fps[0]].keys())
+  l = len(confusion_matrix_labels)
+  
+  overall = {iou_thresh : np.zeros((l, l)) for iou_thresh in iou_thresholds}
+  
+  for fp in fps:
+    for iou_thresh in iou_thresholds:
+      overall[iou_thresh] += confusion_matrix[fp][iou_thresh]
+  
+  return overall, confusion_matrix_labels
+
+def predict_and_evaluate(model, dataloader_dict, args, save = True):
   metrics = {}
+  confusion_matrix = {}
   for fn in dataloader_dict:
     predictions, regressions = generate_predictions(model, dataloader_dict[fn], args)
     predictions_fp = export_to_selection_table(predictions, regressions, fn, args)
     annotations_fp = os.path.join(args.annotation_selection_tables_dir, f"{fn}.txt")
     metrics[fn] = get_metrics(predictions_fp, annotations_fp, args)
+    confusion_matrix[fn], confusion_matrix_labels = get_confusion_matrix(predictions_fp, annotations_fp, args)
   
+  # summarize and save metrics
   summary = summarize_metrics(metrics)
   metrics['summary'] = summary
-  return metrics
+  if save:
+    metrics_fp = os.path.join(args.experiment_dir, 'metrics.yaml')
+    with open(metrics_fp, 'w') as f:
+      yaml.dump(metrics, f)
+  
+  # summarize and save confusion matrix
+  confusion_matrix_summary, confusion_matrix_labels = summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels)
+  if save:
+    for key in confusion_matrix_summary:
+      plot_confusion_matrix(confusion_matrix_summary[key].astype(int), confusion_matrix_labels, args.experiment_dir, name=f"iou_{key}")  
+  
+  return metrics, confusion_matrix_summary
+      
+      
+
 
 
 
