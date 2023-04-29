@@ -86,12 +86,11 @@ class DetectionDataset(Dataset):
 
         for ii, row in self.info_df.iterrows():
             fn = row['fn']
-            duration = row['duration']
             audio_fp = row['audio_fp']
+            duration = librosa.get_duration(filename=audio_fp)
             timestamp_fp = row['timestamp_fp']
 
             timestamps = self.process_timestamp(timestamp_fp)
-
             timestamp_dict[fn] = timestamps
 
             num_clips = int(np.floor((duration - self.clip_duration - self.clip_start_offset) // self.clip_hop))
@@ -107,8 +106,6 @@ class DetectionDataset(Dataset):
                       continue
 
                 metadata.append([fn, audio_fp, start, end])
-
-                # self.get_sub_timestamps(timestamps)
 
         self.timestamp_dict = timestamp_dict
         self.metadata = metadata
@@ -244,14 +241,6 @@ def get_val_dataloader(args):
   for i in range(len(val_info_df)):
     fn = val_info_df.iloc[i]['fn']
     audio_fp = val_info_df.iloc[i]['audio_fp']
-  
-#     val_file_dataset = DetectionDataset(val_info_df.iloc[i:i+1], args.clip_duration / 2, False, args)
-#     val_file_dataloader = DataLoader(val_file_dataset,
-#                                       batch_size=args.batch_size, 
-#                                       shuffle=False,
-#                                       num_workers=args.num_workers,
-#                                       pin_memory=True, 
-#                                       drop_last = False)
     val_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args)
     
   return val_dataloaders
@@ -265,14 +254,6 @@ def get_test_dataloader(args):
   for i in range(len(test_info_df)):
     fn = test_info_df.iloc[i]['fn']
     audio_fp = test_info_df.iloc[i]['audio_fp']
-  
-#     test_file_dataset = DetectionDataset(test_info_df.iloc[i:i+1], args.clip_duration / 2, False, args)
-#     test_file_dataloader = DataLoader(test_file_dataset,
-#                                       batch_size=args.batch_size, 
-#                                       shuffle=False,
-#                                       num_workers=args.num_workers,
-#                                       pin_memory=True, 
-#                                       drop_last = False)
     test_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args)
     
   

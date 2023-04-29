@@ -151,17 +151,6 @@ def modified_focal_loss(pred, gt, mask = None):
     loss = loss * mask.unsqueeze(-1)
   
   loss = loss.mean()
-    
-#   num_pos  = pos_inds.float().sum()
-#   pos_loss = pos_loss.sum()
-#   neg_loss = neg_loss.sum()
-    
-#   # print(f"pos {-1.*pos_loss} neg {-1.*neg_loss}")
-
-#   if num_pos == 0:
-#     loss = loss - neg_loss
-#   else:
-#     loss = loss - (pos_loss + neg_loss) / num_pos
   return loss
   
   

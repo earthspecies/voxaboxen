@@ -72,11 +72,10 @@ def compute_batched_uncertainty(predictions, starts, durations, args, al_args):
       if len(uncertainties_dict[i])>0:
         mask = ((peaks[i] >= start) * (peaks[i] < (start+duration))).astype(float)
         uncertainties_masked = uncertainties_dict[i] * mask
-        # uncertainties_masked = np.sort(uncertainties_masked)[-10:]
         uncertainties_masked = np.sort(uncertainties_masked)[::-1] 
         weighting = al_args.uncertainty_discount_factor ** np.arange(len(uncertainties_masked))
-        uncertainties_masked = uncertainties_masked * weighting
-        u += uncertainties_masked.sum()
+        uncertainties_weighted = uncertainties_masked * weighting
+        u += uncertainties_weighted.sum()
     uncertainties.append(float(u))
     
   return uncertainties

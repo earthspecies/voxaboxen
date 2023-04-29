@@ -77,31 +77,6 @@ class Clip():
         self.matching = metrics.match_events(ref, est, min_iou=IoU_minimum, method="fast")
         self.matched_annotations = [p[0] for p in self.matching]
         self.matched_predictions = [p[1] for p in self.matching]
-        # print("Computed matching between predictions and annotations based on IoU > %1.3f" % IoU_minimum)
-        
-    # def refine_matching(self, start_tolerance_sec = 0.2, dur_tolerance_percent = 0.1):
-    #     # After matching, we may want to throw out some predictions because their start and end times are too incorrect
-    #     count = 0
-    #     refined_matchings = []
-    #     for match in self.matching:
-    #       ref = self.annotations.iloc[match[0]]
-    #       ref_start = ref['Begin Time (s)']
-    #       ref_dur = ref['End Time (s)'] - ref_start
-    #       est = self.predictions.iloc[match[1]]
-    #       est_start = est['Begin Time (s)']
-    #       est_dur = est['End Time (s)'] - est_start
-    #       if np.abs(ref_start-est_start) > start_tolerance_sec:
-    #         count +=1
-    #         continue
-    #       elif np.abs(ref_dur - est_dur) / (ref_dur + 1e-06) > dur_tolerance_percent:
-    #         count +=1
-    #         continue
-    #       else:
-    #         refined_matchings.append(match)
-    #     self.matching = refined_matchings
-    #     self.matched_annotations = [p[0] for p in self.matching]
-    #     self.matched_predictions = [p[1] for p in self.matching]
-    #     print("Removed %d predictions whose start was off by %1.3f seconds or whose duration was off by %1.3f" % (count, start_tolerance_sec, dur_tolerance_percent))
         
     def evaluate(self):     
       
@@ -172,72 +147,4 @@ class Clip():
           confusion_matrix[cm_nobox_idx, cm_label_idx] = n_missed_detections
           
       return confusion_matrix, confusion_matrix_labels
-        
-            
-        
-#     def show_spec(self, start_sec, end_sec, show_annotations = False, show_predictions = False, show_matched = False):
-#         start_sample = int(self.sr * start_sec)
-#         end_sample = int(self.sr *end_sec)
-#         hop_length = 512
-#         y = librosa.feature.melspectrogram(self.samples[start_sample:end_sample], sr = self.sr, hop_length = hop_length)
-#         y = np.log(y + 1e-6)
-#         # Create figure and axes
-#         fig, ax = plt.subplots(figsize = (16, 6))
-        
-#         ticks = np.linspace(0, (end_sample - start_sample) // hop_length, num=10, dtype = int)
-#         ticklabels = list(np.linspace(start_sec, end_sec, num=10, dtype = float))
-#         ticklabels = ["{:1.1f}".format(x) for x in ticklabels]
-#         ax.set_xticks(ticks)
-#         ax.set_xticklabels(ticklabels)
-#         ax.set_xlabel("Time (s)")
-#         ax.imshow(y[::-1, :])
-        
-#         if show_annotations:
-#             # Do we display annotations as boxes on the spectrogram?
-            
-#             # Only look at annotations that start within the window or end within the window
-#             start_within_window = (self.annotations['Begin Time (s)'] > start_sec) & (self.annotations['Begin Time (s)'] < end_sec)
-#             end_within_window = (self.annotations['End Time (s)'] > start_sec) & (self.annotations['End Time (s)'] < end_sec)
-#             to_show = self.annotations[start_within_window | end_within_window]
-            
-#             jitter = 0
-#             for i, row in to_show.iterrows():
-#                 start_adjusted = row['Begin Time (s)'] - start_sec
-#                 end_adjusted = row['End Time (s)'] - start_sec
-#                 start_frame = int(start_adjusted * self.sr / hop_length)
-#                 end_frame = int(end_adjusted * self.sr / hop_length)
-                
-#                 # Create a Rectangle patch
-#                 if show_matched and row['index'] in self.matched_annotations:
-#                     ec = (0,1,0,1)
-#                 else:
-#                     ec = (1,1,0,1)
-                
-#                 rect = patches.Rectangle((start_frame, 1 + jitter), end_frame - start_frame, 125, linewidth=1, edgecolor=ec, facecolor=(1,1,0,0.15))
-#                 ax.add_patch(rect)
-#                 jitter = (jitter + 1) % 2
-                
-#         if show_predictions:
-#             # Do we display predictions as boxes on the spectrogram?
-            
-#             # Only look at predictions that start within the window or end within the window
-#             start_within_window = (self.predictions['Begin Time (s)'] > start_sec) & (self.predictions['Begin Time (s)'] < end_sec)
-#             end_within_window = (self.predictions['End Time (s)'] > start_sec) & (self.predictions['End Time (s)'] < end_sec)
-#             to_show = self.predictions[start_within_window | end_within_window]
-            
-#             jitter = 0
-#             for i, row in to_show.iterrows():
-#                 start_adjusted = row['Begin Time (s)'] - start_sec
-#                 end_adjusted = row['End Time (s)'] - start_sec
-#                 start_frame = int(start_adjusted * self.sr / hop_length)
-#                 end_frame = int(end_adjusted * self.sr / hop_length)
-          
-#                 # Create a Rectangle patch
-#                 if show_matched and row['index'] in self.matched_predictions:
-#                     ec = (0,1,0,1)
-#                 else:
-#                     ec = (1,0,0,1)
-#                 rect = patches.Rectangle((start_frame, 1 + jitter), end_frame - start_frame, 125, linewidth=1, edgecolor=ec, facecolor=(1,0,0,0.15))
-#                 ax.add_patch(rect)
-#                 jitter = (jitter+1) % 2
         

@@ -16,7 +16,6 @@ def parse_args(args):
   parser.add_argument('--annotation-selection-tables-dir', type = str, default = '/home/jupyter/carrion_crows_data/Annotations_revised_by_Daniela.cleaned/selection_tables')
 
   # Data
-  # parser.add_argument('--label-set', type=str, default = "crow", help = "CSV: names of labels")
   parser.add_argument('--label-mapping-config-fp', type = str, default = "/home/jupyter/sound_event_detection/config/focal_nonfocal.yaml")
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
