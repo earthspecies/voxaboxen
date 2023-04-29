@@ -9,6 +9,7 @@ from evaluation import predict_and_evaluate
 from functools import partial
 from data import get_train_dataloader, get_val_dataloader
 from model import preprocess_and_augment
+import os
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -38,6 +39,21 @@ def train(model, args):
       scheduler.step()
 
   print("Done!")
+  
+  checkpoint_dict = {
+        "epoch": t,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "scheduler_state_dict": scheduler.state_dict(),
+        "train_evals": train_evals,
+        "test_evals" : test_evals
+    }
+
+  torch.save(
+      checkpoint_dict,
+      os.path.join(args.experiment_dir, f"final_model.pt"),
+  ) 
+  
   return model  
   
 def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, args):
@@ -95,7 +111,7 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
                         
 def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     model.eval()
-    e, _ = predict_and_evaluate(model, dataloader, args, save = True)
+    e, _ = predict_and_evaluate(model, dataloader, args, save = False)
     
     summary = e['summary'][0.5]
     

@@ -2,7 +2,7 @@ label_mapping:
   'focal': 'focal'
   'focal?': 'focal'
   'not focal': 'not_focal'
-  'not focal LD': 'not_focal_ld'
+  'not focal LD': 'Unknown'
   'not focal?': 'not_focal'
   'crowchicks': 'crowchicks'
   'crow_undeter': 'Unknown'
@@ -13,7 +13,6 @@ label_mapping:
 label_set:
   - focal
   - not_focal
-  - not_focal_ld
   - crowchicks
   - cuckoo
   

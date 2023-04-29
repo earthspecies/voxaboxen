@@ -155,7 +155,7 @@ class Clip():
           cm_pred_idx = confusion_matrix_labels.index(prediction)
           confusion_matrix[cm_pred_idx, cm_annot_idx] += 1
 
-        for label in self.label_set:
+        for label in confusion_matrix_labels:
           # count false positive and false negative detections, regardless of class
           cm_label_idx = confusion_matrix_labels.index(label)
           

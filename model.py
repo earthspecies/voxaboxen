@@ -39,7 +39,6 @@ class DetectionModel(nn.Module):
       self.encoder = AvesEmbedding(args)
       self.args = args
       aves_sr = args.sr // args.scale_factor
-      prediction_scale_factor = args.prediction_scale_factor
       self.detection_head = DetectionHead(args, embedding_dim = embedding_dim)
       
   def forward(self, x):
@@ -92,7 +91,7 @@ class DetectionHead(nn.Module):
       logits = x[:,:,:self.n_classes]      
       reg = x[:,:,self.n_classes:]
       return logits, reg
-
+    
 def preprocess_and_augment(X, y, r, mask, train, args):
   if args.rms_norm:
     rms = torch.mean(X ** 2, dim = 1, keepdim = True) ** (-1/2)

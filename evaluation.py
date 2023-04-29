@@ -128,14 +128,14 @@ def write_tsv(out_fp, data):
             tsv_output.writerow(row)
 
 
-def generate_predictions(model, dataloader, args):
+def generate_predictions(model, single_clip_dataloader, args):
   model = model.to(device)
   model.eval()
   
   all_predictions = []
   all_regressions = []
   with torch.no_grad():
-    for i, (X, _, _, _) in tqdm.tqdm(enumerate(dataloader)):
+    for i, X in tqdm.tqdm(enumerate(single_clip_dataloader)):
       X = torch.Tensor(X).to(device = device, dtype = torch.float)
       X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
       predictions, regression = model(X)

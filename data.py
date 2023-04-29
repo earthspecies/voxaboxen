@@ -14,7 +14,7 @@ def normalize_sig_np(sig, eps=1e-8):
     return sig
 
 class DetectionDataset(Dataset):
-    def __init__(self, info_df, clip_hop, train, args, random_seed_shift = 0):
+    def __init__(self, info_df, train, args, random_seed_shift = 0):
         self.info_df = info_df
         self.label_set = args.label_set
         if hasattr(args, 'unknown_label'):
@@ -25,7 +25,7 @@ class DetectionDataset(Dataset):
         self.n_classes = len(self.label_set)
         self.sr = args.sr
         self.clip_duration = args.clip_duration
-        self.clip_hop = clip_hop
+        self.clip_hop = args.clip_hop
         assert (self.clip_hop*args.sr).is_integer()
         self.seed = args.seed + random_seed_shift
         self.amp_aug = args.amp_aug
@@ -190,7 +190,7 @@ def get_train_dataloader(args, random_seed_shift = 0):
   else:
     train_info_df = dev_info_df
   
-  train_dataset = DetectionDataset(train_info_df, args.clip_hop, True, args, random_seed_shift = random_seed_shift)
+  train_dataset = DetectionDataset(train_info_df, True, args, random_seed_shift = random_seed_shift)
   train_dataloader = DataLoader(train_dataset,
                                 batch_size=args.batch_size, 
                                 shuffle=True,
@@ -199,6 +199,35 @@ def get_train_dataloader(args, random_seed_shift = 0):
                                 drop_last = True)
   
   return train_dataloader
+
+  
+class SingleClipDataset(Dataset):
+    def __init__(self, audio_fp, clip_hop, args):
+        # waveform (samples,)
+        super().__init__()
+        self.duration = librosa.get_duration(filename=audio_fp)
+        self.num_clips = int(np.floor((self.duration - args.clip_duration) // args.clip_hop))
+        self.waveform, _ = librosa.load(audio_fp, sr=args.sr, mono=True)
+        self.clip_duration_samples = int(args.sr * args.clip_duration)
+        self.clip_hop_samples = int(args.sr * clip_hop)
+        
+    def __len__(self):
+        return self.num_clips
+
+    def __getitem__(self, idx):
+        """ Map int idx to dict of torch tensors """
+        start_sample = idx * self.clip_hop_samples
+        return self.waveform[start_sample:start_sample+self.clip_duration_samples]
+      
+def get_single_clip_data(audio_fp, clip_hop, args):
+    return DataLoader(
+      SingleClipDataset(audio_fp, clip_hop, args),
+      batch_size = args.batch_size,
+      shuffle=False,
+      num_workers=args.num_workers,
+      pin_memory=True,
+      drop_last=False,
+    )
 
 def get_val_dataloader(args):
   dev_info_fp = args.dev_info_fp
@@ -214,15 +243,16 @@ def get_val_dataloader(args):
   
   for i in range(len(val_info_df)):
     fn = val_info_df.iloc[i]['fn']
+    audio_fp = val_info_df.iloc[i]['audio_fp']
   
-    val_file_dataset = DetectionDataset(val_info_df.iloc[i:i+1], args.clip_duration / 2, False, args)
-    val_file_dataloader = DataLoader(val_file_dataset,
-                                      batch_size=args.batch_size, 
-                                      shuffle=False,
-                                      num_workers=args.num_workers,
-                                      pin_memory=True, 
-                                      drop_last = False)
-    val_dataloaders[fn] = val_file_dataloader
+#     val_file_dataset = DetectionDataset(val_info_df.iloc[i:i+1], args.clip_duration / 2, False, args)
+#     val_file_dataloader = DataLoader(val_file_dataset,
+#                                       batch_size=args.batch_size, 
+#                                       shuffle=False,
+#                                       num_workers=args.num_workers,
+#                                       pin_memory=True, 
+#                                       drop_last = False)
+    val_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args)
     
   return val_dataloaders
 
@@ -234,15 +264,16 @@ def get_test_dataloader(args):
   
   for i in range(len(test_info_df)):
     fn = test_info_df.iloc[i]['fn']
+    audio_fp = test_info_df.iloc[i]['audio_fp']
   
-    test_file_dataset = DetectionDataset(test_info_df.iloc[i:i+1], args.clip_duration / 2, False, args)
-    test_file_dataloader = DataLoader(test_file_dataset,
-                                      batch_size=args.batch_size, 
-                                      shuffle=False,
-                                      num_workers=args.num_workers,
-                                      pin_memory=True, 
-                                      drop_last = False)
-    test_dataloaders[fn] = test_file_dataloader
+#     test_file_dataset = DetectionDataset(test_info_df.iloc[i:i+1], args.clip_duration / 2, False, args)
+#     test_file_dataloader = DataLoader(test_file_dataset,
+#                                       batch_size=args.batch_size, 
+#                                       shuffle=False,
+#                                       num_workers=args.num_workers,
+#                                       pin_memory=True, 
+#                                       drop_last = False)
+    test_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args)
     
   
   return test_dataloaders

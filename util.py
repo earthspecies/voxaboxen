@@ -73,12 +73,32 @@ def set_seed(seed):
   random.seed(seed)
 
 def save_params(args):
-    """ Save a copy of the params used for this experiment """
-    logging.info("Params:")
-    params_file = os.path.join(args.experiment_dir, "params.txt")
-    with open(params_file, "w") as f:
-        for name in sorted(vars(args)):
-            val = getattr(args, name)
-            logging.info(f"  {name}: {val}")
-            f.write(f"{name}: {val}\n")
+  """ Save a copy of the params used for this experiment """
+  logging.info("Params:")
+  params_file = os.path.join(args.experiment_dir, "params.yaml")
+
+  args_dict = {}
+  for name in sorted(vars(args)):
+    val = getattr(args, name)
+    logging.info(f"  {name}: {val}")
+    args_dict[name] = val
+
+  with open(params_file, "w") as f:
+    yaml.dump(args_dict, f)
+
+  # for name in sorted(vars(args)):
+  #     val = getattr(args, name)
+  #     logging.info(f"  {name}: {val}")
+  #     f.write(f"{name}: {val}\n")
             
+      
+def load_params(fp):
+  with open(fp, 'r') as f:
+    args_dict = yaml.safe_load(f)
+
+  args = argparse.Namespace()
+
+  for key in args_dict:
+    setattr(args, key, args_dict[key])
+
+  return args
