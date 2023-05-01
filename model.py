@@ -13,6 +13,8 @@ class AvesEmbedding(nn.Module):
         super().__init__()
         models, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task([args.model_weight_fp])
         self.model = models[0]
+        self.model.feature_grad_mult = 0 # do not fine tune aves conv layers 
+        
         self.sr=args.sr
 
     def forward(self, x):

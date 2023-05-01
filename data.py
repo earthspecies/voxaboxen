@@ -9,9 +9,23 @@ from numpy.random import default_rng
 from intervaltree import IntervalTree
 from torch.utils.data import Dataset, DataLoader
 
+import torch
+import torchaudio
+from torch.nn import functional as F
+
 def normalize_sig_np(sig, eps=1e-8):
     sig = sig / (np.max(np.abs(sig))+eps)
     return sig
+  
+def crop_and_pad(wav, sr, dur_sec):
+  # crops and pads waveform to be the expected number of samples; used after resampling to ensure proper size
+  target_dur_samples = int(sr * dur_sec)
+  wav = wav[:target_dur_samples]
+  pad = target_dur_samples - wav.size(0)
+  if pad > 0:
+    wav = F.pad(wav, (0,pad), mode='reflect')
+    
+  return wav
 
 class DetectionDataset(Dataset):
     def __init__(self, info_df, train, args, random_seed_shift = 0):
@@ -168,15 +182,19 @@ class DetectionDataset(Dataset):
 
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
-        audio, _ = librosa.load(audio_fp, sr=self.sr, offset=start, duration=self.clip_duration, mono=True)
+        audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
         audio = audio-np.mean(audio)
+        if self.amp_aug and self.train:
+            audio = self.augment_amplitude(audio)
+        audio = torch.from_numpy(audio)
+        if file_sr != self.sr:
+          audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
+          audio = crop_and_pad(audio, self.sr, self.clip_duration)
+        
         pos_intervals = self.get_pos_intervals(fn, start, end)
         anchor_anno, regression_anno, mask = self.get_annotation(pos_intervals, audio)
 
-        if self.amp_aug and self.train:
-            audio = self.augment_amplitude(audio)
-                        
-        return audio, anchor_anno, regression_anno, mask
+        return audio, torch.from_numpy(anchor_anno), torch.from_numpy(regression_anno), torch.from_numpy(mask)
 
     def __len__(self):
         return len(self.metadata)
@@ -203,18 +221,26 @@ class SingleClipDataset(Dataset):
         super().__init__()
         self.duration = librosa.get_duration(filename=audio_fp)
         self.num_clips = int(np.floor((self.duration - args.clip_duration) // args.clip_hop))
-        self.waveform, _ = librosa.load(audio_fp, sr=args.sr, mono=True)
-        self.clip_duration_samples = int(args.sr * args.clip_duration)
-        self.clip_hop_samples = int(args.sr * clip_hop)
-        self.annot_fp = annot_fp
+        self.waveform, self.file_sr = librosa.load(audio_fp, sr=None, mono=True)
+        self.clip_hop_samples_file_sr = int(clip_hop * self.file_sr)
+        self.clip_duration_samples_file_sr = int(args.clip_duration * self.file_sr)
+        self.clip_duration_samples = int(args.clip_duration * args.sr)
+        self.annot_fp = annot_fp # attribute that is accessed elsewhere
+        self.sr = args.sr
         
     def __len__(self):
         return self.num_clips
 
     def __getitem__(self, idx):
         """ Map int idx to dict of torch tensors """
-        start_sample = idx * self.clip_hop_samples
-        return self.waveform[start_sample:start_sample+self.clip_duration_samples]
+        start_sample = idx * self.clip_hop_samples_file_sr
+        audio = self.waveform[start_sample:start_sample+self.clip_duration_samples_file_sr]
+        audio = audio-np.mean(audio)
+        audio = torch.from_numpy(audio)
+        if self.file_sr != self.sr:
+          audio = torchaudio.functional.resample(audio, self.file_sr, self.sr) 
+          audio = crop_and_pad(audio, self.sr, self.clip_duration)
+        return audio
       
 def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):
     return DataLoader(

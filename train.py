@@ -69,10 +69,10 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
     data_iterator = tqdm.tqdm(dataloader)
     for i, (X, y, r, loss_mask) in enumerate(data_iterator):
       num_batches_seen = i
-      X = torch.Tensor(X).to(device = device, dtype = torch.float)
-      y = torch.Tensor(y).to(device = device, dtype = torch.float)
-      r = torch.Tensor(r).to(device = device, dtype = torch.float)
-      loss_mask = torch.Tensor(loss_mask).to(device = device, dtype = torch.float)
+      X = X.to(device = device, dtype = torch.float)
+      y = y.to(device = device, dtype = torch.float)
+      r = r.to(device = device, dtype = torch.float)
+      loss_mask = loss_mask.to(device = device, dtype = torch.float)
       
       X, y, r, loss_mask = preprocess_and_augment(X, y, r, loss_mask, True, args)
       probs, regression = model(X)
@@ -113,7 +113,7 @@ def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     model.eval()
     e, _ = predict_and_evaluate(model, dataloader, args, save = False)
     
-    summary = e['summary'][0.5]
+    summary = e['summary'][0.8]
     
     evals = {k:[] for k in ['precision','recall','f1']}
     for k in ['precision','recall','f1']:
@@ -122,7 +122,7 @@ def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
         evals[k].append(m)
       evals[k] = float(np.mean(evals[k]))
         
-    print(f"Epoch {t} | Test scores @0.5IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
+    print(f"Epoch {t} | Test scores @0.8IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
 
 def modified_focal_loss(pred, gt, mask = None):

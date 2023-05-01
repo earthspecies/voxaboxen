@@ -113,7 +113,7 @@ def generate_predictions(model, single_clip_dataloader, args):
   all_regressions = []
   with torch.no_grad():
     for i, X in tqdm.tqdm(enumerate(single_clip_dataloader)):
-      X = torch.Tensor(X).to(device = device, dtype = torch.float)
+      X = X.to(device = device, dtype = torch.float)
       X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
       predictions, regression = model(X)
       # predictions = torch.sigmoid(logits)
