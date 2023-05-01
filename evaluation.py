@@ -299,7 +299,7 @@ def predict_and_evaluate(model, dataloader_dict, args, save = True):
   for fn in dataloader_dict:
     predictions, regressions = generate_predictions(model, dataloader_dict[fn], args)
     predictions_fp = export_to_selection_table(predictions, regressions, fn, args)
-    annotations_fp = os.path.join(args.annotation_selection_tables_dir, f"{fn}.txt")
+    annotations_fp = dataloader_dict[fn].dataset.annot_fp
     metrics[fn] = get_metrics(predictions_fp, annotations_fp, args)
     confusion_matrix[fn], confusion_matrix_labels = get_confusion_matrix(predictions_fp, annotations_fp, args)
   

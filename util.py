@@ -13,16 +13,15 @@ def parse_args(args):
   parser.add_argument('--output-dir', type=str, default="/home/jupyter/sound_event_detection/logs")
   parser.add_argument('--name', type = str, required=True)
   parser.add_argument('--seed', type=int, default=0)
-  parser.add_argument('--annotation-selection-tables-dir', type = str, default = '/home/jupyter/carrion_crows_data/Annotations_revised_by_Daniela.cleaned/selection_tables')
 
   # Data
   parser.add_argument('--label-mapping-config-fp', type = str, default = "/home/jupyter/sound_event_detection/config/focal_nonfocal.yaml")
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
-  parser.add_argument('--dev-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.all/dev_info.csv")
-  parser.add_argument('--test-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.revised_anno.all/test_info.csv")
+  parser.add_argument('--train-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.active/train_info.csv")
+  parser.add_argument('--val-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.active/val_info.csv")
+  parser.add_argument('--test-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.active/test_info.csv")
   parser.add_argument('--num-workers', type=int, default=8)
-  parser.add_argument('--num-files-val', type=int, default=1)
   
   # Model
   parser.add_argument('--sr', type=int, default=16000)

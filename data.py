@@ -59,14 +59,18 @@ class DetectionDataset(Dataset):
             aug_signal = r*signal
             return aug_signal
 
-    def process_timestamp(self, timestamp_fp):
-        timestamp = pd.read_csv(timestamp_fp)
+    def process_selection_table(self, selection_table_fp):
+        selection_table = pd.read_csv(selection_table_fp, sep = '\t')
         tree = IntervalTree()
 
-        for ii, row in timestamp.iterrows():
-            start = row['start']
-            end = row['end']
-            label = row['label']
+        for ii, row in selection_table.iterrows():
+            start = row['Begin Time (s)']
+            end = row['End Time (s)']
+            label = row['Annotation']
+            
+            if end<=start:
+              continue
+            
             if label in self.label_mapping:
               label = self.label_mapping[label]
             else:
@@ -81,17 +85,17 @@ class DetectionDataset(Dataset):
         return tree
 
     def make_metadata(self):
-        timestamp_dict = dict()
+        selection_table_dict = dict()
         metadata = []
 
         for ii, row in self.info_df.iterrows():
             fn = row['fn']
             audio_fp = row['audio_fp']
             duration = librosa.get_duration(filename=audio_fp)
-            timestamp_fp = row['timestamp_fp']
+            selection_table_fp = row['selection_table_fp']
 
-            timestamps = self.process_timestamp(timestamp_fp)
-            timestamp_dict[fn] = timestamps
+            selection_table = self.process_selection_table(selection_table_fp)
+            selection_table_dict[fn] = selection_table
 
             num_clips = int(np.floor((duration - self.clip_duration - self.clip_start_offset) // self.clip_hop))
 
@@ -99,7 +103,7 @@ class DetectionDataset(Dataset):
                 start = tt*self.clip_hop + self.clip_start_offset
                 end = start + self.clip_duration
 
-                ivs = timestamps[start:end]
+                ivs = selection_table[start:end]
                 # if no annotated intervals, skip with specified probability
                 if not ivs:
                   if self.omit_empty_clip_prob > self.rng.uniform():
@@ -107,11 +111,11 @@ class DetectionDataset(Dataset):
 
                 metadata.append([fn, audio_fp, start, end])
 
-        self.timestamp_dict = timestamp_dict
+        self.selection_table_dict = selection_table_dict
         self.metadata = metadata
 
     def get_pos_intervals(self, fn, start, end):
-        tree = self.timestamp_dict[fn]
+        tree = self.selection_table_dict[fn]
 
         intervals = tree[start:end]
         intervals = [(max(iv.begin, start)-start, min(iv.end, end)-start, iv.data) for iv in intervals]
@@ -179,13 +183,8 @@ class DetectionDataset(Dataset):
       
       
 def get_train_dataloader(args, random_seed_shift = 0):
-  dev_info_fp = args.dev_info_fp
-  dev_info_df = pd.read_csv(dev_info_fp)
-  num_files_val = args.num_files_val
-  if args.num_files_val>0:
-    train_info_df = dev_info_df.iloc[:-args.num_files_val]
-  else:
-    train_info_df = dev_info_df
+  train_info_fp = args.train_info_fp
+  train_info_df = pd.read_csv(train_info_fp)
   
   train_dataset = DetectionDataset(train_info_df, True, args, random_seed_shift = random_seed_shift)
   train_dataloader = DataLoader(train_dataset,
@@ -199,7 +198,7 @@ def get_train_dataloader(args, random_seed_shift = 0):
 
   
 class SingleClipDataset(Dataset):
-    def __init__(self, audio_fp, clip_hop, args):
+    def __init__(self, audio_fp, clip_hop, args, annot_fp = None):
         # waveform (samples,)
         super().__init__()
         self.duration = librosa.get_duration(filename=audio_fp)
@@ -207,6 +206,7 @@ class SingleClipDataset(Dataset):
         self.waveform, _ = librosa.load(audio_fp, sr=args.sr, mono=True)
         self.clip_duration_samples = int(args.sr * args.clip_duration)
         self.clip_hop_samples = int(args.sr * clip_hop)
+        self.annot_fp = annot_fp
         
     def __len__(self):
         return self.num_clips
@@ -216,9 +216,9 @@ class SingleClipDataset(Dataset):
         start_sample = idx * self.clip_hop_samples
         return self.waveform[start_sample:start_sample+self.clip_duration_samples]
       
-def get_single_clip_data(audio_fp, clip_hop, args):
+def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):
     return DataLoader(
-      SingleClipDataset(audio_fp, clip_hop, args),
+      SingleClipDataset(audio_fp, clip_hop, args, annot_fp = annot_fp),
       batch_size = args.batch_size,
       shuffle=False,
       num_workers=args.num_workers,
@@ -227,21 +227,16 @@ def get_single_clip_data(audio_fp, clip_hop, args):
     )
 
 def get_val_dataloader(args):
-  dev_info_fp = args.dev_info_fp
-  dev_info_df = pd.read_csv(dev_info_fp)
-  num_files_val = args.num_files_val
-  if args.num_files_val>0:
-    val_info_df = dev_info_df.iloc[-args.num_files_val:]
-  else:
-    val_info_df = dev_info_df.iloc[-1:]
-    warnings.warn("num_files_val was set to 0. I am using last dev file as validation, but this is also in the train set.")
+  val_info_fp = args.val_info_fp
+  val_info_df = pd.read_csv(val_info_fp)
   
   val_dataloaders = {}
   
   for i in range(len(val_info_df)):
     fn = val_info_df.iloc[i]['fn']
     audio_fp = val_info_df.iloc[i]['audio_fp']
-    val_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args)
+    annot_fp = val_info_df.iloc[i]['selection_table_fp']
+    val_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
     
   return val_dataloaders
 
@@ -254,9 +249,9 @@ def get_test_dataloader(args):
   for i in range(len(test_info_df)):
     fn = test_info_df.iloc[i]['fn']
     audio_fp = test_info_df.iloc[i]['audio_fp']
-    test_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args)
+    annot_fp = test_info_df.iloc[i]['selection_table_fp']
+    test_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
     
-  
   return test_dataloaders
   
 def get_anchor_anno(start_idx, dur_samples, seq_len):
