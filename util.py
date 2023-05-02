@@ -18,9 +18,9 @@ def parse_args(args):
   parser.add_argument('--label-mapping-config-fp', type = str, default = "/home/jupyter/sound_event_detection/config/focal_nonfocal.yaml")
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
-  parser.add_argument('--train-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.active/train_info.csv")
-  parser.add_argument('--val-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.active/val_info.csv")
-  parser.add_argument('--test-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.active/test_info.csv")
+  parser.add_argument('--train-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.active_origsr/train_info.csv")
+  parser.add_argument('--val-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.active_origsr/val_info.csv")
+  parser.add_argument('--test-info-fp', type=str, default = "/home/jupyter/carrion_crows_data/call_detection_data.active_origsr/test_info.csv")
   parser.add_argument('--num-workers', type=int, default=8)
   
   # Model
@@ -35,10 +35,12 @@ def parse_args(args):
   parser.add_argument('--batch-size', type=int, required=True) 
   parser.add_argument('--lr', type=float, required=True) 
   parser.add_argument('--n-epochs', type=int, required=True)
-  parser.add_argument('--unfreeze-encoder-epoch', type=int, default=1)
+  parser.add_argument('--unfreeze-encoder-epoch', type=int, default=0)
   parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the final frames") 
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0.95, help="if a clip has no annotations, do not use for training with this probability")
-  parser.add_argument('--lamb', type=float, default=.003, help="parameter controlling strength regression loss")                 
+  parser.add_argument('--lamb', type=float, default=.003, help="parameter controlling strength regression loss")
+  parser.add_argument('--step-size', type=int, default=5, help="number epochs between lr decrease")
+  parser.add_argument('--model-selection-iou', type=float, default=0.8, help="iou for used for computing f1 for early stopping")
   
   # Augmentations
   parser.add_argument('--amp-aug', action ="store_true", help="Whether to use amplitude augmentation") 

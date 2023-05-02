@@ -19,40 +19,51 @@ def train(model, args):
   class_loss_fn = modified_focal_loss
   reg_loss_fn = masked_reg_loss
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
-  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=args.lr/100, last_epoch=- 1, verbose=False)
+  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.step_size, gamma=0.1, last_epoch=- 1, verbose=False)
+  # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=args.lr/100, last_epoch=- 1, verbose=False)
   
   train_evals = []
-  test_evals = []
+  val_evals = []
   learning_rates = []
   
   val_dataloader = get_val_dataloader(args)
+  
+  best_f1 = 0
       
   for t in range(args.n_epochs):
       print(f"Epoch {t}\n-------------------------------")
       train_dataloader = get_train_dataloader(args, random_seed_shift = t) # reinitialize dataloader with different negatives each epoch
       model, train_eval = train_epoch(model, t, train_dataloader, class_loss_fn, reg_loss_fn, optimizer, args)
-      test_eval = test_epoch(model, t, val_dataloader, class_loss_fn, reg_loss_fn, args)
+      val_eval = val_epoch(model, t, val_dataloader, class_loss_fn, reg_loss_fn, args)
       train_evals.append(train_eval.copy())
-      test_evals.append(test_eval.copy())
+      val_evals.append(val_eval.copy())
       learning_rates.append(optimizer.param_groups[0]["lr"])
-      plot_eval(train_evals, test_evals, learning_rates, args)
+      plot_eval(train_evals, val_evals, learning_rates, args)
       scheduler.step()
-
-  print("Done!")
-  
-  checkpoint_dict = {
+      
+      current_f1 = val_eval['f1']
+      if current_f1 > best_f1:
+        print('found new best model')
+        best_f1 = current_f1
+        
+        checkpoint_dict = {
         "epoch": t,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "scheduler_state_dict": scheduler.state_dict(),
         "train_evals": train_evals,
-        "test_evals" : test_evals
-    }
+        "val_evals" : val_evals
+        }
 
-  torch.save(
-      checkpoint_dict,
-      os.path.join(args.experiment_dir, f"final_model.pt"),
-  ) 
+        torch.save(
+            checkpoint_dict,
+            os.path.join(args.experiment_dir, f"best_model.pt"),
+        ) 
+
+  print("Done! Returning the best model.")
+  
+  cp = torch.load(os.path.join(args.experiment_dir, f"best_model.pt"))
+  model.load_state_dict(cp["model_state_dict"])
   
   return model  
   
@@ -109,11 +120,11 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
     print(f"Epoch {t} | Train loss: {train_loss:1.3f}")
     return model, evals
                         
-def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
+def val_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     model.eval()
-    e, _ = predict_and_evaluate(model, dataloader, args, save = False)
+    e, _ = predict_and_evaluate(model, dataloader, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), verbose = False)
     
-    summary = e['summary'][0.8]
+    summary = e['summary'][args.model_selection_iou]
     
     evals = {k:[] for k in ['precision','recall','f1']}
     for k in ['precision','recall','f1']:
@@ -122,7 +133,7 @@ def test_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
         evals[k].append(m)
       evals[k] = float(np.mean(evals[k]))
         
-    print(f"Epoch {t} | Test scores @0.8IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
+    print(f"Epoch {t} | Test scores @{args.model_selection_iou}IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
 
 def modified_focal_loss(pred, gt, mask = None):

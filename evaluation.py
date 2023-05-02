@@ -105,14 +105,20 @@ def write_tsv(out_fp, data):
             tsv_output.writerow(row)
 
 
-def generate_predictions(model, single_clip_dataloader, args):
+def generate_predictions(model, single_clip_dataloader, args, verbose = True):
   model = model.to(device)
   model.eval()
   
   all_predictions = []
   all_regressions = []
+  
+  if verbose:
+    iterator = tqdm.tqdm(enumerate(single_clip_dataloader), total=len(single_clip_dataloader))
+  else:
+    iterator = enumerate(single_clip_dataloader)
+  
   with torch.no_grad():
-    for i, X in tqdm.tqdm(enumerate(single_clip_dataloader)):
+    for i, X in iterator:
       X = X.to(device = device, dtype = torch.float)
       X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
       predictions, regression = model(X)
@@ -145,7 +151,7 @@ def generate_predictions(model, single_clip_dataloader, args):
     
   return all_predictions.detach().cpu().numpy(), all_regressions.detach().cpu().numpy()
 
-def export_to_selection_table(predictions, regressions, fn, args):
+def export_to_selection_table(predictions, regressions, fn, args, verbose=True):
   target_fp = os.path.join(args.experiment_dir, f"probs_{fn}.npy")
   np.save(target_fp, predictions)
   
@@ -172,8 +178,9 @@ def export_to_selection_table(predictions, regressions, fn, args):
     
   preds = np.stack(preds, axis = -1)
   preds = preds * all_classes_peak_mask
-
-  print(f"Peaks found {np.sum(preds)} boxes")
+  
+  if verbose:
+    print(f"Peaks found {np.sum(preds)} boxes")
   
   pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
   anchor_scores = predictions
@@ -293,28 +300,32 @@ def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
   
   return overall, confusion_matrix_labels
 
-def predict_and_evaluate(model, dataloader_dict, args, save = True):
+def predict_and_evaluate(model, dataloader_dict, args, output_dir = None, verbose = True):
   metrics = {}
   confusion_matrix = {}
   for fn in dataloader_dict:
-    predictions, regressions = generate_predictions(model, dataloader_dict[fn], args)
-    predictions_fp = export_to_selection_table(predictions, regressions, fn, args)
+    predictions, regressions = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
+    predictions_fp = export_to_selection_table(predictions, regressions, fn, args, verbose = verbose)
     annotations_fp = dataloader_dict[fn].dataset.annot_fp
     metrics[fn] = get_metrics(predictions_fp, annotations_fp, args)
     confusion_matrix[fn], confusion_matrix_labels = get_confusion_matrix(predictions_fp, annotations_fp, args)
+    
+  if output_dir is not None:
+    if not os.path.exists(output_dir):
+      os.makedirs(output_dir)
   
   # summarize and save metrics
   summary = summarize_metrics(metrics)
   metrics['summary'] = summary
-  if save:
-    metrics_fp = os.path.join(args.experiment_dir, 'metrics.yaml')
+  if output_dir is not None:
+    metrics_fp = os.path.join(output_dir, 'metrics.yaml')
     with open(metrics_fp, 'w') as f:
       yaml.dump(metrics, f)
   
   # summarize and save confusion matrix
   confusion_matrix_summary, confusion_matrix_labels = summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels)
-  if save:
+  if output_dir is not None:
     for key in confusion_matrix_summary:
-      plot_confusion_matrix(confusion_matrix_summary[key].astype(int), confusion_matrix_labels, args.experiment_dir, name=f"iou_{key}")  
+      plot_confusion_matrix(confusion_matrix_summary[key].astype(int), confusion_matrix_labels, output_dir, name=f"iou_{key}")  
   
   return metrics, confusion_matrix_summary

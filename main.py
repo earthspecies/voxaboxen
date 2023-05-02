@@ -26,7 +26,7 @@ def main(args):
   
   ## Evaluation
   test_dataloader = get_test_dataloader(args)
-  predict_and_evaluate(trained_model, test_dataloader, args)
+  predict_and_evaluate(trained_model, test_dataloader, args, output_dir = os.path.join(args.experiment_dir, 'test_results'))
  
 
 if __name__ == "__main__":

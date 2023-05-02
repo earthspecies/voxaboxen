@@ -221,10 +221,12 @@ class SingleClipDataset(Dataset):
         super().__init__()
         self.duration = librosa.get_duration(filename=audio_fp)
         self.num_clips = int(np.floor((self.duration - args.clip_duration) // args.clip_hop))
-        self.waveform, self.file_sr = librosa.load(audio_fp, sr=None, mono=True)
-        self.clip_hop_samples_file_sr = int(clip_hop * self.file_sr)
-        self.clip_duration_samples_file_sr = int(args.clip_duration * self.file_sr)
-        self.clip_duration_samples = int(args.clip_duration * args.sr)
+        self.audio_fp = audio_fp
+        # self.waveform, self.file_sr = librosa.load(audio_fp, sr=None, mono=True)
+        # self.clip_hop_samples_file_sr = int(clip_hop * self.file_sr)
+        self.clip_hop = clip_hop
+        # self.clip_duration_samples_file_sr = int(args.clip_duration * self.file_sr)
+        self.clip_duration = args.clip_duration
         self.annot_fp = annot_fp # attribute that is accessed elsewhere
         self.sr = args.sr
         
@@ -233,12 +235,16 @@ class SingleClipDataset(Dataset):
 
     def __getitem__(self, idx):
         """ Map int idx to dict of torch tensors """
-        start_sample = idx * self.clip_hop_samples_file_sr
-        audio = self.waveform[start_sample:start_sample+self.clip_duration_samples_file_sr]
+        start = idx * self.clip_hop
+        
+        audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
+        
+#         start_sample = idx * self.clip_hop_samples_file_sr
+#         audio = self.waveform[start_sample:start_sample+self.clip_duration_samples_file_sr]
         audio = audio-np.mean(audio)
         audio = torch.from_numpy(audio)
-        if self.file_sr != self.sr:
-          audio = torchaudio.functional.resample(audio, self.file_sr, self.sr) 
+        if file_sr != self.sr:
+          audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
           audio = crop_and_pad(audio, self.sr, self.clip_duration)
         return audio
       
