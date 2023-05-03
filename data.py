@@ -3,35 +3,64 @@ import math
 import numpy as np
 import pandas as pd
 import librosa
+import warnings
 
-from numpy.random import RandomState
+from numpy.random import default_rng
 from intervaltree import IntervalTree
 from torch.utils.data import Dataset, DataLoader
+
+import torch
+import torchaudio
+from torch.nn import functional as F
 
 def normalize_sig_np(sig, eps=1e-8):
     sig = sig / (np.max(np.abs(sig))+eps)
     return sig
+  
+def crop_and_pad(wav, sr, dur_sec):
+  # crops and pads waveform to be the expected number of samples; used after resampling to ensure proper size
+  target_dur_samples = int(sr * dur_sec)
+  wav = wav[:target_dur_samples]
+  pad = target_dur_samples - wav.size(0)
+  if pad > 0:
+    wav = F.pad(wav, (0,pad), mode='reflect')
+    
+  return wav
 
 class DetectionDataset(Dataset):
-    def __init__(self, info_df, clip_hop, omit_empty_clip_probability, args):
+    def __init__(self, info_df, train, args, random_seed_shift = 0):
         self.info_df = info_df
-        self.anchor_win_sizes = np.array(args.anchor_durs_sec)        
         self.label_set = args.label_set
+        if hasattr(args, 'unknown_label'):
+          self.unknown_label = args.unknown_label
+        else:
+          self.unknown_label = None
+        self.label_mapping = args.label_mapping
+        self.n_classes = len(self.label_set)
         self.sr = args.sr
         self.clip_duration = args.clip_duration
-        self.clip_hop = clip_hop
-        self.seed = args.seed
+        self.clip_hop = args.clip_hop
+        assert (self.clip_hop*args.sr).is_integer()
+        self.seed = args.seed + random_seed_shift
         self.amp_aug = args.amp_aug
         if self.amp_aug:
           self.amp_aug_low_r = args.amp_aug_low_r
           self.amp_aug_high_r = args.amp_aug_high_r
-          assert (self.amp_aug_low_r >= 0) and (self.amp_aug_high_r <= 1) and (self.amp_aug_low_r <= self.amp_aug_high_r)
+          assert (self.amp_aug_low_r >= 0) #and (self.amp_aug_high_r <= 1) and 
+          assert (self.amp_aug_low_r <= self.amp_aug_high_r)
 
         self.scale_factor = args.scale_factor
         self.prediction_scale_factor = args.prediction_scale_factor
         self.scale_factor_raw_to_prediction = self.scale_factor*self.prediction_scale_factor
-        self.rs = RandomState(seed=self.seed)
-        self.omit_empty_clip_probability = omit_empty_clip_probability
+        self.rng = default_rng(seed=self.seed)
+        self.train=train
+        
+        if self.train:
+          self.omit_empty_clip_prob = args.omit_empty_clip_prob
+          self.clip_start_offset = self.rng.integers(0, np.floor(self.clip_hop*self.sr)) / self.sr
+        else:
+          self.omit_empty_clip_prob = 0
+          self.clip_start_offset = 0
         
         # make metadata
         self.make_metadata()
@@ -40,123 +69,142 @@ class DetectionDataset(Dataset):
         if not self.amp_aug:
             return signal
         else:
-            r = self.rs.uniform(self.amp_aug_low_r, self.amp_aug_high_r)
+            r = self.rng.uniform(self.amp_aug_low_r, self.amp_aug_high_r)
             aug_signal = r*signal
             return aug_signal
 
-    def process_timestamp(self, timestamp_fp):
-        timestamp = pd.read_csv(timestamp_fp)
+    def process_selection_table(self, selection_table_fp):
+        selection_table = pd.read_csv(selection_table_fp, sep = '\t')
         tree = IntervalTree()
 
-        for ii, row in timestamp.iterrows():
-            start = row['start']
-            end = row['end']
-            label_idx = self.label_set.index(row['label'])
-
+        for ii, row in selection_table.iterrows():
+            start = row['Begin Time (s)']
+            end = row['End Time (s)']
+            label = row['Annotation']
+            
+            if end<=start:
+              continue
+            
+            if label in self.label_mapping:
+              label = self.label_mapping[label]
+            else:
+              continue
+            
+            if label == self.unknown_label:
+              label_idx = -1
+            else:
+              label_idx = self.label_set.index(label)
             tree.addi(start, end, label_idx)
-            # print(start, end, label_idx)
 
         return tree
 
     def make_metadata(self):
-        timestamp_dict = dict()
+        selection_table_dict = dict()
         metadata = []
 
         for ii, row in self.info_df.iterrows():
             fn = row['fn']
-            duration = row['duration']
             audio_fp = row['audio_fp']
-            timestamp_fp = row['timestamp_fp']
+            duration = librosa.get_duration(filename=audio_fp)
+            selection_table_fp = row['selection_table_fp']
 
-            timestamps = self.process_timestamp(timestamp_fp)
+            selection_table = self.process_selection_table(selection_table_fp)
+            selection_table_dict[fn] = selection_table
 
-            timestamp_dict[fn] = timestamps
-
-            num_clips = int(np.floor((duration - self.clip_duration) // self.clip_hop))
+            num_clips = int(np.floor((duration - self.clip_duration - self.clip_start_offset) // self.clip_hop))
 
             for tt in range(num_clips):
-                start = tt*self.clip_hop
+                start = tt*self.clip_hop + self.clip_start_offset
                 end = start + self.clip_duration
 
-                ivs = timestamps[start:end]
-                # if no positive intervals, skip with specified probability
+                ivs = selection_table[start:end]
+                # if no annotated intervals, skip with specified probability
                 if not ivs:
-                  if self.omit_empty_clip_probability > np.random.uniform():
+                  if self.omit_empty_clip_prob > self.rng.uniform():
                       continue
 
                 metadata.append([fn, audio_fp, start, end])
 
-                # self.get_sub_timestamps(timestamps)
-
-        self.timestamp_dict = timestamp_dict
+        self.selection_table_dict = selection_table_dict
         self.metadata = metadata
 
     def get_pos_intervals(self, fn, start, end):
-        tree = self.timestamp_dict[fn]
+        tree = self.selection_table_dict[fn]
 
         intervals = tree[start:end]
         intervals = [(max(iv.begin, start)-start, min(iv.end, end)-start, iv.data) for iv in intervals]
 
         return intervals
 
-    def get_annotation(self, anchor_win_sizes, pos_intervals, audio):
+    def get_annotation(self, pos_intervals, audio):
+        
         raw_seq_len = audio.shape[0]
-
-        num_anchors = len(anchor_win_sizes)
-
         seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
-
-        anchor_anno = np.zeros((seq_len, num_anchors), dtype=np.int32)
-        class_anno = np.zeros(seq_len, dtype=np.int32) - 1
+        regression_anno = np.zeros((seq_len, self.n_classes))
 
         anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
+        
+        anchor_annos_dict = {i : [] for i in range(self.n_classes)}
+        
+        mask = [np.ones(seq_len)]
 
         for iv in pos_intervals:
             start, end, class_idx = iv
-            # start_idx = int(math.ceil(start*anno_sr))
-            # end_idx = int(math.floor(end*anno_sr))
+            dur = end-start
+            
+            start_idx = int(math.floor(start*anno_sr))
+            start_idx = max(min(start_idx, seq_len-1), 0)
+            dur_samples = np.ceil(dur * anno_sr)
+            
+            # ### Start idx anchors and regression targets ###
+            if class_idx != -1:
+              anchor_anno = get_anchor_anno(start_idx, dur_samples, seq_len)
+              anchor_annos_dict[class_idx].append(anchor_anno)
+              regression_anno[start_idx, class_idx] = dur
+            else:
+              mask.append(get_unknown_mask(start_idx, dur_samples, seq_len))      
+        
+        anchor_annos = []
+        for i in range(self.n_classes):
+          if len(anchor_annos_dict[i])>0:
+            x = np.stack(anchor_annos_dict[i])
+            x = np.amax(x, axis = 0)
+          else:
+            x = np.zeros(seq_len)
+          anchor_annos.append(x)
+        
+        anchor_annos = np.stack(anchor_annos, axis = -1)
+          
+        mask = np.stack(mask)
+        mask = np.amin(mask, axis = 0)
 
-            center = (start+end) / 2
-            center_idx = int(round(center*anno_sr))
-            center_idx = max(min(center_idx, seq_len-1), 0)
-
-            # ### Anchors ###
-            interval_win_size = end-start
-            anchor_idx = np.argmin(np.abs(self.anchor_win_sizes-interval_win_size))
-            anchor_anno[center_idx, anchor_idx] = 1
-
-            # ### Class ###
-            class_anno[center_idx] = class_idx
-
-        return anchor_anno, class_anno
+        return anchor_annos, regression_anno, mask # shapes [time_steps, n_classes], [time_steps, n_classes], [time_steps,]
 
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
-        audio, _ = librosa.load(audio_fp, sr=self.sr, offset=start, duration=end-start, mono=True)
-        pos_intervals = self.get_pos_intervals(fn, start, end)
-        anchor_anno, class_anno = self.get_annotation(self.anchor_win_sizes, pos_intervals, audio)
-
-        # ### Data Aug: amplitude ###
-        if self.amp_aug:
-            audio = normalize_sig_np(audio)
+        audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
+        audio = audio-np.mean(audio)
+        if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)
+        audio = torch.from_numpy(audio)
+        if file_sr != self.sr:
+          audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
+          audio = crop_and_pad(audio, self.sr, self.clip_duration)
+        
+        pos_intervals = self.get_pos_intervals(fn, start, end)
+        anchor_anno, regression_anno, mask = self.get_annotation(pos_intervals, audio)
 
-        return audio, anchor_anno, class_anno
+        return audio, torch.from_numpy(anchor_anno), torch.from_numpy(regression_anno), torch.from_numpy(mask)
 
     def __len__(self):
         return len(self.metadata)
       
       
-def get_dataloader(args):
-  dev_info_fp = args.dev_info_fp
-  dev_info_df = pd.read_csv(dev_info_fp)
-  num_files_val = args.num_files_val
-  train_info_df = dev_info_df.iloc[:-args.num_files_val]
-  val_info_df = dev_info_df.iloc[-args.num_files_val:]
-  test_info_fp = args.test_info_fp
-  test_info_df = pd.read_csv(test_info_fp)
+def get_train_dataloader(args, random_seed_shift = 0):
+  train_info_fp = args.train_info_fp
+  train_info_df = pd.read_csv(train_info_fp)
   
-  train_dataset = DetectionDataset(train_info_df, args.clip_hop, args.omit_empty_clip_prob, args)
+  train_dataset = DetectionDataset(train_info_df, True, args, random_seed_shift = random_seed_shift)
   train_dataloader = DataLoader(train_dataset,
                                 batch_size=args.batch_size, 
                                 shuffle=True,
@@ -164,75 +212,90 @@ def get_dataloader(args):
                                 pin_memory=True, 
                                 drop_last = True)
   
+  return train_dataloader
+
+  
+class SingleClipDataset(Dataset):
+    def __init__(self, audio_fp, clip_hop, args, annot_fp = None):
+        # waveform (samples,)
+        super().__init__()
+        self.duration = librosa.get_duration(filename=audio_fp)
+        self.num_clips = int(np.floor((self.duration - args.clip_duration) // args.clip_hop))
+        self.audio_fp = audio_fp
+        # self.waveform, self.file_sr = librosa.load(audio_fp, sr=None, mono=True)
+        # self.clip_hop_samples_file_sr = int(clip_hop * self.file_sr)
+        self.clip_hop = clip_hop
+        # self.clip_duration_samples_file_sr = int(args.clip_duration * self.file_sr)
+        self.clip_duration = args.clip_duration
+        self.annot_fp = annot_fp # attribute that is accessed elsewhere
+        self.sr = args.sr
+        
+    def __len__(self):
+        return self.num_clips
+
+    def __getitem__(self, idx):
+        """ Map int idx to dict of torch tensors """
+        start = idx * self.clip_hop
+        
+        audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
+        
+#         start_sample = idx * self.clip_hop_samples_file_sr
+#         audio = self.waveform[start_sample:start_sample+self.clip_duration_samples_file_sr]
+        audio = audio-np.mean(audio)
+        audio = torch.from_numpy(audio)
+        if file_sr != self.sr:
+          audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
+          audio = crop_and_pad(audio, self.sr, self.clip_duration)
+        return audio
+      
+def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):
+    return DataLoader(
+      SingleClipDataset(audio_fp, clip_hop, args, annot_fp = annot_fp),
+      batch_size = args.batch_size,
+      shuffle=False,
+      num_workers=args.num_workers,
+      pin_memory=True,
+      drop_last=False,
+    )
+
+def get_val_dataloader(args):
+  val_info_fp = args.val_info_fp
+  val_info_df = pd.read_csv(val_info_fp)
+  
   val_dataloaders = {}
   
   for i in range(len(val_info_df)):
     fn = val_info_df.iloc[i]['fn']
-  
-    val_file_dataset = DetectionDataset(val_info_df.iloc[i:i+1], args.clip_duration, 0, args)
-    val_file_dataloader = DataLoader(val_file_dataset,
-                                      batch_size=args.batch_size, 
-                                      shuffle=False,
-                                      num_workers=args.num_workers,
-                                      pin_memory=True, 
-                                      drop_last = False)
-    val_dataloaders[fn] = val_file_dataloader
+    audio_fp = val_info_df.iloc[i]['audio_fp']
+    annot_fp = val_info_df.iloc[i]['selection_table_fp']
+    val_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
+    
+  return val_dataloaders
+
+def get_test_dataloader(args):
+  test_info_fp = args.test_info_fp
+  test_info_df = pd.read_csv(test_info_fp)
   
   test_dataloaders = {}
   
   for i in range(len(test_info_df)):
     fn = test_info_df.iloc[i]['fn']
-  
-    test_file_dataset = DetectionDataset(test_info_df.iloc[i:i+1], args.clip_duration, 0, args)
-    test_file_dataloader = DataLoader(test_file_dataset,
-                                      batch_size=args.batch_size, 
-                                      shuffle=False,
-                                      num_workers=args.num_workers,
-                                      pin_memory=True, 
-                                      drop_last = False)
-    test_dataloaders[fn] = test_file_dataloader
+    audio_fp = test_info_df.iloc[i]['audio_fp']
+    annot_fp = test_info_df.iloc[i]['selection_table_fp']
+    test_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
     
+  return test_dataloaders
   
-  return {'train': train_dataloader, 'val': val_dataloaders, 'test': test_dataloaders}
+def get_anchor_anno(start_idx, dur_samples, seq_len):
+  # start times plus gaussian blur
+  std = dur_samples / 6
+  x = (np.arange(seq_len) - start_idx) ** 2
+  x = x / (2 * std**2)
+  x = np.exp(-x)
+  return x
   
-  
-  
-
-# Example, old use:
-      
-
-
-# if __name__ == "__main__":
-
-#     anchor_win_sizes = [0.1, 0.3, 0.5]
-
-#     label_set = [
-#         'crow',
-#     ]
-
-#     amp_aug_config = {
-#         'r_range': [0.1, 1],
-#         'seed': 123
-#     }
-
-#     sr = 16000
-#     clip_duration = 30
-#     clip_hop = 15
-
-#     scale_factor = 320
-
-#     info_dir = '/home/jupyter/storage/Datasets/spanish_carrion_crows/call_detection_data.revised_anno.all_crows/'
-
-#     info_fp = os.path.join(info_dir, 'dev_info.csv')
-#     # info_fp = os.path.join(info_dir, 'test_info.csv')
-#     info = pd.read_csv(info_fp)
-#     num_files_va = 1
-#     info_tr = info.iloc[:-num_files_va]
-#     info_va = info.iloc[-num_files_va:]
-
-#     dataset = DetectionDataset(anchor_win_sizes, info_va, label_set, sr, clip_duration, clip_hop, scale_factor, amp_aug_config=amp_aug_config)
-
-#     item = dataset.__getitem__(0)
-
-#     # for ii in range(100):
-#     #     item = dataset.__getitem__(ii)
+def get_unknown_mask(start_idx, dur_samples, seq_len):
+  unknown_radius = 1 + int(dur_samples / 6)
+  x = np.ones(seq_len)
+  x[start_idx - unknown_radius:start_idx + unknown_radius] = 0
+  return x

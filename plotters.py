@@ -1,15 +1,15 @@
 from matplotlib import pyplot as plt
 from pathlib import Path
 
-def plot_eval(train_evals, test_evals, args):
+def plot_eval(train_evals, test_evals, learning_rates, args):
   # train_evals : list of dicts, one dict per epoch
   # test_evals : list of dicts, one dict per epoch
   plot_fp = Path(args.experiment_dir, "train_progress.png")
   train_keys = train_evals[0].keys()
   test_keys = test_evals[0].keys()
   
-  n_plots = len(train_keys)+len(test_keys)
-  fig, ax = plt.subplots(nrows=n_plots, sharex=True)
+  n_plots = len(train_keys)+len(test_keys) + 1
+  fig, ax = plt.subplots(nrows=n_plots, sharex=True, figsize = (12, 4*n_plots))
   
   plot_number = 0
   for i, eval_dict_list in enumerate([train_evals, test_evals]):
@@ -20,6 +20,10 @@ def plot_eval(train_evals, test_evals, args):
       ax[plot_number].set_title(f"{fold} {key}")
       ax[plot_number].set_xlabel("Epoch")
       plot_number += 1
+      
+  ax[plot_number].plot(learning_rates)
+  ax[plot_number].set_title("Learning Rate")
+  ax[plot_number].set_xlabel("Epoch")     
       
   plt.savefig(plot_fp)
   plt.close()

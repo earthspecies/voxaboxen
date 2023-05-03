@@ -1,7 +1,7 @@
-from data import get_dataloader
+from data import get_test_dataloader
 from model import DetectionModel
 from train import train
-from util import parse_args, set_seed
+from util import parse_args, set_seed, save_params
 from evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_evaluate
 
 import yaml
@@ -18,22 +18,18 @@ def main(args):
   if not os.path.exists(args.experiment_dir):
     os.makedirs(args.experiment_dir)
   
+  save_params(args)
   model = DetectionModel(args)
-  dataloader = get_dataloader(args)
   
   ## Training
-  trained_model = train(model, dataloader['train'], dataloader['val'], args)  
+  trained_model = train(model, args)  
   
   ## Evaluation
-  metrics = predict_and_evaluate(trained_model, dataloader['test'], args)
-  
-  metrics_fp = os.path.join(args.experiment_dir, 'metrics.yaml')
-  with open(metrics_fp, 'w') as f:
-    yaml.dump(metrics, f)
-    
+  test_dataloader = get_test_dataloader(args)
+  predict_and_evaluate(trained_model, test_dataloader, args, output_dir = os.path.join(args.experiment_dir, 'test_results'))
+ 
 
 if __name__ == "__main__":
   main(sys.argv[1:])
   
-  
-# python main.py --name=debug --lr=0.001 --n-epochs=5
+# python main.py --name=debug --lr=0.0001 --n-epochs=6 --clip-duration=4 --batch-size=100 --omit-empty-clip-prob=0.5 --clip-hop=2
