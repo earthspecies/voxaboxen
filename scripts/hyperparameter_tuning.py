@@ -4,10 +4,7 @@ import yaml
 import numpy as np
 
 
-def main(args):
-  local['python']['single_experiment.py',
-                      f'--config={config_fp}'] & FG
-  
+def main():  
   local['python']['../main.py',
                   '--name=sweep0',
                   '--lr=0.003',
