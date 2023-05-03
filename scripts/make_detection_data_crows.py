@@ -18,7 +18,7 @@ if __name__ == "__main__":
     # Settings #
     ############
 
-    out_info_dir = '/home/jupyter/carrion_crows_data/call_detection_data.active/'
+    out_info_dir = '/home/jupyter/carrion_crows_data/call_detection_data.active_origsr/'
 
     # the root of the spanish_carrion_crows dataset
     base_data_dir = '/home/jupyter/carrion_crows_data/'
@@ -26,10 +26,10 @@ if __name__ == "__main__":
     split_dir = os.path.join(base_anno_dir, 'split')
     anno_dir = os.path.join(base_anno_dir, 'selection_tables')
     
-    # Where to save resampled clips and selection tables
-    resampled_clips_dir = os.path.join(out_info_dir, 'resampled_clips')
-    if not os.path.exists(resampled_clips_dir):
-      os.makedirs(resampled_clips_dir)
+    # Where to save chunked clips and selection tables
+    chunked_clips_dir = os.path.join(out_info_dir, 'chunked_clips')
+    if not os.path.exists(chunked_clips_dir):
+      os.makedirs(chunked_clips_dir)
     modified_anno_dir = os.path.join(out_info_dir, 'modified_selection_tables')
     if not os.path.exists(modified_anno_dir):
       os.makedirs(modified_anno_dir)
@@ -55,9 +55,7 @@ if __name__ == "__main__":
     for fn in tqdm.tqdm(fns):
         audio_fp = os.path.join(base_data_dir, '/'.join(fn.split('_')) + '.wav')
         duration = librosa.get_duration(filename=audio_fp)
-        sr= 16000
-        ## Omitting because audio was already resampled
-        audio, sr = librosa.load(audio_fp, sr=16000)
+        audio, sr = librosa.load(audio_fp, sr=None)
         
         anno_fp = os.path.join(anno_dir, f'{fn}.txt')
 
@@ -71,11 +69,11 @@ if __name__ == "__main__":
           
           start_sample = int(t * sr)
           end_sample = int(end * sr)
-          resampled_audio_fp = os.path.join(resampled_clips_dir, f"{fn}.{i}.wav")
+          chunked_audio_fp = os.path.join(chunked_clips_dir, f"{fn}.{i}.wav")
 
-          sf.write(resampled_audio_fp, audio[start_sample:end_sample], sr)
+          sf.write(chunked_audio_fp, audio[start_sample:end_sample], sr)
           
-          train_out_info = train_out_info.append({'fn': f'{fn}.{i}', 'audio_fp': resampled_audio_fp, 'selection_table_fp': modified_anno_fp}, ignore_index=True)
+          train_out_info = train_out_info.append({'fn': f'{fn}.{i}', 'audio_fp': chunked_audio_fp, 'selection_table_fp': modified_anno_fp}, ignore_index=True)
           
           t += train_chunk_dur_sec
           i += 1
@@ -89,11 +87,11 @@ if __name__ == "__main__":
           
           start_sample = int(t * sr)
           end_sample = int(end * sr)
-          resampled_audio_fp = os.path.join(resampled_clips_dir, f"{fn}.{i}.wav")
+          chunked_audio_fp = os.path.join(chunked_clips_dir, f"{fn}.{i}.wav")
 
-          sf.write(resampled_audio_fp, audio[start_sample:end_sample], sr)
+          sf.write(chunked_audio_fp, audio[start_sample:end_sample], sr)
           
-          val_out_info = val_out_info.append({'fn': f'{fn}.{i}', 'audio_fp': resampled_audio_fp, 'selection_table_fp': modified_anno_fp}, ignore_index=True)
+          val_out_info = val_out_info.append({'fn': f'{fn}.{i}', 'audio_fp': chunked_audio_fp, 'selection_table_fp': modified_anno_fp}, ignore_index=True)
           
           t += val_chunk_dur_sec
           i += 1
@@ -117,18 +115,17 @@ if __name__ == "__main__":
     
     for fn in tqdm.tqdm(fns):
         audio_fp = os.path.join(base_data_dir, '/'.join(fn.split('_')) + '.wav')
-        sr= 16000
-        resampled_audio_fp = os.path.join(resampled_clips_dir, f"{fn}.wav")
-        audio, sr = librosa.load(audio_fp, sr=16000)
+        chunked_audio_fp = os.path.join(chunked_clips_dir, f"{fn}.wav")
+        audio, sr = librosa.load(audio_fp, sr=None)
         
         anno_fp = os.path.join(anno_dir, f'{fn}.txt')
 
         modified_anno_fp = os.path.join(modified_anno_dir, f'{fn}.txt')
         duration = librosa.get_duration(filename=audio_fp)
         modify_anno(anno_fp, modified_anno_fp, 0, duration)
-        sf.write(resampled_audio_fp, audio, sr)
+        sf.write(chunked_audio_fp, audio, sr)
 
-        test_out_info = test_out_info.append({'fn': fn, 'audio_fp': resampled_audio_fp, 'selection_table_fp': modified_anno_fp}, ignore_index=True)
+        test_out_info = test_out_info.append({'fn': fn, 'audio_fp': chunked_audio_fp, 'selection_table_fp': modified_anno_fp}, ignore_index=True)
 
     test_out_info.to_csv(test_out_info_fp, index=False)
 

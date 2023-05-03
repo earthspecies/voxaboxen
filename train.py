@@ -65,6 +65,9 @@ def train(model, args):
   cp = torch.load(os.path.join(args.experiment_dir, f"best_model.pt"))
   model.load_state_dict(cp["model_state_dict"])
   
+  # resave validation with best model
+  val_epoch(model, t+1, val_dataloader, class_loss_fn, reg_loss_fn, args)
+  
   return model  
   
 def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, args):
