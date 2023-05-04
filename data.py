@@ -111,7 +111,7 @@ class DetectionDataset(Dataset):
             selection_table = self.process_selection_table(selection_table_fp)
             selection_table_dict[fn] = selection_table
 
-            num_clips = int(np.floor((duration - self.clip_duration - self.clip_start_offset) // self.clip_hop))
+            num_clips = max(0, int(np.floor((duration - self.clip_duration - self.clip_start_offset) // self.clip_hop)))
 
             for tt in range(num_clips):
                 start = tt*self.clip_hop + self.clip_start_offset
@@ -220,7 +220,7 @@ class SingleClipDataset(Dataset):
         # waveform (samples,)
         super().__init__()
         self.duration = librosa.get_duration(filename=audio_fp)
-        self.num_clips = int(np.floor((self.duration - args.clip_duration) // args.clip_hop))
+        self.num_clips = max(0, int(np.floor((self.duration - args.clip_duration) // args.clip_hop)))
         self.audio_fp = audio_fp
         # self.waveform, self.file_sr = librosa.load(audio_fp, sr=None, mono=True)
         # self.clip_hop_samples_file_sr = int(clip_hop * self.file_sr)
