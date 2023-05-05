@@ -43,6 +43,9 @@ def sample_uncertainty(fp, model, al_args, args, rng):
 
 def get_uncertainties(audio_fp, model, al_args, args):
   dataloader = get_single_clip_data(audio_fp, args.clip_duration/2, args)
+  if len(dataloader) == 0:
+    return [], [], []
+  
   predictions, _ = generate_predictions(model, dataloader, args)
   
   if 'Morado' in audio_fp:
@@ -151,7 +154,12 @@ def main(al_args):
   for i, row in files_to_sample.iterrows():
     fp = row['audio_fp']
     fn = row['fn']
+    
+    if not os.path.exists(fp):
+      print(f"Could not locate file {fp}")
+      continue
     print(f"Sampling clips from {fn}")
+    
     a, s, d, u = sample_uncertainty(fp, model, al_args, args, rng)
     
     output_audio.extend(a)
