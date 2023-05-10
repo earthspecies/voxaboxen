@@ -1,35 +1,31 @@
-from data import get_test_dataloader
-from model import DetectionModel
-from train import train
-from util import parse_args, set_seed, save_params
-from evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_evaluate
+# New workflow, under main:
+# 1. `project_setup`
+# 2. `active_learning_sampling`
+# 3. annotate or `query_oracle`
+# 4. `trian_model`
+# 5. Repeat 2-4 as desired.
 
-import yaml
+# These are set up in `benchmarking`, in scripts
+
 import sys
-import os
 
-def main(args):
-  ## Setup
-  args = parse_args(args)
-  set_seed(args.seed)
+def main(mode, args):  
+  if mode == 'project_setup':
+    import source.project.project_setup.project_setup as project_setup
+    project_setup(args)
   
-  experiment_dir = os.path.join(args.output_dir, args.name)
-  setattr(args, 'experiment_dir', str(experiment_dir))
-  if not os.path.exists(args.experiment_dir):
-    os.makedirs(args.experiment_dir)
+  if mode == 'active_learning_sampling':
+    pass
   
-  save_params(args)
-  model = DetectionModel(args)
+  if mode == 'query_oracle':
+    pass
   
-  ## Training
-  trained_model = train(model, args)  
-  
-  ## Evaluation
-  test_dataloader = get_test_dataloader(args)
-  predict_and_evaluate(trained_model, test_dataloader, args, output_dir = os.path.join(args.experiment_dir, 'test_results'))
- 
+  if mode == 'train_model':
+    import source.training.train_model.train_model as train_model
+    train_model(args)
 
 if __name__ == "__main__":
-  main(sys.argv[1:])
-  
-# python main.py --name=debug --lr=0.0001 --n-epochs=6 --clip-duration=4 --batch-size=100 --omit-empty-clip-prob=0.5 --clip-hop=2
+  ins = sys.argv
+  mode = ins[1]
+  args = ins[2:]
+  main(mode, args)

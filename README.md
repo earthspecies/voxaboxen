@@ -13,3 +13,14 @@ run
 
 for active learning, run
 `python active_learning_sampling.py ...other args...` Example arguments are in the file `active_learning_sampling.py`
+
+
+New workflow, under main:
+1. `project_setup`
+2. `active_learning_sampling`
+3. annotate or `query_oracle`
+4. `active_learning_update`
+5. `trian_model`
+6. Repeat 2-5 as desired.
+
+These are set up in `benchmarking`
