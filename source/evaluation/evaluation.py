@@ -3,13 +3,14 @@ import csv
 import torch
 import os
 import tqdm
-from raven_utils import Clip
-from model import preprocess_and_augment
 from scipy.signal import find_peaks
 import yaml
 from matplotlib import pyplot as plt
 import seaborn as sns
 from pathlib import Path
+
+from source.evaluation.raven_utils import Clip
+from source.model.model import preprocess_and_augment
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -152,10 +153,10 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
   return all_predictions.detach().cpu().numpy(), all_regressions.detach().cpu().numpy()
 
 def export_to_selection_table(predictions, regressions, fn, args, verbose=True):
-  target_fp = os.path.join(args.experiment_dir, f"probs_{fn}.npy")
+  target_fp = os.path.join(args.experiment_output_dir, f"probs_{fn}.npy")
   np.save(target_fp, predictions)
   
-  target_fp = os.path.join(args.experiment_dir, f"regressions_{fn}.npy")
+  target_fp = os.path.join(args.experiment_output_dir, f"regressions_{fn}.npy")
   np.save(target_fp, regressions)
   
   ## peaks  
@@ -187,7 +188,7 @@ def export_to_selection_table(predictions, regressions, fn, args, verbose=True):
   
   bboxes, scores, class_idxs = pred2bbox(preds, anchor_scores, regressions, pred_sr)
   
-  target_fp = os.path.join(args.experiment_dir, f"peaks_pred_{fn}.txt")
+  target_fp = os.path.join(args.experiment_output_dir, f"peaks_pred_{fn}.txt")
   st = bbox2raven(bboxes, class_idxs, args.label_set)
   write_tsv(target_fp, st)
   

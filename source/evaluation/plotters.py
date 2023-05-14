@@ -1,11 +1,11 @@
 from matplotlib import pyplot as plt
 from pathlib import Path
 
-def plot_eval(train_evals, test_evals, learning_rates, args):
+def plot_eval(train_evals, learning_rates, args, test_evals = [{}]):
   # train_evals : list of dicts, one dict per epoch
   # test_evals : list of dicts, one dict per epoch
   plot_fp = Path(args.experiment_dir, "train_progress.png")
-  train_keys = train_evals[0].keys()
+  train_keys = train_evals[0].keys()  
   test_keys = test_evals[0].keys()
   
   n_plots = len(train_keys)+len(test_keys) + 1

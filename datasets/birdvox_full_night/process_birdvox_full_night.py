@@ -12,7 +12,7 @@ def process_audio_and_annot(annot, audio, sr, train_proportion, voc_dur_sec = 0.
   audio_dur_samples = np.shape(audio)[0]
   audio_dur_sec = np.floor(audio_dur_samples / sr)
   train_audio_dur_samples = int(audio_dur_samples * train_proportion)
-  train_audio_dur_sec = int(train_audio_dur_samples / sr)
+  train_audio_dur_sec = train_audio_dur_samples / sr
   
   train_audio = audio[:train_audio_dur_samples]
   test_audio = audio[train_audio_dur_samples:]
@@ -103,7 +103,7 @@ def main():
     test_audio_fps.append(test_audio_fp)
   
   train_info_df = pd.DataFrame({'fn' : train_fns, 'audio_fp' : train_audio_fps, 'selection_table_fp' : train_annot_fps})
-  train_info_fp = os.path.join(formatted_data_dir, 'train_info.csv')
+  train_info_fp = os.path.join(formatted_data_dir, 'train_pool_info.csv')
   train_info_df.to_csv(train_info_fp, index = False)
   test_info_df = pd.DataFrame({'fn' : test_fns, 'audio_fp' : test_audio_fps, 'selection_table_fp' : test_annot_fps})
   test_info_fp = os.path.join(formatted_data_dir, 'test_info.csv')

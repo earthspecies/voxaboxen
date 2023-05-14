@@ -17,7 +17,7 @@ def parse_al_args(al_args):
   parser.add_argument('--clips-per-file', type = int, default = 1, help = 'how many clips to sample per file')
   parser.add_argument('--uncertainty-discount-factor', type = float, default = 0.8, help = 'geometric weighting of uncertainties. Uncertainties are sorted and then the lower ranking uncertainties count for less. Closer to 0 discourages sampling clips with lots of detections')
   parser.add_argument('--uncertainty-detection-threshold', type=float, default = 0.1, help = 'ignore detection peaks lower than this value, for the purpose of computing uncertainty')
-  al_args = parser.parse_args()  
+  al_args = parser.parse_args(al_args)  
   return al_args
 
 def save_params(al_args):

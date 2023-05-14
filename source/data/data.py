@@ -259,7 +259,7 @@ def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):
     )
 
 def get_val_dataloader(args):
-  val_info_fp = args.val_info_fp
+  val_info_fp = args.val_info_fp  
   val_info_df = pd.read_csv(val_info_fp)
   
   val_dataloaders = {}

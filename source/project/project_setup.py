@@ -19,21 +19,25 @@ def save_params(args):
   print(f"Saved config to {params_file}. You may now edit this file if you want some classes to be treated as Unknown")
   
 def parse_args(args):
+  print(args)
   parser = argparse.ArgumentParser()
   
-  parser.add_argument('--train-info-fp', type=str, required=True, help = "filepath of csv with train pool info")
-  parser.add_argument('--val-info-fp', type=str, default=None, help = "filepath of csv with val pool info")
-  parser.add_argument('--test-info-fp', type=str, required=True, help = "filepath of csv with test pool info")
+  parser.add_argument('--train-pool-info-fp', type=str, required=True, help = "filepath of csv with train pool info")
+  parser.add_argument('--val-info-fp', type=str, default=None, help = "filepath of csv with val info")
+  parser.add_argument('--test-info-fp', type=str, required=True, help = "filepath of csv with test info")
   parser.add_argument('--project-dir', type=str, required=True, help = "directory where project will be stored")
   
-  al_args = parser.parse_args()  
+  al_args = parser.parse_args(args)  
   return al_args
 
 def project_setup(args):
   args = parse_args(args)
   
-  annots = []
-  for info_fp in [args.train_info_fp, args.val_info_fp, args.test_info_fp]:
+  if not os.path.exists(args.project_dir):
+    os.makedirs(args.project_dir)
+  
+  all_annots = []
+  for info_fp in [args.train_pool_info_fp, args.val_info_fp, args.test_info_fp]:
     if info_fp is None:
       continue
     
@@ -41,12 +45,12 @@ def project_setup(args):
     annot_fps = list(info['selection_table_fp'])
     
     for annot_fp in annot_fps:
-      if os.path.exists(annot_fp):
+      if annot_fp != "None":
         selection_table = pd.read_csv(annot_fp, delimiter = '\t')
         annots = list(selection_table['Annotation'])
-        annots.extend(annots)
+        all_annots.extend(annots)
         
-  label_set = sorted(set(annots))
+  label_set = sorted(set(all_annots))
   label_mapping = {x : x for x in label_set}
   unknown_label = 'Unknown'
   

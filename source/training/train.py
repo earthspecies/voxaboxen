@@ -4,12 +4,13 @@ from torch import nn
 import torch.nn as nn
 import torch.nn.functional as F
 import tqdm
-from plotters import plot_eval
-from evaluation import predict_and_evaluate
 from functools import partial
-from data import get_train_dataloader, get_val_dataloader
-from model import preprocess_and_augment
 import os
+
+from source.evaluation.plotters import plot_eval
+from source.evaluation.evaluation import predict_and_evaluate
+from source.data.data import get_train_dataloader, get_val_dataloader
+from source.model.model import preprocess_and_augment
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -23,29 +24,54 @@ def train(model, args):
   # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=args.lr/100, last_epoch=- 1, verbose=False)
   
   train_evals = []
-  val_evals = []
   learning_rates = []
+  val_evals = []
   
-  val_dataloader = get_val_dataloader(args)
-  
-  best_f1 = 0
+  if args.early_stopping:
+    assert args.val_info_fp is not None
+    best_f1 = 0
+
+  if args.val_info_fp is not None:
+    val_dataloader = get_val_dataloader(args)
+    use_val = True
+  else:
+    use_val = False
       
   for t in range(args.n_epochs):
       print(f"Epoch {t}\n-------------------------------")
       train_dataloader = get_train_dataloader(args, random_seed_shift = t) # reinitialize dataloader with different negatives each epoch
       model, train_eval = train_epoch(model, t, train_dataloader, class_loss_fn, reg_loss_fn, optimizer, args)
-      val_eval = val_epoch(model, t, val_dataloader, class_loss_fn, reg_loss_fn, args)
       train_evals.append(train_eval.copy())
-      val_evals.append(val_eval.copy())
       learning_rates.append(optimizer.param_groups[0]["lr"])
-      plot_eval(train_evals, val_evals, learning_rates, args)
+      if use_val:
+        val_eval = val_epoch(model, t, val_dataloader, class_loss_fn, reg_loss_fn, args)
+        val_evals.append(val_eval.copy())
+        plot_eval(train_evals, learning_rates, args, test_eval = val_evals)
+      else:
+        plot_eval(train_evals, learning_rates, args)
       scheduler.step()
       
-      current_f1 = val_eval['f1']
-      if current_f1 > best_f1:
-        print('found new best model')
-        best_f1 = current_f1
-        
+      if use_val and args.early_stopping:
+        current_f1 = val_eval['f1']
+        if current_f1 > best_f1:
+          print('found new best model')
+          best_f1 = current_f1
+
+          checkpoint_dict = {
+          "epoch": t,
+          "model_state_dict": model.state_dict(),
+          "optimizer_state_dict": optimizer.state_dict(),
+          "scheduler_state_dict": scheduler.state_dict(),
+          "train_evals": train_evals,
+          "val_evals" : val_evals
+          }
+          
+          torch.save(
+              checkpoint_dict,
+              os.path.join(args.experiment_dir, f"model.pt"),
+          ) 
+          
+      else:  
         checkpoint_dict = {
         "epoch": t,
         "model_state_dict": model.state_dict(),
@@ -54,19 +80,21 @@ def train(model, args):
         "train_evals": train_evals,
         "val_evals" : val_evals
         }
-
+        
         torch.save(
-            checkpoint_dict,
-            os.path.join(args.experiment_dir, f"best_model.pt"),
-        ) 
-
-  print("Done! Returning the best model.")
+              checkpoint_dict,
+              os.path.join(args.experiment_dir, f"model.pt"),
+          ) 
+          
   
-  cp = torch.load(os.path.join(args.experiment_dir, f"best_model.pt"))
+  print("Done!")
+  
+  cp = torch.load(os.path.join(args.experiment_dir, f"model.pt"))
   model.load_state_dict(cp["model_state_dict"])
   
   # resave validation with best model
-  val_epoch(model, t+1, val_dataloader, class_loss_fn, reg_loss_fn, args)
+  if use_val:
+    val_epoch(model, t+1, val_dataloader, class_loss_fn, reg_loss_fn, args)
   
   return model  
   

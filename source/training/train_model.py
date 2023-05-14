@@ -1,8 +1,8 @@
-from data import get_test_dataloader
-from model import DetectionModel
-from train import train
-from util import parse_args, set_seed, save_params
-from evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_evaluate
+from source.data.data import get_test_dataloader
+from source.model.model import DetectionModel
+from source.training.train import train
+from source.training.params import parse_args, set_seed, save_params
+from source.evaluation.evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_evaluate
 
 import yaml
 import sys
@@ -11,12 +11,18 @@ import os
 def train_model(args):
   ## Setup
   args = parse_args(args)
+
   set_seed(args.seed)
   
-  experiment_dir = os.path.join(args.output_dir, args.name)
+  experiment_dir = os.path.join(args.project_dir, args.name)
   setattr(args, 'experiment_dir', str(experiment_dir))
   if not os.path.exists(args.experiment_dir):
     os.makedirs(args.experiment_dir)
+    
+  experiment_output_dir = os.path.join(experiment_dir, "outputs")
+  setattr(args, 'experiment_output_dir', experiment_output_dir)
+  if not os.path.exists(args.experiment_output_dir):
+    os.makedirs(args.experiment_output_dir)
   
   save_params(args)
   model = DetectionModel(args)
