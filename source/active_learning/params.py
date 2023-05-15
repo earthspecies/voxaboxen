@@ -11,7 +11,7 @@ def parse_al_args(al_args):
   parser.add_argument('--seed', type=int, default=0, help="random seed")
   parser.add_argument('--name', type=str, required=True)
   parser.add_argument('--output-dir', type=str, default=None)
-  parser.add_argument('--candidate-manifest-fp', help='fp to tsv list of wav files to sample')
+  # parser.add_argument('--candidate-manifest-fp', required=True, help='fp to tsv list of wav files to sample')
   parser.add_argument('--sample-duration', type = float, default = 30, help = 'duration of clip to sample for annotation, in seconds')
   parser.add_argument('--max-n-clips-to-sample', type = int, default = 120, help = 'how many clips to sample')
   parser.add_argument('--clips-per-file', type = int, default = 1, help = 'how many clips to sample per file')

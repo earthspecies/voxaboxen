@@ -10,16 +10,16 @@
 # python main.py train-model --output-dir=/home/jupyter/sound_event_detection/projects/bvfn_debug --name=d0 --label-mapping-config-fp=/home/jupyter/sound_event_detection/projects/bvfn_debug/project_config.yaml --clip-duration=4 --clip-hop=2 --train-info-fp=/home/jupyter/sound_event_detection/datasets/birdvox_full_night/formatted/train_pool_info.csv --batch-size=32 --lr=0.0001 --n-epochs=4 --unfreeze-encoder-epoch=1 --omit-empty-clip-prob=1 --step-size=2
 
 import sys
-from source.project.project_setup import project_setup
-
 
 def main(mode, args):  
   
   if mode == 'project-setup':
+    from source.project.project_setup import project_setup
     project_setup(args)
   
   if mode == 'active-learning-sampling':
-    pass
+    from source.active_learning.active_learning_sampling import active_learning_sampling
+    active_learning_sampling(args)
   
   if mode == 'train-model':
     from source.training.train_model import train_model

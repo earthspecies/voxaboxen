@@ -13,10 +13,11 @@ import librosa
 from scipy.signal import find_peaks
 import soundfile as sf
 
-from util import load_params, set_seed
-from model import DetectionModel
-from evaluation import generate_predictions
-from data import get_single_clip_data, crop_and_pad
+from source.training.params import load_params, set_seed
+from source.active_learning.params import parse_al_args, save_params
+from source.model.model import DetectionModel
+from source.evaluation.evaluation import generate_predictions
+from source.data.data import get_single_clip_data, crop_and_pad
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -112,7 +113,7 @@ def assemble_output_audio(output_log, al_args, args):
   output_audio = np.concatenate(output_audio)
   return output_audio
   
-def main(al_args):
+def active_learning_sampling(al_args):
   al_args = parse_al_args(al_args)
   args = load_params(al_args.model_args_fp)
   set_seed(al_args.seed)
@@ -133,7 +134,7 @@ def main(al_args):
   model.load_state_dict(cp["model_state_dict"])
   model = model.to(device)
   
-  files_to_sample = pd.read_csv(al_args.candidate_manifest_fp)
+  files_to_sample = pd.read_csv(args.train_pool_info_fp)
   
   start_times = []
   durations = []

@@ -46,7 +46,7 @@ def train(model, args):
       if use_val:
         val_eval = val_epoch(model, t, val_dataloader, class_loss_fn, reg_loss_fn, args)
         val_evals.append(val_eval.copy())
-        plot_eval(train_evals, learning_rates, args, test_eval = val_evals)
+        plot_eval(train_evals, learning_rates, args, test_evals = val_evals)
       else:
         plot_eval(train_evals, learning_rates, args)
       scheduler.step()
