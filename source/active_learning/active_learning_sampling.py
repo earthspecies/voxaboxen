@@ -12,6 +12,7 @@ from source.active_learning.params import parse_al_args, save_al_params, expand_
 from source.data.data import crop_and_pad
 from source.active_learning.uncertainty_sampling import sample_uncertainty_all
 from source.active_learning.random_sampling import sample_random_all
+from source.active_learning.query_oracle import query_oracle
     
 def assemble_output_audio(output_log, al_args):
   output_audio = []
@@ -56,12 +57,12 @@ def active_learning_sampling(al_args):
   
   # query oracle
   if al_args.query_oracle:
-    selection_table_fp = "not implemented!"
+    selection_table_fp = query_oracle(al_args, output_log)
   else:
     selection_table_fp = "None"
   
   # add to previous train info
-  train_info = {'fn' : [f"{al_args.name}_active_learning_audio"], 'audio_fp' : [output_audio_fp], 'selection_table' : [selection_table_fp]}
+  train_info = {'fn' : [f"{al_args.name}_active_learning_audio"], 'audio_fp' : [output_audio_fp], 'selection_table_fp' : [selection_table_fp]}
   train_info = pd.DataFrame(train_info)
   
   if al_args.prev_iteration_info_fp is not None:

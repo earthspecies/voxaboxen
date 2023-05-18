@@ -12,11 +12,7 @@ from source.data.data import get_single_clip_data
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def sample_uncertainty_all(al_args):
-  args = load_params(al_args.model_args_fp)
-  
-    
-  project_config = load_params(al_args.project_config_fp)
-  
+  args = load_params(al_args.model_args_fp)  
   model = DetectionModel(args)
   
   # model  
@@ -26,7 +22,7 @@ def sample_uncertainty_all(al_args):
   model.load_state_dict(cp["model_state_dict"])
   model = model.to(device)
   
-  files_to_sample = pd.read_csv(project_config.train_pool_info_fp)
+  files_to_sample = pd.read_csv(al_args.train_pool_info_fp)
   
   start_times = []
   durations = []
@@ -60,6 +56,7 @@ def sample_uncertainty_all(al_args):
   
   # subselect
   output_log = output_log.sort_values('uncertainty', ascending = False)[:al_args.max_n_clips_to_sample].reset_index()
+  output_log['start_second_in_al_samples'] = output_log.index * al_args.sample_duration
   
   return output_log
 

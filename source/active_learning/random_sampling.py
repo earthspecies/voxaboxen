@@ -5,17 +5,14 @@ import torch
 from scipy.signal import find_peaks
 import librosa
 
-from source.training.params import load_params
-
 def sample_random_all(al_args):
   
-  if al_args.sampling_iteration > 0:
+  if al_args.prev_iteration_info_fp is not None:
     raise ValueError('Random sampling is not implemented for multiple iterations')
   
   rng = np.random.default_rng(al_args.seed)
   
-  project_config = load_params(al_args.project_config_fp)
-  files_to_sample = pd.read_csv(project_config.train_pool_info_fp)
+  files_to_sample = pd.read_csv(al_args.train_pool_info_fp)
     
   start_times = []
   durations = []
@@ -49,6 +46,7 @@ def sample_random_all(al_args):
   idxs_to_select = rng.permutation(np.arange(len(output_log)))[:al_args.max_n_clips_to_sample]
   output_log = output_log.iloc[idxs_to_select].reset_index()
   
+  output_log['start_second_in_al_samples'] = output_log.index * al_args.sample_duration
   return output_log
 
 def sample_random_fp(audio_fp, rng, al_args):
