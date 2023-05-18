@@ -19,7 +19,6 @@ def save_params(args):
   print(f"Saved config to {params_file}. You may now edit this file if you want some classes to be treated as Unknown")
   
 def parse_args(args):
-  print(args)
   parser = argparse.ArgumentParser()
   
   parser.add_argument('--train-pool-info-fp', type=str, required=True, help = "filepath of csv with train pool info")

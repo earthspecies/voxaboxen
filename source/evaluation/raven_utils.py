@@ -1,14 +1,9 @@
 import os
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
-import matplotlib.patches as patches
 import yaml
-from pathlib import Path
-import IPython.display as ipd
 import librosa
 from tqdm import tqdm
-from IPython.core.display import display
 import warnings
 
 import source.evaluation.metrics as metrics

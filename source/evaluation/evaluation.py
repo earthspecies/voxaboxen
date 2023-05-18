@@ -267,7 +267,8 @@ def summarize_metrics(metrics):
   
   return overall
 
-def plot_confusion_matrix(data, label_names, target_dir, name=""):   
+def plot_confusion_matrix(data, label_names, target_dir, name=""):
+  
     fig = plt.figure(num=None, figsize=(12, 8), dpi=80, facecolor='w', edgecolor='k')
     plt.clf()
     ax = fig.add_subplot(111)
@@ -283,6 +284,8 @@ def plot_confusion_matrix(data, label_names, target_dir, name=""):
     plt.title(name)
     
     plt.savefig(Path(target_dir, f"{name}_confusion_matrix.png"))
+    plt.close()
+
 
 def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
   # confusion_matrix (dict) : {fp : fp_cm}
