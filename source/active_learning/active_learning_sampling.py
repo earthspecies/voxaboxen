@@ -11,6 +11,7 @@ from source.training.params import set_seed
 from source.active_learning.params import parse_al_args, save_al_params, expand_al_args
 from source.data.data import crop_and_pad
 from source.active_learning.uncertainty_sampling import sample_uncertainty_all
+from source.active_learning.coreset_sampling import sample_coreset_all
 from source.active_learning.random_sampling import sample_random_all
 from source.active_learning.query_oracle import query_oracle
     
@@ -45,8 +46,14 @@ def active_learning_sampling(al_args):
   if al_args.sampling_method == 'uncertainty':
     output_log = sample_uncertainty_all(al_args)
     
-  if al_args.sampling_method == 'random':
+  elif al_args.sampling_method == 'random':
     output_log = sample_random_all(al_args)
+    
+  elif al_args.sampling_method == 'coreset':
+    output_log = sample_coreset_all(al_args)
+    
+  else:
+    raise NotImplementedError
   
   output_log.to_csv(os.path.join(al_args.output_dir, f'{al_args.name}_active_learning_log.csv'))
   output_audio = assemble_output_audio(output_log, al_args)

@@ -152,6 +152,39 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
     
   return all_predictions.detach().cpu().numpy(), all_regressions.detach().cpu().numpy()
 
+def generate_features(model, single_clip_dataloader, args, verbose = True):
+  model = model.to(device)
+  model.eval()
+  
+  all_features = []
+  
+  if verbose:
+    iterator = tqdm.tqdm(enumerate(single_clip_dataloader), total=len(single_clip_dataloader))
+  else:
+    iterator = enumerate(single_clip_dataloader)
+  
+  with torch.no_grad():
+    for i, X in iterator:
+      X = X.to(device = device, dtype = torch.float)
+      X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
+      features = model.generate_features(X)
+      all_features.append(features)
+    all_features = torch.cat(all_features)
+    
+    ######## Need better checking that features are the correct dur    
+    assert all_features.size(dim=1) % 2 == 0
+    first_quarter_window_dur_samples=all_features.size(dim=1)//4
+    last_quarter_window_dur_samples=(all_features.size(dim=1)//2)-first_quarter_window_dur_samples
+    
+    # assemble features
+    beginning_bit = all_features[0,:first_quarter_window_dur_samples,:]
+    end_bit = all_features[-1,-last_quarter_window_dur_samples:,:]
+    features_clipped = all_features[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
+    all_features = torch.reshape(features_clipped, (-1, features_clipped.size(-1)))
+    all_features = torch.cat([beginning_bit, all_features, end_bit])
+    
+  return all_features.detach().cpu().numpy()
+
 def export_to_selection_table(predictions, regressions, fn, args, verbose=True):
   target_fp = os.path.join(args.experiment_output_dir, f"probs_{fn}.npy")
   np.save(target_fp, predictions)

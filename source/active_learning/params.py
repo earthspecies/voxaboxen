@@ -31,6 +31,10 @@ def parse_al_args(al_args):
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by aves")
   parser.add_argument('--aves-model-weight-fp', type=str, default = "/home/jupyter/carrion_crows/clip/pretrained_weights/aves-base-bio.pt")
+  parser.add_argument('--rms-norm', default=False, help = "If true, apply rms normalization to each clip")
+  parser.add_argument('--clip-duration', default=4, help = "duration of clip used to generate feature vectors for coreset")
+  parser.add_argument('--batch-size', default=64, help = "batch size used to generate feature vectors for coreset")
+  parser.add_argument('--num-workers', default=8, help = "num workers used to generate feature vectors for coreset")
   
   # Uncertainty based sampling  
   parser.add_argument('--uncertainty-clips-per-file', type = int, default = 1, help = 'maximum clips to sample per file')

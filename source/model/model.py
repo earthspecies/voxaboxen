@@ -48,8 +48,8 @@ class DetectionModel(nn.Module):
       Input
         x (Tensor): (batch, time) (time at 16000 Hz, audio_sr)
       Returns
-        preds (Tensor): (batch, time) (time at 50 Hz, aves_sr)
-        regression (Tensor): (batch, time) (time at 50 Hz, aves_sr)
+        preds (Tensor): (batch, time, n_classes) (time at 50 Hz, aves_sr)
+        regression (Tensor): (batch, time, n_classes) (time at 50 Hz, aves_sr)
       """
       
       expected_dur_output = math.ceil(x.size(1)/self.args.scale_factor)
@@ -65,6 +65,27 @@ class DetectionModel(nn.Module):
       logits, regression = self.detection_head(feats)
       preds = torch.sigmoid(logits)
       return preds, regression
+    
+  def generate_features(self, x):
+      """
+      Input
+        x (Tensor): (batch, time) (time at 16000 Hz, audio_sr)
+      Returns
+        features (Tensor): (batch, time) (time at 50 Hz, aves_sr)
+        regression (Tensor): (batch, time) (time at 50 Hz, aves_sr)
+      """
+      
+      expected_dur_output = math.ceil(x.size(1)/self.args.scale_factor)
+            
+      x = x-torch.mean(x,axis=1,keepdim=True)
+      feats = self.encoder(x)
+      
+      #aves may be off by 1 sample from expected
+      pad = expected_dur_output - feats.size(1)
+      if pad>0:
+        feats = F.pad(feats, (0,0,0,pad), mode='reflect')
+        
+      return feats
     
   def freeze_encoder(self):
       self.encoder.freeze()
