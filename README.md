@@ -16,4 +16,4 @@ Get pretrained weights for aves. You will need to specify the default location o
 5. Repeat 2-4 as desired.
 6. `main.py inference ...flags...`. See `source/inference/params.py`.
 
-Examples of this workflow are simulated in the different `scriptes/*experiment*.py` files. The flag `--query-oracle` replaces manual sampling with looking up predefined annotations. This is used purely for benchmarking the different active learning approaches. 
+Examples of this workflow are simulated in the different `scriptes/*experiment*.py` files. The flag `--query-oracle` for the mode `active-learning-sampling` replaces manual annotating with looking up predefined annotations. This is used purely for benchmarking the different active learning approaches. 
