@@ -3,13 +3,14 @@ import csv
 import torch
 import os
 import tqdm
-from raven_utils import Clip
-from model import preprocess_and_augment
 from scipy.signal import find_peaks
 import yaml
 from matplotlib import pyplot as plt
 import seaborn as sns
 from pathlib import Path
+
+from source.evaluation.raven_utils import Clip
+from source.model.model import preprocess_and_augment
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -151,11 +152,44 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
     
   return all_predictions.detach().cpu().numpy(), all_regressions.detach().cpu().numpy()
 
+def generate_features(model, single_clip_dataloader, args, verbose = True):
+  model = model.to(device)
+  model.eval()
+  
+  all_features = []
+  
+  if verbose:
+    iterator = tqdm.tqdm(enumerate(single_clip_dataloader), total=len(single_clip_dataloader))
+  else:
+    iterator = enumerate(single_clip_dataloader)
+  
+  with torch.no_grad():
+    for i, X in iterator:
+      X = X.to(device = device, dtype = torch.float)
+      X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
+      features = model.generate_features(X)
+      all_features.append(features)
+    all_features = torch.cat(all_features)
+    
+    ######## Need better checking that features are the correct dur    
+    assert all_features.size(dim=1) % 2 == 0
+    first_quarter_window_dur_samples=all_features.size(dim=1)//4
+    last_quarter_window_dur_samples=(all_features.size(dim=1)//2)-first_quarter_window_dur_samples
+    
+    # assemble features
+    beginning_bit = all_features[0,:first_quarter_window_dur_samples,:]
+    end_bit = all_features[-1,-last_quarter_window_dur_samples:,:]
+    features_clipped = all_features[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
+    all_features = torch.reshape(features_clipped, (-1, features_clipped.size(-1)))
+    all_features = torch.cat([beginning_bit, all_features, end_bit])
+    
+  return all_features.detach().cpu().numpy()
+
 def export_to_selection_table(predictions, regressions, fn, args, verbose=True):
-  target_fp = os.path.join(args.experiment_dir, f"probs_{fn}.npy")
+  target_fp = os.path.join(args.experiment_output_dir, f"probs_{fn}.npy")
   np.save(target_fp, predictions)
   
-  target_fp = os.path.join(args.experiment_dir, f"regressions_{fn}.npy")
+  target_fp = os.path.join(args.experiment_output_dir, f"regressions_{fn}.npy")
   np.save(target_fp, regressions)
   
   ## peaks  
@@ -187,7 +221,7 @@ def export_to_selection_table(predictions, regressions, fn, args, verbose=True):
   
   bboxes, scores, class_idxs = pred2bbox(preds, anchor_scores, regressions, pred_sr)
   
-  target_fp = os.path.join(args.experiment_dir, f"peaks_pred_{fn}.txt")
+  target_fp = os.path.join(args.experiment_output_dir, f"peaks_pred_{fn}.txt")
   st = bbox2raven(bboxes, class_idxs, args.label_set)
   write_tsv(target_fp, st)
   
@@ -266,7 +300,8 @@ def summarize_metrics(metrics):
   
   return overall
 
-def plot_confusion_matrix(data, label_names, target_dir, name=""):   
+def plot_confusion_matrix(data, label_names, target_dir, name=""):
+  
     fig = plt.figure(num=None, figsize=(12, 8), dpi=80, facecolor='w', edgecolor='k')
     plt.clf()
     ax = fig.add_subplot(111)
@@ -282,6 +317,8 @@ def plot_confusion_matrix(data, label_names, target_dir, name=""):
     plt.title(name)
     
     plt.savefig(Path(target_dir, f"{name}_confusion_matrix.png"))
+    plt.close()
+
 
 def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
   # confusion_matrix (dict) : {fp : fp_cm}

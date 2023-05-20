@@ -1,35 +1,36 @@
-from data import get_test_dataloader
-from model import DetectionModel
-from train import train
-from util import parse_args, set_seed, save_params
-from evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_evaluate
+# Workflow, under main:
+# 1. `project-setup`
+# 1.b edit project config to reflect label mapping preferences
+# 2. `active-learning-sampling`
+# 3. annotate
+# 4. `trian-model`
+# 5. Repeat 2-4 as desired.
+# 6. 'inference'
 
-import yaml
+# These are set up in the different `experiment` files, in scripts
+
 import sys
-import os
 
-def main(args):
-  ## Setup
-  args = parse_args(args)
-  set_seed(args.seed)
+def main(mode, args):  
   
-  experiment_dir = os.path.join(args.output_dir, args.name)
-  setattr(args, 'experiment_dir', str(experiment_dir))
-  if not os.path.exists(args.experiment_dir):
-    os.makedirs(args.experiment_dir)
+  if mode == 'project-setup':
+    from source.project.project_setup import project_setup
+    project_setup(args)
   
-  save_params(args)
-  model = DetectionModel(args)
+  if mode == 'active-learning-sampling':
+    from source.active_learning.active_learning_sampling import active_learning_sampling
+    active_learning_sampling(args)
   
-  ## Training
-  trained_model = train(model, args)  
-  
-  ## Evaluation
-  test_dataloader = get_test_dataloader(args)
-  predict_and_evaluate(trained_model, test_dataloader, args, output_dir = os.path.join(args.experiment_dir, 'test_results'))
- 
+  if mode == 'train-model':
+    from source.training.train_model import train_model
+    train_model(args)
+    
+  if mode == 'inference':
+    from source.inference.inference import inference
+    inference(args)
 
 if __name__ == "__main__":
-  main(sys.argv[1:])
-  
-# python main.py --name=debug --lr=0.0001 --n-epochs=6 --clip-duration=4 --batch-size=100 --omit-empty-clip-prob=0.5 --clip-hop=2
+  ins = sys.argv
+  mode = ins[1]
+  args = ins[2:]
+  main(mode, args)

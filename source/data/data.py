@@ -220,7 +220,7 @@ class SingleClipDataset(Dataset):
         # waveform (samples,)
         super().__init__()
         self.duration = librosa.get_duration(filename=audio_fp)
-        self.num_clips = max(0, int(np.floor((self.duration - args.clip_duration) // args.clip_hop)))
+        self.num_clips = max(0, int(np.floor((self.duration - args.clip_duration) // clip_hop)))
         self.audio_fp = audio_fp
         # self.waveform, self.file_sr = librosa.load(audio_fp, sr=None, mono=True)
         # self.clip_hop_samples_file_sr = int(clip_hop * self.file_sr)
@@ -259,7 +259,7 @@ def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):
     )
 
 def get_val_dataloader(args):
-  val_info_fp = args.val_info_fp
+  val_info_fp = args.val_info_fp  
   val_info_df = pd.read_csv(val_info_fp)
   
   val_dataloaders = {}

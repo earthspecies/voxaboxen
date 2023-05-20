@@ -2,14 +2,18 @@
 
 Example usage:
 
-Get carrion crow data (the folder `19` and `Annotations_revised_by_Daniela.cleaned`) from GCP. Put them in the same directory.
+Get the birdvox full night dataset (https://zenodo.org/record/1205569). Put the files in `datasets/birdvox_full_night/raw`. Run the script `process_birdvox_full_night.py`.
 
-Get pretrained weights for aves.
+Get pretrained weights for aves. You will need to specify the default location of these weights in the files `source/training/params.py` and `source/active_learning/params.py`, or pass as a flag explicitly.
 
-edit and run `make_detection_data_crows.py`
+## Workflow:
 
-run
-`python main.py --name=sweep3 --lr=0.001 --n-epochs=20 --clip-duration=16 --batch-size=8 --omit-empty-clip-prob=0.5 --clip-hop=8 --lamb=.02`
+1. `main.py project-setup ...flags...`. See `source/project/params.py`.
+1.b Optional: edit project config to reflect label mapping preferences
+2. `main.py active-learning-sampling ...flags...`. See `source/active_learning/params.py`.
+3. annotate
+4. `main.py train-model ...flags...`. See `source/training/params.py`.
+5. Repeat 2-4 as desired.
+6. `main.py inference ...flags...`. See `source/inference/params.py`.
 
-for active learning, run
-`python active_learning_sampling.py ...other args...` Example arguments are in the file `active_learning_sampling.py`
+Examples of this workflow are simulated in the different `scriptes/*experiment*.py` files. The flag `--query-oracle` replaces manual sampling with looking up predefined annotations. This is used purely for benchmarking the different active learning approaches. 

@@ -45,7 +45,7 @@ if __name__ == "__main__":
     
     split_fp = os.path.join(split_dir, f'{split}.txt')
     fns = pd.read_csv(split_fp, header=None)[0].to_list()
-    train_out_info_fp = os.path.join(out_info_dir, f'train_info.csv')
+    train_out_info_fp = os.path.join(out_info_dir, f'train_info_iter_0.csv')
     val_out_info_fp = os.path.join(out_info_dir, f'val_info.csv')
 
     train_out_info = pd.DataFrame(columns=['fn', 'audio_fp', 'selection_table_fp'])
@@ -140,12 +140,12 @@ if __name__ == "__main__":
     
     split_fp = os.path.join(split_dir, f'{split}.txt')
     fns = pd.read_csv(split_fp, header=None)[0].to_list()
-    unannotated_out_info_fp = os.path.join(out_info_dir, f'unannotated_info.csv')
+    unannotated_out_info_fp = os.path.join(out_info_dir, f'train_pool_info.csv')
 
-    unannotated_out_info = pd.DataFrame(columns=['fn', 'audio_fp'])
+    unannotated_out_info = pd.DataFrame(columns=['fn', 'audio_fp', 'selection_table_fp'])
     
     for fn in fns:
       audio_fp = os.path.join(base_data_dir, '/'.join(fn.split('_')) + '.wav')
 
-      unannotated_out_info = unannotated_out_info.append({'fn': fn, 'audio_fp': audio_fp}, ignore_index=True)
+      unannotated_out_info = unannotated_out_info.append({'fn': fn, 'audio_fp': audio_fp, 'selection_table_fp' : "None"}, ignore_index=True)
     unannotated_out_info.to_csv(unannotated_out_info_fp, index=False)
