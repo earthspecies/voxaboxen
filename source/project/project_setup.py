@@ -6,7 +6,7 @@ import argparse
 from source.project.params import save_params, parse_project_args
 
 def project_setup(args):
-  args = parse_args(args)
+  args = parse_project_args(args)
   
   if not os.path.exists(args.project_dir):
     os.makedirs(args.project_dir)
