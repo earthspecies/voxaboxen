@@ -14,7 +14,7 @@ def main():
   
   for i in range(20):
     # uncertainty sampling with random init
-    if i == 0:
+    if i == 0 :
       local['python']['../main.py',
                       'active-learning-sampling',
                       '--project-config-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/project_config.yaml',
@@ -23,6 +23,18 @@ def main():
                       '--sequence-name=unc',
                       '--query-oracle',
                       '--max-n-clips-to-sample=60'] & FG
+      
+    elif i<3 :
+      local['python']['../main.py',
+                      'active-learning-sampling',
+                      '--project-config-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/project_config.yaml',
+                      '--sampling-method=coreset',
+                      '--sample-duration=10', 
+                      f'--prev-iteration-info-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/active_learning/train_info_unc_{i-1}.csv',
+                      f'--model-args-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/m{i-1}/params.yaml',
+                      '--query-oracle',
+                      '--max-n-clips-to-sample=60'] & FG
+      
     else:
       local['python']['../main.py',
                       'active-learning-sampling',

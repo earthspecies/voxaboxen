@@ -29,7 +29,7 @@ def main():
       local['python']['../main.py',
                       'train-model',
                       '--project-config-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_random/project_config.yaml',
-                      f'--name=m{i}',
+                      f'--name=m_{i}_{j}',
                       '--clip-duration=2',
                       '--clip-hop=1',
                       '--omit-empty-clip-prob=0',
