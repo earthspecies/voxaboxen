@@ -14,6 +14,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def sample_uncertainty_all(al_args):
   args = load_params(al_args.model_args_fp)  
   model = DetectionModel(args)
+  rng = np.random.default_rng(al_args.seed)
   
   # model  
   model_checkpoint_fp = os.path.join(args.experiment_dir, "model.pt")
@@ -39,7 +40,7 @@ def sample_uncertainty_all(al_args):
       continue
     print(f"Sampling clips from {fn}")
     
-    s, d, u = sample_uncertainty_fp(fp, model, al_args, args)
+    s, d, u = sample_uncertainty_fp(fp, model, rng, al_args, args)
     
     start_times.extend(s)
     durations.extend(d)
@@ -54,13 +55,20 @@ def sample_uncertainty_all(al_args):
                 'uncertainty' : uncertainties}
   output_log = pd.DataFrame(output_log)
   
-  # subselect
-  output_log = output_log.sort_values('uncertainty', ascending = False)[:al_args.max_n_clips_to_sample].reset_index()
+  # subselect, choose minimum uncertainty samples at random
+  output_log_temp = output_log.sort_values('uncertainty', ascending = False)[:al_args.max_n_clips_to_sample]
+  uncertainty_cutoff = np.amin(output_log_temp['uncertainty'])
+  output_log_above_cutoff = output_log[output_log['uncertainty'] > uncertainty_cutoff]
+  output_log_at_cutoff = output_log[output_log['uncertainty'] == uncertainty_cutoff]
+  
+  n_additional_needed = min(al_args.max_n_clips_to_sample - len(output_log_above_cutoff), len(output_log_at_cutoff))
+  output_log_additional = output_log_at_cutoff.sample(n = n_additional_needed, random_state = al_args.seed)
+  output_log = pd.concat([output_log_above_cutoff, output_log_additional]).sort_values('uncertainty', ascending = False).reset_index()
   output_log['start_second_in_al_samples'] = output_log.index * al_args.sample_duration
   
   return output_log
 
-def sample_uncertainty_fp(fp, model, al_args, args):
+def sample_uncertainty_fp(fp, model, rng, al_args, args):
   starts, durations, uncertainties = get_uncertainties(fp, model, al_args, args)
   
   if len(uncertainties)==0:
@@ -78,7 +86,7 @@ def sample_uncertainty_fp(fp, model, al_args, args):
   # sample at cutoff, handle situation if there are ties in uncertainty
   n_remaining_to_sample = al_args.uncertainty_clips_per_file - len(sampled_idxs)
   borderline_sampled_idxs = np.nonzero(np.array(uncertainties) == uncertainty_cutoff)[0]
-  borderline_sampled_idxs = borderline_sampled_idxs[:n_remaining_to_sample]
+  borderline_sampled_idxs = rng.permutation(borderline_sampled_idxs)[:n_remaining_to_sample]
   
   sampled_idxs = np.concatenate([sampled_idxs, borderline_sampled_idxs])
         

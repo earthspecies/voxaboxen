@@ -13,7 +13,7 @@ def modify_anno(anno_fp, modified_anno_fp, start, end):
   modified_anno['End Time (s)'] = modified_anno['End Time (s)'] - start
   modified_anno = modified_anno.reset_index()
   
-  merged_anno = merge_annos(modified_anno, merge_tolerance = 0.5)
+  merged_anno = merge_annos(modified_anno, merge_tolerance = 0)
   merged_anno.to_csv(modified_anno_fp, sep = '\t', index = False)
   
 def merge_annos(df, merge_tolerance = 0):

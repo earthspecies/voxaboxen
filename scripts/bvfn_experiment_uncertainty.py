@@ -18,21 +18,12 @@ def main():
       local['python']['../main.py',
                       'active-learning-sampling',
                       '--project-config-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/project_config.yaml',
-                      '--sampling-method=coreset',
+                      '--sampling-method=random',
+                      '--random-clips-per-file=10',
                       '--sample-duration=10', 
                       '--sequence-name=unc',
                       '--query-oracle',
-                      '--max-n-clips-to-sample=60'] & FG
-      
-    elif i<3 :
-      local['python']['../main.py',
-                      'active-learning-sampling',
-                      '--project-config-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/project_config.yaml',
-                      '--sampling-method=coreset',
-                      '--sample-duration=10', 
-                      f'--prev-iteration-info-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/active_learning/train_info_unc_{i-1}.csv',
-                      f'--model-args-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/m{i-1}/params.yaml',
-                      '--query-oracle',
+                      '--seed=1',
                       '--max-n-clips-to-sample=60'] & FG
       
     else:
@@ -45,7 +36,9 @@ def main():
                       f'--prev-iteration-info-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/active_learning/train_info_unc_{i-1}.csv',
                       f'--model-args-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_uncertainty/m{i-1}/params.yaml',
                       '--query-oracle',
-                      '--max-n-clips-to-sample=60'] & FG
+                      '--max-n-clips-to-sample=60',
+                      f'--seed={i+1}',
+                     ] & FG
       
     local['python']['../main.py',
                     'train-model',
