@@ -18,10 +18,6 @@ def parse_al_args(al_args):
   # parser.add_argument('--sampling-iteration', type=int, default=0, help = 'how many times have data previously been sampled and annotated for this project')
   parser.add_argument('--query-oracle', action='store_true', help="for benchmarking, will use predefined annotations to simulate active learning annotation step")
   parser.add_argument('--output-sr', type=int, default=16000, help="sr for output audio")
-  
-  # parser.add_argument('--model-checkpoint-fp', type=str, required=True, help = "filepath of model checkpoint")
-  # parser.add_argument('--name', type=str, required=True)
-  # parser.add_argument('--candidate-manifest-fp', required=True, help='fp to tsv list of wav files to sample')
 
   # Model based (Core set and Uncertainty) sampling
   parser.add_argument('--model-args-fp', type=str, help = "filepath of model params saved as a yaml")

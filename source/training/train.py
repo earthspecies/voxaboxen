@@ -17,6 +17,12 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def train(model, args):
   model = model.to(device)
+  
+  if args.previous_checkpoint_fp is not None:
+    print(f"loading model weights from {args.previous_checkpoint_fp}")
+    cp = torch.load(args.previous_checkpoint_fp)
+    model.load_state_dict(cp["model_state_dict"])
+  
   class_loss_fn = modified_focal_loss
   reg_loss_fn = masked_reg_loss
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
