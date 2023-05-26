@@ -121,15 +121,17 @@ def preprocess_and_augment(X, y, r, mask, train, args):
     X = X * rms
     
   if args.mixup and train:
+    batch_size = X.size(0)
+    
     X_aug = torch.flip(X, (0,))
     r_aug = torch.flip(r, (0,))
     y_aug = torch.flip(y, (0,))
     mask_aug = torch.flip(mask, (0,))
     
-    X = (X + X_aug) / 2
-    r = torch.maximum(r, r_aug)
-    y = torch.maximum(y, y_aug)
-    mask = torch.minimum(mask, mask_aug)
+    X = (X + X_aug)[:batch_size//2,...]
+    r = torch.maximum(r, r_aug)[:batch_size//2,...]
+    y = torch.maximum(y, y_aug)[:batch_size//2,...]
+    mask = torch.minimum(mask, mask_aug)[:batch_size//2,...]
     
   return X, y, r, mask
       

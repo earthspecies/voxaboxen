@@ -27,7 +27,7 @@ def train(model, args):
   reg_loss_fn = masked_reg_loss
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
   scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.step_size, gamma=0.1, last_epoch=- 1, verbose=False)
-  # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=args.lr/100, last_epoch=- 1, verbose=False)
+  # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
   
   train_evals = []
   learning_rates = []
@@ -134,7 +134,7 @@ def train_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, optimizer, arg
       r_clipped = r[:,end_mask_dur:-end_mask_dur,:]
       loss_mask_clipped = loss_mask[:, end_mask_dur:-end_mask_dur]
       
-      class_loss = class_loss_fn(probs_clipped, y_clipped, mask=loss_mask_clipped)
+      class_loss = class_loss_fn(probs_clipped, y_clipped, pos_loss_weight = args.pos_loss_weight, mask=loss_mask_clipped)
       reg_loss = reg_loss_fn(regression_clipped, r_clipped, y_clipped, mask=loss_mask_clipped)
       
       loss = class_loss + args.lamb* reg_loss
@@ -173,7 +173,7 @@ def val_epoch(model, t, dataloader, class_loss_fn, reg_loss_fn, args):
     print(f"Epoch {t} | Test scores @{args.model_selection_iou}IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
 
-def modified_focal_loss(pred, gt, mask = None):
+def modified_focal_loss(pred, gt, pos_loss_weight = 1, mask = None):
   # Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
   ''' 
       pred [batch, time, n_classes]
@@ -190,7 +190,7 @@ def modified_focal_loss(pred, gt, mask = None):
 
   loss = 0
 
-  pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds
+  pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds * pos_loss_weight
   neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
   
   loss = -1.*n_classes*(neg_loss + pos_loss)

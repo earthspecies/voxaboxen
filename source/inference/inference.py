@@ -24,6 +24,8 @@ def inference(inference_args):
   model.load_state_dict(cp["model_state_dict"])
   model = model.to(device)
   
+  
+  
   files_to_infer = pd.read_csv(inference_args.file_info_for_inference)
   
   for i, row in files_to_infer.iterrows():

@@ -205,6 +205,13 @@ def get_train_dataloader(args, random_seed_shift = 0):
   train_info_df = pd.read_csv(train_info_fp)
   
   train_dataset = DetectionDataset(train_info_df, True, args, random_seed_shift = random_seed_shift)
+  
+  if args.mixup:
+    effective_batch_size = args.batch_size*2 # double batch size because half will be discarded before being passed to model
+  else:
+    effective_batch_size = args.batch_size
+  
+  
   train_dataloader = DataLoader(train_dataset,
                                 batch_size=args.batch_size, 
                                 shuffle=True,
