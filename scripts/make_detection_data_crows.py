@@ -149,3 +149,23 @@ if __name__ == "__main__":
 
       unannotated_out_info = unannotated_out_info.append({'fn': fn, 'audio_fp': audio_fp, 'selection_table_fp' : "None"}, ignore_index=True)
     unannotated_out_info.to_csv(unannotated_out_info_fp, index=False)
+    
+    ########
+    # All
+    ########
+    
+    # We create a manifest of all files
+    
+    split = 'all'
+    
+    split_fp = os.path.join(split_dir, f'{split}.txt')
+    fns = pd.read_csv(split_fp, header=None)[0].to_list()
+    all_out_info_fp = os.path.join(out_info_dir, f'all_files_info.csv')
+
+    all_out_info = pd.DataFrame(columns=['fn', 'audio_fp', 'selection_table_fp'])
+    
+    for fn in fns:
+      audio_fp = os.path.join(base_data_dir, '/'.join(fn.split('_')) + '.wav')
+
+      all_out_info = all_out_info.append({'fn': fn, 'audio_fp': audio_fp, 'selection_table_fp' : "None"}, ignore_index=True)
+    all_out_info.to_csv(all_out_info_fp, index=False)

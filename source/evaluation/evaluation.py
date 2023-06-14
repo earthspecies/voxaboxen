@@ -185,11 +185,14 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
     
   return all_features.detach().cpu().numpy()
 
-def export_to_selection_table(predictions, regressions, fn, args, verbose=True):
-  target_fp = os.path.join(args.experiment_output_dir, f"probs_{fn}.npy")
+def export_to_selection_table(predictions, regressions, fn, args, verbose=True, target_dir=None):
+  if target_dir is None:
+    target_dir = args.experiment_output_dir  
+  
+  target_fp = os.path.join(target_dir, f"probs_{fn}.npy")
   np.save(target_fp, predictions)
   
-  target_fp = os.path.join(args.experiment_output_dir, f"regressions_{fn}.npy")
+  target_fp = os.path.join(target_dir, f"regressions_{fn}.npy")
   np.save(target_fp, regressions)
   
   ## peaks  
@@ -221,7 +224,8 @@ def export_to_selection_table(predictions, regressions, fn, args, verbose=True):
   
   bboxes, scores, class_idxs = pred2bbox(preds, anchor_scores, regressions, pred_sr)
   
-  target_fp = os.path.join(args.experiment_output_dir, f"peaks_pred_{fn}.txt")
+  target_fp = os.path.join(target_dir, f"peaks_pred_{fn}.txt")
+    
   st = bbox2raven(bboxes, class_idxs, args.label_set)
   write_tsv(target_fp, st)
   
