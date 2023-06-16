@@ -37,6 +37,7 @@ def parse_args(args):
   parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the final frames") 
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0.5, help="if a clip has no annotations, do not use for training with this probability")
   parser.add_argument('--lamb', type=float, default=.01, help="parameter controlling strength regression loss")
+  parser.add_argument('--rho', type=float, default = .01, help="parameter controlling strength of classification loss")
   parser.add_argument('--step-size', type=int, default=5, help="number epochs between lr decrease")
   parser.add_argument('--model-selection-iou', type=float, default=0.5, help="iou for used for computing f1 for early stopping")
   parser.add_argument('--early-stopping', action ="store_true", help="Whether to use early stopping based on val performance")

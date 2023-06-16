@@ -135,17 +135,36 @@ class DetectionDataset(Dataset):
         intervals = [(max(iv.begin, start)-start, min(iv.end, end)-start, iv.data) for iv in intervals]
 
         return intervals
+      
+    def get_class_proportions(self):
+        counts = np.zeros((self.n_classes,))
+        
+        for k in self.selection_table_dict:
+          st = self.selection_table_dict[k]
+          for interval in st:
+            annot = interval.data
+            if annot == -1:
+              continue
+            else:
+              counts[annot] += 1
+        
+        total_count = np.sum(counts)
+        proportions = counts / total_count
+          
+        return proportions
+          
 
     def get_annotation(self, pos_intervals, audio):
         
         raw_seq_len = audio.shape[0]
         seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
-        regression_anno = np.zeros((seq_len, self.n_classes))
+        regression_anno = np.zeros((seq_len,))
+        class_anno = np.zeros((seq_len, self.n_classes)) 
 
         anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
         
-        anchor_annos_dict = {i : [] for i in range(self.n_classes)}
-        
+        anchor_annos = [np.zeros(seq_len,)]
+                
         mask = [np.ones(seq_len)]
 
         for iv in pos_intervals:
@@ -156,29 +175,19 @@ class DetectionDataset(Dataset):
             start_idx = max(min(start_idx, seq_len-1), 0)
             dur_samples = np.ceil(dur * anno_sr)
             
-            # ### Start idx anchors and regression targets ###
-            if class_idx != -1:
-              anchor_anno = get_anchor_anno(start_idx, dur_samples, seq_len)
-              anchor_annos_dict[class_idx].append(anchor_anno)
-              regression_anno[start_idx, class_idx] = dur
-            else:
-              mask.append(get_unknown_mask(start_idx, dur_samples, seq_len))      
-        
-        anchor_annos = []
-        for i in range(self.n_classes):
-          if len(anchor_annos_dict[i])>0:
-            x = np.stack(anchor_annos_dict[i])
-            x = np.amax(x, axis = 0)
-          else:
-            x = np.zeros(seq_len)
-          anchor_annos.append(x)
-        
-        anchor_annos = np.stack(anchor_annos, axis = -1)
-          
-        mask = np.stack(mask)
-        mask = np.amin(mask, axis = 0)
+            anchor_anno = get_anchor_anno(start_idx, dur_samples, seq_len)
+            anchor_annos.append(anchor_anno)
+            regression_anno[start_idx] = dur
 
-        return anchor_annos, regression_anno, mask # shapes [time_steps, n_classes], [time_steps, n_classes], [time_steps,]
+            if class_idx != -1:
+              class_anno[start_idx, class_idx] = 1.
+            else:
+              class_anno[start_idx, :] = 1./self.n_classes # if unknown, enforce uncertainty
+        
+        anchor_annos = np.stack(anchor_annos)
+        anchor_annos = np.amax(anchor_annos, axis = 0)
+
+        return anchor_annos, regression_anno, class_anno # shapes [time_steps, ], [time_steps, ], [time_steps, n_classes]
 
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
@@ -192,9 +201,9 @@ class DetectionDataset(Dataset):
           audio = crop_and_pad(audio, self.sr, self.clip_duration)
         
         pos_intervals = self.get_pos_intervals(fn, start, end)
-        anchor_anno, regression_anno, mask = self.get_annotation(pos_intervals, audio)
+        anchor_anno, regression_anno, class_anno = self.get_annotation(pos_intervals, audio)
 
-        return audio, torch.from_numpy(anchor_anno), torch.from_numpy(regression_anno), torch.from_numpy(mask)
+        return audio, torch.from_numpy(anchor_anno), torch.from_numpy(regression_anno), torch.from_numpy(class_anno)
 
     def __len__(self):
         return len(self.metadata)
