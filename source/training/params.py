@@ -40,6 +40,8 @@ def parse_args(args):
   parser.add_argument('--rho', type=float, default = .01, help="parameter controlling strength of classification loss")
   parser.add_argument('--step-size', type=int, default=5, help="number epochs between lr decrease")
   parser.add_argument('--model-selection-iou', type=float, default=0.5, help="iou for used for computing f1 for early stopping")
+  parser.add_argument('--model-selection-class-threshold', type=float, default=0.5, help="class threshold for used for computing f1 for early stopping")
+
   parser.add_argument('--early-stopping', action ="store_true", help="Whether to use early stopping based on val performance")
   parser.add_argument('--pos-loss-weight', type=float, default=1, help="Weights positive component of loss")
   

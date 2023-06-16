@@ -7,7 +7,7 @@ from scipy.signal import find_peaks
 import yaml
 from matplotlib import pyplot as plt
 import seaborn as sns
-from pathlib import Path
+import pandas as pd
 
 from source.evaluation.raven_utils import Clip
 from source.model.model import preprocess_and_augment
@@ -45,7 +45,7 @@ def pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_pro
         
     return np.array(bboxes), np.array(detection_probs_sub), np.array(class_idxs_sub), np.array(class_probs_sub)
     
-def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs):
+def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs, unknown_label):
     '''
     output bounding boxes to a selection table
 
@@ -65,14 +65,23 @@ def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs):
         
     class_probs: numpy array
         shape = (num_bboxes,)
+        
+    unknown_label: str
 
     '''
     if bboxes is None:
       return [['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']]
 
     columns = ['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']
+    
+    
+    def label_idx_to_label(i):
+      if i==-1:
+        return unknown_label
+      else:
+        return label_set[i]
         
-    out_data = [[bbox[0], bbox[1], label_set[int(c)], dp, cp] for bbox, c, dp, cp in zip(bboxes, class_idxs, detection_probs, class_probs)]
+    out_data = [[bbox[0], bbox[1], label_idx_to_label(int(c)), dp, cp] for bbox, c, dp, cp in zip(bboxes, class_idxs, detection_probs, class_probs)]
     out_data = sorted(out_data, key=lambda x: x[:2])
 
     out = [columns] + out_data
@@ -187,7 +196,7 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
     
   return all_features.detach().cpu().numpy()
 
-def export_to_selection_table(detections, regressions, classifications, fn, args, verbose=True, target_dir=None):
+def export_to_selection_table(detections, regressions, classifications, fn, args, verbose=True, target_dir=None, detection_threshold = 0.5, classification_threshold = 0):
   
   # Stopped here also it's a mess
   
@@ -204,7 +213,7 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
   np.save(target_fp, classifications)
   
   ## peaks  
-  detection_peaks, properties = find_peaks(detections, height = args.detection_threshold, distance=5)
+  detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=5)
   detection_probs = properties['peak_heights']
     
   ## regressions and classifications
@@ -216,12 +225,15 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
     dur = regressions[i]
     durations.append(dur)
     
-    c = np.argmax(classifications[i,:])
-    class_idxs.append(c)
-    
+    c = np.argmax(classifications[i,:])    
     p = classifications[i,c]
-    class_probs.append(p)
     
+    if p < classification_threshold:
+      c = -1
+    
+    class_idxs.append(c)
+    class_probs.append(p)
+        
   durations = np.array(durations)
   class_idxs = np.array(class_idxs)
   class_probs = np.array(class_probs)
@@ -235,81 +247,78 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
   
   target_fp = os.path.join(target_dir, f"peaks_pred_{fn}.txt")
     
-  st = bbox2raven(bboxes, class_idxs, args.label_set, detection_probs, class_probs)
+  st = bbox2raven(bboxes, class_idxs, args.label_set, detection_probs, class_probs, args.unknown_label)
   write_tsv(target_fp, st)
   
   return target_fp
   
-def get_metrics(predictions_fp, annotations_fp, args):
+def get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold):
   c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
   
   c.load_predictions(predictions_fp)
+  c.threshold_class_predictions(class_threshold)
   c.load_annotations(annotations_fp, label_mapping = args.label_mapping)
   
   metrics = {}
   
-  for iou_thresh in [0.2, 0.5, 0.8]:
-    c.compute_matching(IoU_minimum = iou_thresh)
-    metrics[iou_thresh] = c.evaluate()
+  c.compute_matching(IoU_minimum = iou)
+  metrics = c.evaluate()
   
   return metrics
 
-def get_confusion_matrix(predictions_fp, annotations_fp, args):
+def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold):
   c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
   
   c.load_predictions(predictions_fp)
+  c.threshold_class_predictions(class_threshold)
   c.load_annotations(annotations_fp, label_mapping = args.label_mapping)
   
   confusion_matrix = {}
   
-  for iou_thresh in [0.2, 0.5, 0.8]:
-    c.compute_matching(IoU_minimum = iou_thresh)
-    confusion_matrix[iou_thresh], confusion_matrix_labels = c.confusion_matrix()
+  c.compute_matching(IoU_minimum = iou)
+  confusion_matrix, confusion_matrix_labels = c.confusion_matrix()
   
   return confusion_matrix, confusion_matrix_labels
 
 def summarize_metrics(metrics):
   # metrics (dict) : {fp : fp_metrics}
   # where
-  # fp_metrics (dict) : {iou_thresh : {'TP': int, 'FP' : int, 'FN' : int}}
+  # fp_metrics (dict) : {class_label: {'TP': int, 'FP' : int, 'FN' : int}}
   
   fps = sorted(metrics.keys())
-  iou_thresholds = sorted(metrics[fps[0]].keys())
-  class_labels = sorted(metrics[fps[0]][iou_thresholds[0]].keys())
+  class_labels = sorted(metrics[fps[0]].keys())
   
-  overall = {iou_thresh : { l: {'TP' : 0, 'FP' : 0, 'FN' : 0} for l in class_labels} for iou_thresh in iou_thresholds}
+  overall = { l: {'TP' : 0, 'FP' : 0, 'FN' : 0} for l in class_labels}
   
   for fp in fps:
-    for iou_thresh in iou_thresholds:
-      for l in class_labels:
-        counts = metrics[fp][iou_thresh][l]
-        overall[iou_thresh][l]['TP'] += counts['TP']
-        overall[iou_thresh][l]['FP'] += counts['FP']
-        overall[iou_thresh][l]['FN'] += counts['FN']
-      
-  for iou_thresh in iou_thresholds:
     for l in class_labels:
-      tp = overall[iou_thresh][l]['TP']
-      fp = overall[iou_thresh][l]['FP']
-      fn = overall[iou_thresh][l]['FN']
+      counts = metrics[fp][l]
+      overall[l]['TP'] += counts['TP']
+      overall[l]['FP'] += counts['FP']
+      overall[l]['FN'] += counts['FN']
+      
+  for l in class_labels:
+    tp = overall[l]['TP']
+    fp = overall[l]['FP']
+    fn = overall[l]['FN']
 
-      if tp + fp == 0:
-        prec = 1
-      else:
-        prec = tp / (tp + fp)
-      overall[iou_thresh][l]['precision'] = prec
+    if tp + fp == 0:
+      prec = 1
+    else:
+      prec = tp / (tp + fp)
+    overall[l]['precision'] = prec
 
-      if tp + fn == 0:
-        rec = 1
-      else:
-        rec = tp / (tp + fn)
-      overall[iou_thresh][l]['recall'] = rec
+    if tp + fn == 0:
+      rec = 1
+    else:
+      rec = tp / (tp + fn)
+    overall[l]['recall'] = rec
 
-      if prec + rec == 0:
-        f1 = 0
-      else:
-        f1 = 2*prec*rec / (prec + rec)
-      overall[iou_thresh][l]['f1'] = f1
+    if prec + rec == 0:
+      f1 = 0
+    else:
+      f1 = 2*prec*rec / (prec + rec)
+    overall[l]['f1'] = f1
   
   return overall
 
@@ -329,36 +338,56 @@ def plot_confusion_matrix(data, label_names, target_dir, name=""):
     ax.set_xlabel('Annotation')
     plt.title(name)
     
-    plt.savefig(Path(target_dir, f"{name}_confusion_matrix.png"))
+    plt.savefig(os.path.join(target_dir, f"{name}_confusion_matrix.png"))
     plt.close()
 
 
 def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
   # confusion_matrix (dict) : {fp : fp_cm}
   # where
-  # fp_cm (dict) : {iou_thresh : numpy array}
+  # fp_cm  : numpy array
   
   fps = sorted(confusion_matrix.keys())
-  iou_thresholds = sorted(confusion_matrix[fps[0]].keys())
   l = len(confusion_matrix_labels)
   
-  overall = {iou_thresh : np.zeros((l, l)) for iou_thresh in iou_thresholds}
+  overall = np.zeros((l, l))
   
   for fp in fps:
-    for iou_thresh in iou_thresholds:
-      overall[iou_thresh] += confusion_matrix[fp][iou_thresh]
+    overall += confusion_matrix[fp]
   
   return overall, confusion_matrix_labels
 
-def predict_and_evaluate(model, dataloader_dict, args, output_dir = None, verbose = True):
-  metrics = {}
-  confusion_matrix = {}
+def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
+  fns = []
+  predictions_fps = []
+  annotations_fps = []
+                               
   for fn in dataloader_dict:
     detections, regressions, classifications = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
-    predictions_fp = export_to_selection_table(detections, regressions, classifications, fn, args, verbose = verbose)
+    
+    predictions_fp = export_to_selection_table(detections, regressions, classifications, fn, args, verbose = verbose, detection_threshold = args.detection_threshold)
+    
     annotations_fp = dataloader_dict[fn].dataset.annot_fp
-    metrics[fn] = get_metrics(predictions_fp, annotations_fp, args)
-    confusion_matrix[fn], confusion_matrix_labels = get_confusion_matrix(predictions_fp, annotations_fp, args)
+    
+    fns.append(fn)
+    predictions_fps.append(predictions_fp)
+    annotations_fps.append(annotations_fp)
+    
+  manifest = pd.DataFrame({'filename' : fns, 'predictions_fp' : predictions_fps, 'annotations_fp' : annotations_fps})
+  return manifest
+                                  
+def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, class_threshold = 0.0):
+  
+  metrics = {}
+  confusion_matrix = {}
+  
+  for i, row in manifest.iterrows():
+    fn = row['filename']
+    predictions_fp = row['predictions_fp']
+    annotations_fp = row['annotations_fp']
+  
+    metrics[fn] = get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold)
+    confusion_matrix[fn], confusion_matrix_labels = get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold)
     
   if output_dir is not None:
     if not os.path.exists(output_dir):
@@ -368,14 +397,13 @@ def predict_and_evaluate(model, dataloader_dict, args, output_dir = None, verbos
   summary = summarize_metrics(metrics)
   metrics['summary'] = summary
   if output_dir is not None:
-    metrics_fp = os.path.join(output_dir, 'metrics.yaml')
+    metrics_fp = os.path.join(output_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
     with open(metrics_fp, 'w') as f:
       yaml.dump(metrics, f)
   
   # summarize and save confusion matrix
   confusion_matrix_summary, confusion_matrix_labels = summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels)
   if output_dir is not None:
-    for key in confusion_matrix_summary:
-      plot_confusion_matrix(confusion_matrix_summary[key].astype(int), confusion_matrix_labels, output_dir, name=f"iou_{key}")  
+    plot_confusion_matrix(confusion_matrix_summary.astype(int), confusion_matrix_labels, output_dir, name=f"cm_iou_{iou}_class_threshold_{class_threshold}")  
   
   return metrics, confusion_matrix_summary

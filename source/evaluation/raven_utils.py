@@ -54,6 +54,14 @@ class Clip():
         self.annotations = self.load_selection_table(fp, view = view, label_mapping = label_mapping)
         self.annotations['index'] = self.annotations.index
         
+    def threshold_class_predictions(self, class_threshold):
+        # If class probability is below a threshold, switch label to unknown
+      
+        assert self.unknown_label is not None
+        for i in self.predictions.index:
+          if self.predictions.iloc[i]['Class Prob'] < class_threshold:
+            self.predictions.iloc[i]['Annotation'] = self.unknown_label        
+        
     def refine_annotations(self):
         print("Not implemented! Could implement refining annotations by SNR to remove quiet vocs")
         
@@ -90,7 +98,9 @@ class Clip():
             annotation = annot_label[p[0]]
             prediction = pred_label[p[1]]
             
-            if annotation == prediction:
+            if self.unknown_label is not None and prediction == self.unknown_label:
+              pass # treat predicted unknowns as no predictions for these metrics
+            elif annotation == prediction:
               out[annotation]['TP'] += 1
             elif self.unknown_label is not None and annotation == self.unknown_label:
               out[prediction]['FP'] -= 1 #adjust FP for unknown labels
@@ -129,6 +139,7 @@ class Clip():
         for label in confusion_matrix_labels:
           if label == 'None':
             continue
+            
           # count false positive and false negative detections, regardless of class
           cm_label_idx = confusion_matrix_labels.index(label)
           

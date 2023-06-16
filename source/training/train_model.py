@@ -2,7 +2,7 @@ from source.data.data import get_test_dataloader
 from source.model.model import DetectionModel
 from source.training.train import train
 from source.training.params import parse_args, set_seed, save_params
-from source.evaluation.evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_evaluate
+from source.evaluation.evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_generate_manifest, evaluate_based_on_manifest
 
 import yaml
 import sys
@@ -32,8 +32,12 @@ def train_model(args):
   
   ## Evaluation
   test_dataloader = get_test_dataloader(args)
-  predict_and_evaluate(trained_model, test_dataloader, args, output_dir = os.path.join(args.experiment_dir, 'test_results'))
- 
+  
+  manifest = predict_and_generate_manifest(trained_model, test_dataloader, args)
+  
+  for iou in [0.2, 0.5, 0.8]:
+    for class_threshold in [0.0, 0.5, 0.9]:
+      evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou = iou, class_threshold = class_threshold) 
 
 if __name__ == "__main__":
   train_model(sys.argv[1:])

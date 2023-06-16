@@ -10,7 +10,7 @@ from einops import rearrange
 
 
 from source.evaluation.plotters import plot_eval
-from source.evaluation.evaluation import predict_and_evaluate
+from source.evaluation.evaluation import predict_and_generate_manifest, evaluate_based_on_manifest
 from source.data.data import get_train_dataloader, get_val_dataloader
 from source.model.model import preprocess_and_augment
 
@@ -170,9 +170,11 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
                         
 def val_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args):
     model.eval()
-    e, _ = predict_and_evaluate(model, dataloader, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), verbose = False)
     
-    summary = e['summary'][args.model_selection_iou]
+    manifest = predict_and_generate_manifest(model, dataloader, args, verbose = False)
+    e, _ = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
+        
+    summary = e['summary']
     
     evals = {k:[] for k in ['precision','recall','f1']}
     for k in ['precision','recall','f1']:
