@@ -41,10 +41,11 @@ def inference(inference_args):
     if len(dataloader) == 0:
       print(f"Skipping {fn} because it is too short")
       continue
-            
-    predictions, regressions = generate_predictions(model, dataloader, args, verbose=True)
-    target_fp = export_to_selection_table(predictions, regressions, fn, args, verbose = True, target_dir = output_dir)
+                
+    detections, regressions, classifications = generate_predictions(model, dataloader, args, verbose = True)
     
+    target_fp = export_to_selection_table(detections, regressions, classifications, fn, args, verbose=True, target_dir=output_dir, detection_threshold = inference_args.detection_threshold, classification_threshold = inference_args.classification_threshold)
+        
     print(f"Saving predictions for {fn} to {target_fp}")
 
 if __name__ == "__main__":

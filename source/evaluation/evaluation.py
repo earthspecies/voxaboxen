@@ -197,9 +197,7 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
   return all_features.detach().cpu().numpy()
 
 def export_to_selection_table(detections, regressions, classifications, fn, args, verbose=True, target_dir=None, detection_threshold = 0.5, classification_threshold = 0):
-  
-  # Stopped here also it's a mess
-  
+    
   if target_dir is None:
     target_dir = args.experiment_output_dir  
     
