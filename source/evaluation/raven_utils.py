@@ -59,8 +59,8 @@ class Clip():
       
         assert self.unknown_label is not None
         for i in self.predictions.index:
-          if self.predictions.iloc[i]['Class Prob'] < class_threshold:
-            self.predictions.iloc[i]['Annotation'] = self.unknown_label        
+          if self.predictions.loc[i, 'Class Prob'] < class_threshold:
+            self.predictions.at[i, 'Annotation'] = self.unknown_label        
         
     def refine_annotations(self):
         print("Not implemented! Could implement refining annotations by SNR to remove quiet vocs")
