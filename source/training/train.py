@@ -26,7 +26,7 @@ def train(model, args):
     model.load_state_dict(cp["model_state_dict"])
   
   detection_loss_fn = modified_focal_loss
-  reg_loss_fn = masked_reg_loss
+  reg_loss_fn = get_reg_loss_fn(args)
   
   class_loss_fn = get_class_loss_fn(args)
   
@@ -144,7 +144,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
       
       
       detection_loss = detection_loss_fn(probs_clipped, d_clipped, pos_loss_weight = args.pos_loss_weight)
-      reg_loss = reg_loss_fn(regression_clipped, r_clipped, d_clipped)
+      reg_loss = reg_loss_fn(regression_clipped, r_clipped, d_clipped, y_clipped)
       class_loss = class_loss_fn(class_logits_clipped, y_clipped, d_clipped)
       
       loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
@@ -209,15 +209,35 @@ def modified_focal_loss(pred, gt, pos_loss_weight = 1):
   return loss
   
   
-def masked_reg_loss(regression, r, d):
+def masked_reg_loss(regression, r, d, y, class_weights = None):
   # regression, r (Tensor): [batch, time,]
   # r (Tensor) : [batch, time,], float tensor
   # d (Tensor) : [batch, time,], float tensor
-  
-  reg_loss = F.mse_loss(regression, r, reduction='none')
+  # y (Tensor) : [batch, time, n_classes]
+  # class_weights (Tensor) : [n_classes,]
+    
+  reg_loss = F.l1_loss(regression, r, reduction='none')
   mask = d.eq(1).float()
   
   reg_loss = reg_loss * mask
+  
+  if class_weights is not None:
+    y = rearrange(y, 'b t c -> b c t')
+
+    high_prob = torch.amax(y, dim = 1)
+    knowns = high_prob.eq(1).float()
+    unknowns = high_prob.lt(1).float()
+  
+    reg_loss_unknowns = reg_loss * unknowns
+        
+    class_weights = torch.reshape(class_weights, (1, -1, 1))
+    class_weights = y * class_weights
+    class_weights = torch.amax(class_weights, dim = 1)
+    
+    reg_loss_knowns = reg_loss * knowns * class_weights
+    
+    reg_loss = reg_loss_unknowns + reg_loss_knowns
+    
   reg_loss = torch.sum(reg_loss)
   n_pos = mask.sum()
   
@@ -268,3 +288,14 @@ def get_class_loss_fn(args):
   
   class_weights = torch.Tensor(class_weights).to(device)
   return partial(masked_classification_loss, class_weights = class_weights)
+
+def get_reg_loss_fn(args):
+  dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
+  class_proportions = dataloader_temp.dataset.get_class_proportions()
+  class_weights = 1. / (class_proportions + 1e-6)
+    
+  class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
+  
+  class_weights = torch.Tensor(class_weights).to(device)
+  return partial(masked_reg_loss, class_weights = class_weights)
+                               
