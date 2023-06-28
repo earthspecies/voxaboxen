@@ -164,8 +164,6 @@ class DetectionDataset(Dataset):
         anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
         
         anchor_annos = [np.zeros(seq_len,)]
-                
-        mask = [np.ones(seq_len)]
 
         for iv in pos_intervals:
             start, end, class_idx = iv
@@ -304,14 +302,10 @@ def get_test_dataloader(args):
   
 def get_anchor_anno(start_idx, dur_samples, seq_len):
   # start times plus gaussian blur
+  # std setting follows CornerNet, where adaptive standard deviation is set to 1/3 image radius
   std = dur_samples / 6
   x = (np.arange(seq_len) - start_idx) ** 2
   x = x / (2 * std**2)
   x = np.exp(-x)
   return x
   
-def get_unknown_mask(start_idx, dur_samples, seq_len):
-  unknown_radius = 1 + int(dur_samples / 6)
-  x = np.ones(seq_len)
-  x[start_idx - unknown_radius:start_idx + unknown_radius] = 0
-  return x

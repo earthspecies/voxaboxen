@@ -126,6 +126,8 @@ def preprocess_and_augment(X, d, r, y, train, args):
     X = X * rms
     
   if args.mixup and train:
+    # TODO: For mixup, add in a check that there aren't extremely overlapping vocs
+    
     batch_size = X.size(0)
     
     X_aug = torch.flip(X, (0,))

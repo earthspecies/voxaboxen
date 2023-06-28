@@ -34,7 +34,7 @@ def parse_args(args):
   parser.add_argument('--lr', type=float, default=.001) 
   parser.add_argument('--n-epochs', type=int, default=20)
   parser.add_argument('--unfreeze-encoder-epoch', type=int, default=5)
-  parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the final frames") 
+  parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the frames on each end of the clip") 
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0.5, help="if a clip has no annotations, do not use for training with this probability")
   parser.add_argument('--lamb', type=float, default=.01, help="parameter controlling strength regression loss")
   parser.add_argument('--rho', type=float, default = .01, help="parameter controlling strength of classification loss")
@@ -51,8 +51,13 @@ def parse_args(args):
   parser.add_argument('--amp-aug-high-r', type=float, default = 1.2) 
   parser.add_argument('--mixup', action ="store_true", help="Whether to use mixup augmentation") 
   
+  # Inference
+  parser.add_argument('--peak-distance', type=float, default=5, help="for finding peaks in detection probability, what radius to use for detecting local maxima. In output frame rate.")
+  
   args = parser.parse_args(args)
   args = read_config(args)
+  
+  check_config(args)
   
   return args
 
@@ -94,3 +99,6 @@ def load_params(fp):
     setattr(args, key, args_dict[key])
 
   return args
+
+def check_config(args):
+  assert args.end_mask_perc < 0.25, "Masking above 25% of each end during training will interfere with inference"

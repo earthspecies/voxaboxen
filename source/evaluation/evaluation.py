@@ -105,6 +105,8 @@ def write_tsv(out_fp, data):
 
 
 def generate_predictions(model, single_clip_dataloader, args, verbose = True):
+  assert single_clip_dataloader.dataset.clip_hop == args.clip_duration/2, "For inference, clip hop is assumed to be equal to half clip duration"
+
   model = model.to(device)
   model.eval()
   
@@ -134,8 +136,9 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
     all_classifications = torch.cat(all_classifications)
 
     # we use half overlapping windows, need to throw away boundary predictions
+    # See get_val_dataloader and get_test_dataloader in data.py
     
-    ######## Need better checking that preds are the correct dur    
+    ######## Todo: Need better checking that preds are the correct dur    
     assert all_detections.size(dim=1) % 2 == 0
     first_quarter_window_dur_samples=all_detections.size(dim=1)//4
     last_quarter_window_dur_samples=(all_detections.size(dim=1)//2)-first_quarter_window_dur_samples
@@ -211,7 +214,7 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
   np.save(target_fp, classifications)
   
   ## peaks  
-  detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=5)
+  detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
   detection_probs = properties['peak_heights']
     
   ## regressions and classifications

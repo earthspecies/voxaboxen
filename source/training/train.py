@@ -130,6 +130,9 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
       X, d, r, y = preprocess_and_augment(X, d, r, y, True, args)
       probs, regression, class_logits = model(X)
       
+      # We mask out loss from each end of the clip, so the model isn't forced to learn to detect events that are partially cut off.
+      # This does not affect inference, because during inference we overlap clips at 50%
+      
       end_mask_perc = args.end_mask_perc
       end_mask_dur = int(probs.size(1)*end_mask_perc) 
       
