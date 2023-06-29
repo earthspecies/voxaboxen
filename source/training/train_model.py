@@ -36,7 +36,7 @@ def train_model(args):
   manifest = predict_and_generate_manifest(trained_model, test_dataloader, args)
   
   for iou in [0.2, 0.5, 0.8]:
-    for class_threshold in [0.0, 0.5, 0.9]:
+    for class_threshold in [0.0, 0.5, 0.95]:
       evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou = iou, class_threshold = class_threshold) 
 
 if __name__ == "__main__":
