@@ -44,6 +44,7 @@ def active_learning_sampling(al_args):
   save_al_params(al_args)
   
   if al_args.sampling_method == 'uncertainty':
+    assert False, "Not updated to work with YOLO framework"
     output_log = sample_uncertainty_all(al_args)
     
   elif al_args.sampling_method == 'random':

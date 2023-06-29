@@ -7,62 +7,45 @@ from scipy.signal import find_peaks
 import yaml
 from matplotlib import pyplot as plt
 import seaborn as sns
-from pathlib import Path
+import pandas as pd
 
 from source.evaluation.raven_utils import Clip
 from source.model.model import preprocess_and_augment
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def pred2bbox(anchor_preds, anchor_scores, regressions, pred_sr):
+def pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_probs, pred_sr):
     '''
-    anchor_preds:
-        shape=(num_frames, n_classes)
-
-    anchor_scores:
-        shape=(num_frames, n_classes)
-
-    regressions:
-        shape=(num_frames, n_classes)
+    detection_peaks, detection_probs, durations, class_idxs, class_probs :
+        shape=(num_frames,)
 
     pred_sr:
         prediction sampling rate in Hz
 
     '''
+    detection_peaks = detection_peaks / pred_sr
     bboxes = []
-    scores = []
-    class_idxs = []
-    
-    ### Stopped here
-    
-    pred_locs = np.nonzero(anchor_preds)
-    
-    for x in range(len(pred_locs[0])):
-        i = pred_locs[0][x]
-        j = pred_locs[1][x]
-        duration = regressions[i, j]
+    detection_probs_sub = []
+    class_idxs_sub = []
+    class_probs_sub = []
+            
+    for i in range(len(detection_peaks)):
+        duration = durations[i]
+        start = detection_peaks[i]
+                   
         if duration <= 0:
           continue
-          
-        start = i / pred_sr
+         
         bbox = [start, start+duration]
-        
-        score = anchor_scores[i, j]
-        
-        class_idx = j
-        
         bboxes.append(bbox)
-        scores.append(score)
-        class_idxs.append(class_idx)
         
-    bboxes = np.array(bboxes)
-    scores = np.array(scores)
-    class_idxs = np.array(class_idxs)
+        detection_probs_sub.append(detection_probs[i])
+        class_idxs_sub.append(class_idxs[i])
+        class_probs_sub.append(class_probs[i])
+        
+    return np.array(bboxes), np.array(detection_probs_sub), np.array(class_idxs_sub), np.array(class_probs_sub)
     
-    
-    return bboxes, scores, class_idxs
-    
-def bbox2raven(bboxes, class_idxs, label_set):
+def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs, unknown_label):
     '''
     output bounding boxes to a selection table
 
@@ -76,14 +59,29 @@ def bbox2raven(bboxes, class_idxs, label_set):
         shape=(num_bboxes,)
 
     label_set: list
+    
+    detection_probs: numpy array
+        shape =(num_bboxes,)
+        
+    class_probs: numpy array
+        shape = (num_bboxes,)
+        
+    unknown_label: str
 
     '''
     if bboxes is None:
-      return [['Begin Time (s)', 'End Time (s)', 'Annotation']]
+      return [['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']]
 
-    columns = ['Begin Time (s)', 'End Time (s)', 'Annotation']
+    columns = ['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']
+    
+    
+    def label_idx_to_label(i):
+      if i==-1:
+        return unknown_label
+      else:
+        return label_set[i]
         
-    out_data = [[bbox[0], bbox[1], label_set[int(c)]] for bbox, c in zip(bboxes, class_idxs)]
+    out_data = [[bbox[0], bbox[1], label_idx_to_label(int(c)), dp, cp] for bbox, c, dp, cp in zip(bboxes, class_idxs, detection_probs, class_probs)]
     out_data = sorted(out_data, key=lambda x: x[:2])
 
     out = [columns] + out_data
@@ -107,11 +105,14 @@ def write_tsv(out_fp, data):
 
 
 def generate_predictions(model, single_clip_dataloader, args, verbose = True):
+  assert single_clip_dataloader.dataset.clip_hop == args.clip_duration/2, "For inference, clip hop is assumed to be equal to half clip duration"
+
   model = model.to(device)
   model.eval()
   
-  all_predictions = []
+  all_detections = []
   all_regressions = []
+  all_classifications = []
   
   if verbose:
     iterator = tqdm.tqdm(enumerate(single_clip_dataloader), total=len(single_clip_dataloader))
@@ -122,35 +123,48 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
     for i, X in iterator:
       X = X.to(device = device, dtype = torch.float)
       X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
-      predictions, regression = model(X)
-      # predictions = torch.sigmoid(logits)
-      all_predictions.append(predictions)
+      
+      detection, regression, classification = model(X)
+      classification = torch.nn.functional.softmax(classification, dim=-1)
+      
+      all_detections.append(detection)
       all_regressions.append(regression)
-    all_predictions = torch.cat(all_predictions)
+      all_classifications.append(classification)
+      
+    all_detections = torch.cat(all_detections)
     all_regressions = torch.cat(all_regressions)
+    all_classifications = torch.cat(all_classifications)
 
     # we use half overlapping windows, need to throw away boundary predictions
+    # See get_val_dataloader and get_test_dataloader in data.py
     
-    ######## Need better checking that preds are the correct dur    
-    assert all_predictions.size(dim=1) % 2 == 0
-    first_quarter_window_dur_samples=all_predictions.size(dim=1)//4
-    last_quarter_window_dur_samples=(all_predictions.size(dim=1)//2)-first_quarter_window_dur_samples
+    ######## Todo: Need better checking that preds are the correct dur    
+    assert all_detections.size(dim=1) % 2 == 0
+    first_quarter_window_dur_samples=all_detections.size(dim=1)//4
+    last_quarter_window_dur_samples=(all_detections.size(dim=1)//2)-first_quarter_window_dur_samples
     
-    # assemble predictions
-    beginning_bit = all_predictions[0,:first_quarter_window_dur_samples,:]
-    end_bit = all_predictions[-1,-last_quarter_window_dur_samples:,:]
-    predictions_clipped = all_predictions[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
-    all_predictions = torch.reshape(predictions_clipped, (-1, predictions_clipped.size(-1)))
-    all_predictions = torch.cat([beginning_bit, all_predictions, end_bit])
+    # assemble detections
+    beginning_bit = all_detections[0,:first_quarter_window_dur_samples]
+    end_bit = all_detections[-1,-last_quarter_window_dur_samples:]
+    detections_clipped = all_detections[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples]
+    all_detections = torch.reshape(detections_clipped, (-1,))
+    all_detections = torch.cat([beginning_bit, all_detections, end_bit])
     
     # assemble regressions
-    beginning_bit = all_regressions[0,:first_quarter_window_dur_samples, :]
-    end_bit = all_regressions[-1,-last_quarter_window_dur_samples:, :]
-    regressions_clipped = all_regressions[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
-    all_regressions = torch.reshape(regressions_clipped, (-1, regressions_clipped.size(-1)))
+    beginning_bit = all_regressions[0,:first_quarter_window_dur_samples]
+    end_bit = all_regressions[-1,-last_quarter_window_dur_samples:]
+    regressions_clipped = all_regressions[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples]
+    all_regressions = torch.reshape(regressions_clipped, (-1,))
     all_regressions = torch.cat([beginning_bit, all_regressions, end_bit])
     
-  return all_predictions.detach().cpu().numpy(), all_regressions.detach().cpu().numpy()
+    # assemble classifications
+    beginning_bit = all_classifications[0,:first_quarter_window_dur_samples, :]
+    end_bit = all_classifications[-1,-last_quarter_window_dur_samples:, :]
+    classifications_clipped = all_classifications[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
+    all_classifications = torch.reshape(classifications_clipped, (-1, classifications_clipped.size(-1)))
+    all_classifications = torch.cat([beginning_bit, all_classifications, end_bit])
+    
+  return all_detections.detach().cpu().numpy(), all_regressions.detach().cpu().numpy(), all_classifications.detach().cpu().numpy()
 
 def generate_features(model, single_clip_dataloader, args, verbose = True):
   model = model.to(device)
@@ -185,122 +199,127 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
     
   return all_features.detach().cpu().numpy()
 
-def export_to_selection_table(predictions, regressions, fn, args, verbose=True, target_dir=None):
+def export_to_selection_table(detections, regressions, classifications, fn, args, verbose=True, target_dir=None, detection_threshold = 0.5, classification_threshold = 0):
+    
   if target_dir is None:
     target_dir = args.experiment_output_dir  
-  
-  target_fp = os.path.join(target_dir, f"probs_{fn}.npy")
-  np.save(target_fp, predictions)
+    
+  target_fp = os.path.join(target_dir, f"detections_{fn}.npy")
+  np.save(target_fp, detections)
   
   target_fp = os.path.join(target_dir, f"regressions_{fn}.npy")
   np.save(target_fp, regressions)
   
+  target_fp = os.path.join(target_dir, f"classifications_{fn}.npy")
+  np.save(target_fp, classifications)
+  
   ## peaks  
-  # uses two masks to enforce we don't have multiple classes for one peak
-  all_classes_max = np.amax(predictions, axis = -1)
-  all_classes_peaks, _ = find_peaks(all_classes_max, height = args.detection_threshold, distance=5)
-  all_classes_peak_mask = np.zeros(all_classes_max.shape, dtype = 'bool')
-  all_classes_peak_mask[all_classes_peaks] = True
-  all_classes_peak_mask = np.expand_dims(all_classes_peak_mask, -1) #mask: look at peaks taken across all classes
-  
-  preds = []
-  for i in range(np.shape(predictions)[-1]):
-    x = predictions[:,i]
-    peaks, _ = find_peaks(x, height=args.detection_threshold, distance=5)
-    anchor_peak_preds = np.zeros(x.shape, dtype='bool')
-    anchor_peak_preds[peaks] = True
-    anchor_peak_is_max_mask = x == all_classes_max # mask: enforce class peaks are really maxima
-    anchor_peak_preds = anchor_peak_preds * anchor_peak_is_max_mask 
-    preds.append(anchor_peak_preds)
+  detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
+  detection_probs = properties['peak_heights']
     
-  preds = np.stack(preds, axis = -1)
-  preds = preds * all_classes_peak_mask
+  ## regressions and classifications
+  durations = []
+  class_idxs = []
+  class_probs = []
   
+  for i in detection_peaks:
+    dur = regressions[i]
+    durations.append(dur)
+    
+    c = np.argmax(classifications[i,:])    
+    p = classifications[i,c]
+    
+    if p < classification_threshold:
+      c = -1
+    
+    class_idxs.append(c)
+    class_probs.append(p)
+        
+  durations = np.array(durations)
+  class_idxs = np.array(class_idxs)
+  class_probs = np.array(class_probs)
+    
   if verbose:
-    print(f"Peaks found {np.sum(preds)} boxes")
+    print(f"Peaks found {len(detection_peaks)} boxes")
   
   pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
-  anchor_scores = predictions
   
-  bboxes, scores, class_idxs = pred2bbox(preds, anchor_scores, regressions, pred_sr)
+  bboxes, detection_probs, class_idxs, class_probs = pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_probs, pred_sr)
   
   target_fp = os.path.join(target_dir, f"peaks_pred_{fn}.txt")
     
-  st = bbox2raven(bboxes, class_idxs, args.label_set)
+  st = bbox2raven(bboxes, class_idxs, args.label_set, detection_probs, class_probs, args.unknown_label)
   write_tsv(target_fp, st)
   
   return target_fp
   
-def get_metrics(predictions_fp, annotations_fp, args):
+def get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold):
   c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
   
   c.load_predictions(predictions_fp)
+  c.threshold_class_predictions(class_threshold)
   c.load_annotations(annotations_fp, label_mapping = args.label_mapping)
   
   metrics = {}
   
-  for iou_thresh in [0.2, 0.5, 0.8]:
-    c.compute_matching(IoU_minimum = iou_thresh)
-    metrics[iou_thresh] = c.evaluate()
+  c.compute_matching(IoU_minimum = iou)
+  metrics = c.evaluate()
   
   return metrics
 
-def get_confusion_matrix(predictions_fp, annotations_fp, args):
+def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold):
   c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
   
   c.load_predictions(predictions_fp)
+  c.threshold_class_predictions(class_threshold)
   c.load_annotations(annotations_fp, label_mapping = args.label_mapping)
   
   confusion_matrix = {}
   
-  for iou_thresh in [0.2, 0.5, 0.8]:
-    c.compute_matching(IoU_minimum = iou_thresh)
-    confusion_matrix[iou_thresh], confusion_matrix_labels = c.confusion_matrix()
+  c.compute_matching(IoU_minimum = iou)
+  confusion_matrix, confusion_matrix_labels = c.confusion_matrix()
   
   return confusion_matrix, confusion_matrix_labels
 
 def summarize_metrics(metrics):
   # metrics (dict) : {fp : fp_metrics}
   # where
-  # fp_metrics (dict) : {iou_thresh : {'TP': int, 'FP' : int, 'FN' : int}}
+  # fp_metrics (dict) : {class_label: {'TP': int, 'FP' : int, 'FN' : int}}
   
   fps = sorted(metrics.keys())
-  iou_thresholds = sorted(metrics[fps[0]].keys())
-  class_labels = sorted(metrics[fps[0]][iou_thresholds[0]].keys())
+  class_labels = sorted(metrics[fps[0]].keys())
   
-  overall = {iou_thresh : { l: {'TP' : 0, 'FP' : 0, 'FN' : 0} for l in class_labels} for iou_thresh in iou_thresholds}
+  overall = { l: {'TP' : 0, 'FP' : 0, 'FN' : 0} for l in class_labels}
   
   for fp in fps:
-    for iou_thresh in iou_thresholds:
-      for l in class_labels:
-        counts = metrics[fp][iou_thresh][l]
-        overall[iou_thresh][l]['TP'] += counts['TP']
-        overall[iou_thresh][l]['FP'] += counts['FP']
-        overall[iou_thresh][l]['FN'] += counts['FN']
-      
-  for iou_thresh in iou_thresholds:
     for l in class_labels:
-      tp = overall[iou_thresh][l]['TP']
-      fp = overall[iou_thresh][l]['FP']
-      fn = overall[iou_thresh][l]['FN']
+      counts = metrics[fp][l]
+      overall[l]['TP'] += counts['TP']
+      overall[l]['FP'] += counts['FP']
+      overall[l]['FN'] += counts['FN']
+      
+  for l in class_labels:
+    tp = overall[l]['TP']
+    fp = overall[l]['FP']
+    fn = overall[l]['FN']
 
-      if tp + fp == 0:
-        prec = 1
-      else:
-        prec = tp / (tp + fp)
-      overall[iou_thresh][l]['precision'] = prec
+    if tp + fp == 0:
+      prec = 1
+    else:
+      prec = tp / (tp + fp)
+    overall[l]['precision'] = prec
 
-      if tp + fn == 0:
-        rec = 1
-      else:
-        rec = tp / (tp + fn)
-      overall[iou_thresh][l]['recall'] = rec
+    if tp + fn == 0:
+      rec = 1
+    else:
+      rec = tp / (tp + fn)
+    overall[l]['recall'] = rec
 
-      if prec + rec == 0:
-        f1 = 0
-      else:
-        f1 = 2*prec*rec / (prec + rec)
-      overall[iou_thresh][l]['f1'] = f1
+    if prec + rec == 0:
+      f1 = 0
+    else:
+      f1 = 2*prec*rec / (prec + rec)
+    overall[l]['f1'] = f1
   
   return overall
 
@@ -320,36 +339,56 @@ def plot_confusion_matrix(data, label_names, target_dir, name=""):
     ax.set_xlabel('Annotation')
     plt.title(name)
     
-    plt.savefig(Path(target_dir, f"{name}_confusion_matrix.png"))
+    plt.savefig(os.path.join(target_dir, f"{name}_confusion_matrix.png"))
     plt.close()
 
 
 def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
   # confusion_matrix (dict) : {fp : fp_cm}
   # where
-  # fp_cm (dict) : {iou_thresh : numpy array}
+  # fp_cm  : numpy array
   
   fps = sorted(confusion_matrix.keys())
-  iou_thresholds = sorted(confusion_matrix[fps[0]].keys())
   l = len(confusion_matrix_labels)
   
-  overall = {iou_thresh : np.zeros((l, l)) for iou_thresh in iou_thresholds}
+  overall = np.zeros((l, l))
   
   for fp in fps:
-    for iou_thresh in iou_thresholds:
-      overall[iou_thresh] += confusion_matrix[fp][iou_thresh]
+    overall += confusion_matrix[fp]
   
   return overall, confusion_matrix_labels
 
-def predict_and_evaluate(model, dataloader_dict, args, output_dir = None, verbose = True):
+def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
+  fns = []
+  predictions_fps = []
+  annotations_fps = []
+                               
+  for fn in dataloader_dict:
+    detections, regressions, classifications = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
+    
+    predictions_fp = export_to_selection_table(detections, regressions, classifications, fn, args, verbose = verbose, detection_threshold = args.detection_threshold)
+    
+    annotations_fp = dataloader_dict[fn].dataset.annot_fp
+    
+    fns.append(fn)
+    predictions_fps.append(predictions_fp)
+    annotations_fps.append(annotations_fp)
+    
+  manifest = pd.DataFrame({'filename' : fns, 'predictions_fp' : predictions_fps, 'annotations_fp' : annotations_fps})
+  return manifest
+                                  
+def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, class_threshold = 0.0):
+  
   metrics = {}
   confusion_matrix = {}
-  for fn in dataloader_dict:
-    predictions, regressions = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
-    predictions_fp = export_to_selection_table(predictions, regressions, fn, args, verbose = verbose)
-    annotations_fp = dataloader_dict[fn].dataset.annot_fp
-    metrics[fn] = get_metrics(predictions_fp, annotations_fp, args)
-    confusion_matrix[fn], confusion_matrix_labels = get_confusion_matrix(predictions_fp, annotations_fp, args)
+  
+  for i, row in manifest.iterrows():
+    fn = row['filename']
+    predictions_fp = row['predictions_fp']
+    annotations_fp = row['annotations_fp']
+  
+    metrics[fn] = get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold)
+    confusion_matrix[fn], confusion_matrix_labels = get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold)
     
   if output_dir is not None:
     if not os.path.exists(output_dir):
@@ -359,14 +398,13 @@ def predict_and_evaluate(model, dataloader_dict, args, output_dir = None, verbos
   summary = summarize_metrics(metrics)
   metrics['summary'] = summary
   if output_dir is not None:
-    metrics_fp = os.path.join(output_dir, 'metrics.yaml')
+    metrics_fp = os.path.join(output_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
     with open(metrics_fp, 'w') as f:
       yaml.dump(metrics, f)
   
   # summarize and save confusion matrix
   confusion_matrix_summary, confusion_matrix_labels = summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels)
   if output_dir is not None:
-    for key in confusion_matrix_summary:
-      plot_confusion_matrix(confusion_matrix_summary[key].astype(int), confusion_matrix_labels, output_dir, name=f"iou_{key}")  
+    plot_confusion_matrix(confusion_matrix_summary.astype(int), confusion_matrix_labels, output_dir, name=f"cm_iou_{iou}_class_threshold_{class_threshold}")  
   
   return metrics, confusion_matrix_summary
