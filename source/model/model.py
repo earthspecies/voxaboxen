@@ -131,7 +131,7 @@ def preprocess_and_augment(X, d, r, y, train, args):
     batch_size = X.size(0)
     
     X_aug = torch.flip(X, (0,))
-    d_aug = torch.flip(r, (0,))
+    d_aug = torch.flip(d, (0,))
     r_aug = torch.flip(r, (0,))
     y_aug = torch.flip(y, (0,))
     
