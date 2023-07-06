@@ -20,18 +20,20 @@ def main():
   for k in cfg['label_mapping']:
     if k == 'Unknown':
       new_label_mapping[k] = 'Unknown'
-    else:
-      new_label_mapping[k] = 'voc'
+    elif k == 'EATO':
+      new_label_mapping[k] = k
+    # else:
+    #   new_label_mapping[k] = 'voc'
       
   cfg['label_mapping'] = new_label_mapping
-  cfg['label_set'] = ['voc']
+  cfg['label_set'] = ['EATO']
   
   with open(params_file, "w") as f:
     yaml.dump(cfg, f)
   
   for i in range(20):  
     # random control
-    for j in range(5):
+    for j in range(1):
       local['python']['../main.py',
                       'active-learning-sampling',
                       '--project-config-fp=/home/jupyter/sound_event_detection/projects/powdermill_experiment_random/project_config.yaml',
@@ -47,8 +49,8 @@ def main():
                       'train-model',
                       '--project-config-fp=/home/jupyter/sound_event_detection/projects/powdermill_experiment_random/project_config.yaml',
                       f'--name=m_{i}_{j}',
-                      '--clip-duration=10',
-                      '--clip-hop=5',
+                      '--clip-duration=6',
+                      '--clip-hop=3',
                       '--batch-size=8',
                       '--omit-empty-clip-prob=0',
                       f'--seed={j}',

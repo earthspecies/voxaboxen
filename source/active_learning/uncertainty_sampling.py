@@ -101,40 +101,36 @@ def get_uncertainties(audio_fp, model, al_args, args):
   if len(dataloader) == 0:
     return [], [], []
   
-  predictions, _ = generate_predictions(model, dataloader, args)
+  detections, regressions, classifications = generate_predictions(model, dataloader, args)
   
   num_clips = int(np.floor((dataloader.dataset.duration - al_args.sample_duration) // al_args.sample_duration))
   
   starts = [al_args.sample_duration * i for i in range(num_clips)]
   durations = [al_args.sample_duration for i in range(num_clips)]
-  uncertainties = compute_batched_uncertainty(predictions, starts, durations, args, al_args)
+  uncertainties = compute_batched_uncertainty(detections, classifications, starts, durations, args, al_args)
  
   return starts, durations, uncertainties
 
-def compute_batched_uncertainty(predictions, starts, durations, args, al_args):
-  peaks = {}
-  uncertainties_dict = {}
-  n_classes = np.shape(predictions)[-1]
+def compute_batched_uncertainty(detections, classifications, starts, durations, args, al_args):
   model_prediction_sr = int(args.sr / (args.scale_factor * args.prediction_scale_factor))
+
+  p, d = find_peaks(detections, height=al_args.uncertainty_detection_threshold, distance=args.peak_distance)
+  peaks = p / model_prediction_sr # location of peaks in seconds
+  heights = d['peak_heights']
+  uncertainties_np = 1-np.abs(1-2*heights)
   
-  for i in range(n_classes):
-    x = predictions[:,i]
-    p, d = find_peaks(x, height=al_args.uncertainty_detection_threshold, distance=5)
-    peaks[i] = p / model_prediction_sr # location of peaks in seconds
-    heights = d['peak_heights']
-    uncertainties_dict[i] = 1-np.abs(1-2*heights)
+  ## TODO add option for uncertainties from classification
     
   uncertainties = []
   for start, duration in zip(starts, durations):
     u = 0
-    for i in range(n_classes):
-      if len(uncertainties_dict[i])>0:
-        mask = ((peaks[i] >= start) * (peaks[i] < (start+duration))).astype(float)
-        uncertainties_masked = uncertainties_dict[i] * mask
-        uncertainties_masked = np.sort(uncertainties_masked)[::-1] 
-        weighting = al_args.uncertainty_discount_factor ** np.arange(len(uncertainties_masked))
-        uncertainties_weighted = uncertainties_masked * weighting
-        u += uncertainties_weighted.sum()
+    if len(uncertainties_np)>0:
+      mask = ((peaks >= start) * (peaks < (start+duration))).astype(float)
+      uncertainties_masked = uncertainties_np * mask
+      uncertainties_masked = np.sort(uncertainties_masked)[::-1] 
+      weighting = al_args.uncertainty_discount_factor ** np.arange(len(uncertainties_masked))
+      uncertainties_weighted = uncertainties_masked * weighting
+      u += uncertainties_weighted.sum()
     uncertainties.append(float(u))
     
   return uncertainties

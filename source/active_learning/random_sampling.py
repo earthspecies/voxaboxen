@@ -59,8 +59,8 @@ def sample_random_fp(audio_fp, rng, al_args):
     
   num_clips = int(np.floor((duration - al_args.sample_duration) // al_args.sample_duration))
   
-  starts = np.arange(0, num_clips, al_args.sample_duration)
-  
+  starts = np.arange(0, num_clips*al_args.sample_duration, al_args.sample_duration)
+    
   if max_clips is not None:
     starts = rng.permutation(starts)[:max_clips]
     

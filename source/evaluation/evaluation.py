@@ -339,7 +339,7 @@ def plot_confusion_matrix(data, label_names, target_dir, name=""):
     ax.set_xlabel('Annotation')
     plt.title(name)
     
-    plt.savefig(os.path.join(target_dir, f"{name}_confusion_matrix.png"))
+    plt.savefig(os.path.join(target_dir, f"{name}_confusion_matrix.svg"))
     plt.close()
 
 

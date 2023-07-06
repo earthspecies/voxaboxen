@@ -14,7 +14,7 @@ def main():
   
   for i in range(20):  
     # random control
-    for j in range(5):
+    for j in range(1):
       local['python']['../main.py',
                       'active-learning-sampling',
                       '--project-config-fp=/home/jupyter/sound_event_detection/projects/bvfn_experiment_random/project_config.yaml',
