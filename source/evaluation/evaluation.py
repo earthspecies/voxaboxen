@@ -10,7 +10,7 @@ import seaborn as sns
 import pandas as pd
 
 from source.evaluation.raven_utils import Clip
-from source.model.model import preprocess_and_augment
+from source.model.model import rms_and_mixup
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -122,7 +122,7 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
   with torch.no_grad():
     for i, X in iterator:
       X = X.to(device = device, dtype = torch.float)
-      X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
+      X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
       
       detection, regression, classification = model(X)
       classification = torch.nn.functional.softmax(classification, dim=-1)
@@ -180,7 +180,7 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
   with torch.no_grad():
     for i, X in iterator:
       X = X.to(device = device, dtype = torch.float)
-      X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
+      X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
       features = model.generate_features(X)
       all_features.append(features)
     all_features = torch.cat(all_features)

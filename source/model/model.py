@@ -5,34 +5,70 @@ from torch.nn import functional as F
 import fairseq
 import math
 from einops import rearrange
+from torchaudio.models import wav2vec2_model
+import json
+
+# class AvesEmbedding(nn.Module):
+#     """ Uses AVES Hubert to embed sounds """
+
+#     def __init__(self, args):
+#         super().__init__()
+#         models, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task([args.aves_model_weight_fp])
+#         self.model = models[0]
+#         self.model.feature_grad_mult = 0 # do not fine tune aves conv layers 
+        
+#         self.sr=args.sr
+
+#     def forward(self, x):
+#         """
+#         Input
+#           x (Tensor): (batch, time) (time at 16000 Hz, audio_sr)
+#         Returns
+#           feats (Tensor): (batch, time, embedding_dim) (time at 50 Hz, aves_sr)
+#         """
+#         feats = self.model.extract_features(x)[0]
+#         return feats
+      
+#     def freeze(self):
+#       for param in self.model.parameters():
+#           param.requires_grad = False
+          
+#     def unfreeze(self):
+#       for param in self.model.parameters():
+#           param.requires_grad = True
+          
+          
 
 class AvesEmbedding(nn.Module):
-    """ Uses AVES Hubert to embed sounds """
-
     def __init__(self, args):
         super().__init__()
-        models, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task([args.aves_model_weight_fp])
-        self.model = models[0]
-        self.model.feature_grad_mult = 0 # do not fine tune aves conv layers 
+
+        # reference: https://pytorch.org/audio/stable/_modules/torchaudio/models/wav2vec2/utils/import_fairseq.html
+        config = self.load_config(args.aves_config_fp)
+        self.model = wav2vec2_model(**config, aux_num_out=None)
+        self.model.load_state_dict(torch.load(args.aves_model_weight_fp))
+        self.model.feature_extractor.requires_grad_(False)
         
         self.sr=args.sr
 
-    def forward(self, x):
-        """
-        Input
-          x (Tensor): (batch, time) (time at 16000 Hz, audio_sr)
-        Returns
-          feats (Tensor): (batch, time, embedding_dim) (time at 50 Hz, aves_sr)
-        """
-        feats = self.model.extract_features(x)[0]
-        return feats
+    def load_config(self, config_path):
+        with open(config_path, 'r') as ff:
+            obj = json.load(ff)
+
+        return obj
+
+    def forward(self, sig):
+        # extract_feature in the torchaudio version will output all 12 layers' output, -1 to select the final one
+        out = self.model.extract_features(sig)[0][-1]
+
+        return out
       
     def freeze(self):
-      for param in self.model.parameters():
+      for param in self.model.encoder.parameters():
           param.requires_grad = False
-          
+
     def unfreeze(self):
-      for param in self.model.parameters():
+      for param in self.model.encoder.parameters():
           param.requires_grad = True
       
 class DetectionModel(nn.Module):
@@ -120,7 +156,7 @@ class DetectionHead(nn.Module):
       class_logits = x[:,:,2:]
       return detection_logits, reg, class_logits
     
-def preprocess_and_augment(X, d, r, y, train, args):
+def rms_and_mixup(X, d, r, y, train, args):
   if args.rms_norm:
     rms = torch.mean(X ** 2, dim = 1, keepdim = True) ** (-1/2)
     X = X * rms

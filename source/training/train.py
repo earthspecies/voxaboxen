@@ -12,7 +12,7 @@ from einops import rearrange
 from source.evaluation.plotters import plot_eval
 from source.evaluation.evaluation import predict_and_generate_manifest, evaluate_based_on_manifest
 from source.data.data import get_train_dataloader, get_val_dataloader
-from source.model.model import preprocess_and_augment
+from source.model.model import rms_and_mixup
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -127,7 +127,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
       r = r.to(device = device, dtype = torch.float)
       y = y.to(device = device, dtype = torch.float)
       
-      X, d, r, y = preprocess_and_augment(X, d, r, y, True, args)
+      X, d, r, y = rms_and_mixup(X, d, r, y, True, args)
       probs, regression, class_logits = model(X)
       
       # We mask out loss from each end of the clip, so the model isn't forced to learn to detect events that are partially cut off.

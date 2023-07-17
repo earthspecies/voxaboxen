@@ -19,7 +19,7 @@ def save_params(args):
 def parse_project_args(args):
   parser = argparse.ArgumentParser()
   
-  parser.add_argument('--train-pool-info-fp', type=str, required=True, help = "filepath of csv with train pool info")
+  parser.add_argument('--train-info-fp', type=str, required=True, help = "filepath of csv with train info")
   parser.add_argument('--val-info-fp', type=str, default=None, help = "filepath of csv with val info")
   parser.add_argument('--test-info-fp', type=str, required=True, help = "filepath of csv with test info")
   parser.add_argument('--project-dir', type=str, required=True, help = "directory where project will be stored")

@@ -17,13 +17,14 @@ def parse_args(args):
   parser.add_argument('--project-config-fp', type = str, required=True)
   parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
   parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
-  parser.add_argument('--train-info-fp', type=str, required=True)
+  parser.add_argument('--train-info-fp', type=str, required=False, help = "train info, to override project train info")
   parser.add_argument('--num-workers', type=int, default=8)
   
   # Model
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by aves")
-  parser.add_argument('--aves-model-weight-fp', type=str, default = "/home/jupyter/carrion_crows/clip/pretrained_weights/aves-base-bio.pt")
+  parser.add_argument('--aves-model-weight-fp', type=str, default = "weights/aves-base-bio.torchaudio.pt")
+  parser.add_argument('--aves-config-fp', type=str, default = "weights/aves-base-bio.torchaudio.model_config.json")
   parser.add_argument('--prediction-scale-factor', type=int, default = 1, help = "downsampling rate from aves sr to prediction sr")
   parser.add_argument('--detection-threshold', type=float, default = 0.5, help = "output probability to count as positive detection")
   parser.add_argument('--rms-norm', action="store_true", help = "If true, apply rms normalization to each clip")
