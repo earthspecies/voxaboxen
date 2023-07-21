@@ -103,7 +103,7 @@ def main():
     test_audio_fps.append(test_audio_fp)
   
   train_info_df = pd.DataFrame({'fn' : train_fns, 'audio_fp' : train_audio_fps, 'selection_table_fp' : train_annot_fps})
-  train_info_fp = os.path.join(formatted_data_dir, 'train_pool_info.csv')
+  train_info_fp = os.path.join(formatted_data_dir, 'train_info.csv')
   train_info_df.to_csv(train_info_fp, index = False)
   test_info_df = pd.DataFrame({'fn' : test_fns, 'audio_fp' : test_audio_fps, 'selection_table_fp' : test_annot_fps})
   test_info_fp = os.path.join(formatted_data_dir, 'test_info.csv')

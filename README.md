@@ -1,19 +1,31 @@
 # sound_event_detection
 
-Example usage:
+Requires `torch > 2.0` and the corresponding version of torchaudio.
+
+## Example usage:
 
 Get the birdvox full night dataset (https://zenodo.org/record/1205569). Put the files in `datasets/birdvox_full_night/raw`. Run the script `process_birdvox_full_night.py`.
 
-Get pretrained weights for aves. You will need to specify the default location of these weights in the files `source/training/params.py` and `source/active_learning/params.py`, or pass as a flag explicitly.
+Get pretrained weights for AVES, which is the backbone model. (https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt) Put them in `weights`. 
 
-## Workflow:
+Process data into correct format:
 
-1. `main.py project-setup ...flags...`. See `source/project/params.py`.
-1.b Optional: edit project config to reflect label mapping preferences
-2. `main.py active-learning-sampling ...flags...`. See `source/active_learning/params.py`.
-3. annotate
-4. `main.py train-model ...flags...`. See `source/training/params.py`.
-5. Repeat 2-4 as desired.
-6. `main.py inference ...flags...`. See `source/inference/params.py`.
+`cd datasets/birdvox_full_night; python process_birdvox_full_night.py; cd .. ; cd ..`
 
-Examples of this workflow are simulated in the different `scriptes/*experiment*.py` files. The flag `--query-oracle` for the mode `active-learning-sampling` replaces manual annotating with looking up predefined annotations. This is used purely for benchmarking the different active learning approaches. 
+Project setup:
+
+`python main.py project-setup --train-info-fp=/home/jupyter/sound_event_detection/datasets/birdvox_full_night/formatted/train_info.csv --test-info-fp=/home/jupyter/sound_event_detection/datasets/birdvox_full_night/formatted/test_info.csv --project-dir=/home/jupyter/sound_event_detection/projects/bvfn`
+
+Train model:
+
+`python main.py train-model --project-config-fp=/home/jupyter/sound_event_detection/projects/bvfn/project_config.yaml --name=demo --clip-duration=2 --clip-hop=1`
+
+## FAQ
+
+Q: How is this different from BirdNet?
+
+A: BirdNet does multi-label classification on a window of audio. This model detects each vocalization individually, so you can have multiple detections in a short window.
+
+Q: How is this different from TweetyNet?
+
+A: TweetyNet doesn't allow for overlapping vocalizations, which are common in the wild.
