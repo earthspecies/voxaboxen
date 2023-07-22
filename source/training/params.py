@@ -15,8 +15,8 @@ def parse_args(args):
 
   # Data
   parser.add_argument('--project-config-fp', type = str, required=True)
-  parser.add_argument('--clip-duration', type=float, default=20.0, help = "clip duration, in seconds")
-  parser.add_argument('--clip-hop', type=float, default=10.0, help = "clip hop, in seconds")
+  parser.add_argument('--clip-duration', type=float, default=6, help = "clip duration, in seconds")
+  parser.add_argument('--clip-hop', type=float, default=3, help = "clip hop, in seconds")
   parser.add_argument('--train-info-fp', type=str, required=False, help = "train info, to override project train info")
   parser.add_argument('--num-workers', type=int, default=8)
   
@@ -53,7 +53,7 @@ def parse_args(args):
   parser.add_argument('--mixup', action ="store_true", help="Whether to use mixup augmentation") 
   
   # Inference
-  parser.add_argument('--peak-distance', type=float, default=5, help="for finding peaks in detection probability, what radius to use for detecting local maxima. In output frame rate.")
+  parser.add_argument('--peak-distance', type=float, default=10, help="for finding peaks in detection probability, what radius to use for detecting local maxima. In output frame rate.")
   
   args = parser.parse_args(args)
   args = read_config(args)
