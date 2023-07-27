@@ -7,12 +7,12 @@ SPECTROGRAM:
   CEIL_THRESHOLD: 120.0
 DATALOADER:
   NUM_WORKERS: -1 # Use num_workers in usual args
-  FILTER_EMPTY_ANNOTATIONS: False
+  FILTER_EMPTY_ANNOTATIONS: False #currently unused- would need to write into SoundEventTrainer I think.
 MODEL:
   DEVICE: "cuda"
-  META_ARCHITECTURE: "GeneralizedRCNN" #
-  MASK_ON: FALSE #TODO: Do not use ideal binary masks, I think?
-  PIXEL_MEAN: [12.778, 0.0, 0.0] # Change the first element 
+  META_ARCHITECTURE: "GeneralizedRCNN"
+  MASK_ON: FALSE #TODO: I think this means, do not use ideal binary masks in training?
+  PIXEL_MEAN: [12.778, 0.0, 0.0] # Change the first element for this dataset
   PIXEL_STD: [25.096, 1.0, 1.0]  # Change the first element for this dataset
   BACKBONE:
     FREEZE_AT: 0
