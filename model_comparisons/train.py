@@ -1,3 +1,5 @@
+import sys
+sys.path.append("/home/jupyter/sound_event_detection/")
 from detectron2.utils.logger import setup_logger
 setup_logger()
 
@@ -7,8 +9,8 @@ import sys
 from glob import glob
 
 #Import custom code
-from model_comparisons.dataloaders import SoundEventTrainer
-from model_comparisons.configuration import get_sound_event_cfg, save_custom_detectron_params
+from dataloaders import SoundEventTrainer
+from configuration import get_sound_event_cfg, save_custom_detectron_params
 from source.training.train import train
 from source.training.params import parse_args, set_seed, save_params
 
@@ -27,12 +29,11 @@ def train(dataset_name, detectron_config_fp, args):
     setattr(sound_event_args, 'experiment_output_dir', experiment_output_dir)
     if not os.path.exists(sound_event_args.experiment_output_dir):
         os.makedirs(sound_event_args.experiment_output_dir)
-    save_params(args)
+    save_params(sound_event_args)
 
     # Detectron config
     cfg = get_sound_event_cfg(sound_event_args, detectron_config_fp)
-    cfg.OUTPUT_DIR = experiment_output_dir
-    save_custom_detectron_params(detectron_config_fp, args)
+    save_custom_detectron_params(detectron_config_fp, sound_event_args)
 
     # ~~~~
     print("Existing model checkpoints:", glob(cfg.OUTPUT_DIR + "*.pth"))

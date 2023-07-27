@@ -13,16 +13,18 @@ def get_sound_event_cfg(sound_event_args, detectron_config_fp):
     cfg.SPECTROGRAM.N_FFT = 400
     cfg.SPECTROGRAM.WIN_LENGTH = 400
     cfg.SPECTROGRAM.HOP_LENGTH = 200 #win_length // 2
-    cfg.SPECTROGRAM.N_MELS = 128
+    cfg.SPECTROGRAM.N_MELS = 100
+    cfg.SPECTROGRAM.REF = 1e-8
     cfg.SPECTROGRAM.FLOOR_THRESHOLD = 0.
     cfg.SPECTROGRAM.CEIL_THRESHOLD = 120.0
 
-    #TODO: Don't know if this will work.
-    cfg.SOUND_EVENT = CN()
-    cfg.SOUND_EVENT.ARGS = sound_event_args
+    cfg.SOUND_EVENT = CN(vars(sound_event_args))
 
     cfg.merge_from_file(model_zoo.get_config_file("./Base-RCNN-FPN.yaml"))
     cfg.merge_from_file(detectron_config_fp)
+
+    cfg.OUTPUT_DIR = cfg.SOUND_EVENT.experiment_output_dir
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(cfg.SOUND_EVENT.label_set)
 
     return cfg
 
