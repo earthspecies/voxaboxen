@@ -2,42 +2,10 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
-import fairseq
 import math
 from einops import rearrange
 from torchaudio.models import wav2vec2_model
 import json
-
-# class AvesEmbedding(nn.Module):
-#     """ Uses AVES Hubert to embed sounds """
-
-#     def __init__(self, args):
-#         super().__init__()
-#         models, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task([args.aves_model_weight_fp])
-#         self.model = models[0]
-#         self.model.feature_grad_mult = 0 # do not fine tune aves conv layers 
-        
-#         self.sr=args.sr
-
-#     def forward(self, x):
-#         """
-#         Input
-#           x (Tensor): (batch, time) (time at 16000 Hz, audio_sr)
-#         Returns
-#           feats (Tensor): (batch, time, embedding_dim) (time at 50 Hz, aves_sr)
-#         """
-#         feats = self.model.extract_features(x)[0]
-#         return feats
-      
-#     def freeze(self):
-#       for param in self.model.parameters():
-#           param.requires_grad = False
-          
-#     def unfreeze(self):
-#       for param in self.model.parameters():
-#           param.requires_grad = True
-          
-          
 
 class AvesEmbedding(nn.Module):
     def __init__(self, args):
