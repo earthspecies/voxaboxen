@@ -252,7 +252,7 @@ class SingleClipDataset(Dataset):
         """ Map int idx to dict of torch tensors """
         start = idx * self.clip_hop
         
-        audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
+        audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
         audio = torch.from_numpy(audio)
                 
         audio = audio-torch.mean(audio)

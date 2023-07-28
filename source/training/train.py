@@ -6,7 +6,6 @@ from functools import partial
 import os
 from einops import rearrange
 
-
 from source.evaluation.plotters import plot_eval
 from source.evaluation.evaluation import predict_and_generate_manifest, evaluate_based_on_manifest
 from source.data.data import get_train_dataloader, get_val_dataloader
@@ -59,7 +58,7 @@ def train(model, args):
       if use_val:
         val_eval = val_epoch(model, t, val_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args)
         val_evals.append(val_eval.copy())
-        plot_eval(train_evals, learning_rates, args, test_evals = val_evals)
+        plot_eval(train_evals, learning_rates, args, val_evals = val_evals)
       else:
         plot_eval(train_evals, learning_rates, args)
       scheduler.step()
