@@ -15,8 +15,8 @@ def parse_args(args):
 
   # Data
   parser.add_argument('--project-config-fp', type = str, required=True)
-  parser.add_argument('--clip-duration', type=float, default=6, help = "clip duration, in seconds")
-  parser.add_argument('--clip-hop', type=float, default=3, help = "clip hop, in seconds")
+  parser.add_argument('--clip-duration', type=float, default=6.0, help = "clip duration, in seconds")
+  parser.add_argument('--clip-hop', type=float, default=3.0, help = "clip hop, in seconds")
   parser.add_argument('--train-info-fp', type=str, required=False, help = "train info, to override project train info")
   parser.add_argument('--num-workers', type=int, default=8)
   
@@ -32,14 +32,14 @@ def parse_args(args):
   
   # Training
   parser.add_argument('--batch-size', type=int, default=32) 
-  parser.add_argument('--lr', type=float, default=.0005) 
-  parser.add_argument('--n-epochs', type=int, default=28)
-  parser.add_argument('--unfreeze-encoder-epoch', type=int, default=7)
+  parser.add_argument('--lr', type=float, default=.00005) 
+  parser.add_argument('--n-epochs', type=int, default=50)
+  parser.add_argument('--unfreeze-encoder-epoch', type=int, default=3)
   parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the frames on each end of the clip") 
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0, help="if a clip has no annotations, do not use for training with this probability")
   parser.add_argument('--lamb', type=float, default=.04, help="parameter controlling strength regression loss")
   parser.add_argument('--rho', type=float, default = .01, help="parameter controlling strength of classification loss")
-  parser.add_argument('--step-size', type=int, default=7, help="number epochs between lr decrease")
+  # parser.add_argument('--step-size', type=int, default=7, help="number epochs between lr decrease")
   parser.add_argument('--model-selection-iou', type=float, default=0.5, help="iou for used for computing f1 for early stopping")
   parser.add_argument('--model-selection-class-threshold', type=float, default=0.5, help="class threshold for used for computing f1 for early stopping")
 

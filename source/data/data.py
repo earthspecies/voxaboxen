@@ -105,6 +105,7 @@ class DetectionDataset(Dataset):
         for ii, row in self.info_df.iterrows():
             fn = row['fn']
             audio_fp = row['audio_fp']
+            
             duration = librosa.get_duration(path=audio_fp)
             selection_table_fp = row['selection_table_fp']
 
@@ -189,11 +190,14 @@ class DetectionDataset(Dataset):
 
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
+        
         audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
-        audio = audio-np.mean(audio)
+        audio = torch.from_numpy(audio)
+    
+    
+        audio = audio-torch.mean(audio)
         if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)
-        audio = torch.from_numpy(audio)
         if file_sr != self.sr:
           audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
           audio = crop_and_pad(audio, self.sr, self.clip_duration)
@@ -236,10 +240,7 @@ class SingleClipDataset(Dataset):
         self.duration = librosa.get_duration(path=audio_fp)
         self.num_clips = max(0, int(np.floor((self.duration - args.clip_duration) // clip_hop)))
         self.audio_fp = audio_fp
-        # self.waveform, self.file_sr = librosa.load(audio_fp, sr=None, mono=True)
-        # self.clip_hop_samples_file_sr = int(clip_hop * self.file_sr)
         self.clip_hop = clip_hop
-        # self.clip_duration_samples_file_sr = int(args.clip_duration * self.file_sr)
         self.clip_duration = args.clip_duration
         self.annot_fp = annot_fp # attribute that is accessed elsewhere
         self.sr = args.sr
@@ -251,12 +252,10 @@ class SingleClipDataset(Dataset):
         """ Map int idx to dict of torch tensors """
         start = idx * self.clip_hop
         
-        audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
-        
-#         start_sample = idx * self.clip_hop_samples_file_sr
-#         audio = self.waveform[start_sample:start_sample+self.clip_duration_samples_file_sr]
-        audio = audio-np.mean(audio)
+        audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
         audio = torch.from_numpy(audio)
+                
+        audio = audio-torch.mean(audio)
         if file_sr != self.sr:
           audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
           audio = crop_and_pad(audio, self.sr, self.clip_duration)

@@ -1,6 +1,6 @@
 # sound_event_detection
 
-Requires `torch > 2.0` and the corresponding version of torchaudio.
+Requires `torch > 2.0` and the corresponding version of torchaudio. Other requirements can be installed with `pip intall -r requirements.txt`. To use audio in formats such as `mp3` and `flac` you may need to `apt install ffmpeg` (or `conda install ffmpeg` if using conda).
 
 ## Example usage:
 

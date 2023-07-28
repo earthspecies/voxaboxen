@@ -1,0 +1,28 @@
+from plumbum import local, FG
+import os
+import yaml
+import numpy as np
+
+
+def main():
+  # Project setup
+  local['python']['../main.py',
+                  'project-setup',
+                  '--train-info-fp=/home/jupyter/sound_event_detection/datasets/birdvox_full_night/formatted/train_info.csv',
+                  '--val-info-fp=/home/jupyter/sound_event_detection/datasets/birdvox_full_night/formatted/val_info.csv',
+                  '--test-info-fp=/home/jupyter/sound_event_detection/datasets/birdvox_full_night/formatted/test_info.csv',
+                  '--project-dir=/home/jupyter/sound_event_detection/projects/birdvox_full_night_experiment'] & FG
+
+  local['python']['../main.py',
+                  'train-model',
+                  '--project-config-fp=/home/jupyter/sound_event_detection/projects/birdvox_full_night_experiment/project_config.yaml',
+                  '--name=m0',
+                  '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
+                  '--clip-duration=2.0',
+                  '--clip-hop=1.0',
+                  '--omit-empty-clip-prob=0.5'
+                 ] & FG   
+
+if __name__ == "__main__":
+  main()

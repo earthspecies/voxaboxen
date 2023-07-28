@@ -15,6 +15,10 @@ from source.model.model import rms_and_mixup
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+if device == "cpu":
+  import warnings
+  warnings.warn("Only using CPU! Check CUDA")
+
 def train(model, args):
   model = model.to(device)
   
@@ -29,8 +33,8 @@ def train(model, args):
   class_loss_fn = get_class_loss_fn(args)
   
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
-  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.step_size, gamma=0.1, last_epoch=- 1, verbose=False)
-  # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
+  # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.step_size, gamma=0.1, last_epoch=- 1, verbose=False)
+  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
   
   train_evals = []
   learning_rates = []

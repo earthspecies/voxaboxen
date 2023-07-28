@@ -14,7 +14,7 @@ def save_params(args):
   with open(params_file, "w") as f:
     yaml.dump(args_dict, f)
     
-  print(f"Saved config to {params_file}. You may now edit this file if you want some classes to be treated as Unknown")
+  print(f"Saved config to {params_file}. You may now edit this file if you want some classes to be omitted or treated as Unknown")
   
 def parse_project_args(args):
   parser = argparse.ArgumentParser()
