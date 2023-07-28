@@ -10,7 +10,7 @@ from glob import glob
 
 #Import custom code
 from dataloaders import SoundEventTrainer
-from configuration import get_sound_event_cfg, save_custom_detectron_params
+from configuration import get_full_cfg
 from source.training.train import train
 from source.training.params import parse_args, set_seed, save_params
 
@@ -32,12 +32,11 @@ def train(dataset_name, detectron_config_fp, args):
     save_params(sound_event_args)
 
     # Detectron config
-    cfg = get_sound_event_cfg(sound_event_args, detectron_config_fp)
-    save_custom_detectron_params(detectron_config_fp, sound_event_args)
-
+    cfg = get_full_cfg(sound_event_args, detectron_config_fp)
+    
     # ~~~~
-    print("Existing model checkpoints:", glob(cfg.OUTPUT_DIR + "*.pth"))
-    n_ckpts = len(glob(cfg.OUTPUT_DIR + "*.pth"))
+    print("Existing model checkpoints:", glob(cfg.OUTPUT_DIR + "/*.pth"))
+    n_ckpts = len(glob(cfg.OUTPUT_DIR + "/*.pth"))
     resume = True if n_ckpts > 0 else False
     cfg.DATASETS.TRAIN = dataset_name
     cfg.DATASETS.TEST = dataset_name

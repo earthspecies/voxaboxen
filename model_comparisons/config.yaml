@@ -2,28 +2,32 @@ SPECTROGRAM:
   N_FFT: 400
   WIN_LENGTH: 400
   HOP_LENGTH: 200
-  N_MELS: 128
+  N_MELS: 64
+  F_MIN: 20.
   FLOOR_THRESHOLD: 0.0
-  CEIL_THRESHOLD: 120.0
+  CEIL_THRESHOLD: 300.0
+  REF: 1e-10
 DATALOADER:
-  NUM_WORKERS: -1 # Use num_workers in usual args
-  FILTER_EMPTY_ANNOTATIONS: False #currently unused- would need to write into SoundEventTrainer I think.
+  NUM_WORKERS: -1 # num_workers is defined in the usual sound_event_detection args
+  FILTER_EMPTY_ANNOTATIONS: True
 MODEL:
   DEVICE: "cuda"
   META_ARCHITECTURE: "GeneralizedRCNN"
-  MASK_ON: FALSE #TODO: I think this means, do not use ideal binary masks in training?
-  PIXEL_MEAN: [12.778, 0.0, 0.0] # Change the first element for this dataset
-  PIXEL_STD: [25.096, 1.0, 1.0]  # Change the first element for this dataset
+  MASK_ON: FALSE #We do not use any masks, only bounding boxes.
+  PIXEL_MEAN: [-1, 0.0, 0.0] # First element will be automatically updated based on train set statistics
+  PIXEL_STD: [-1, 1.0, 1.0]  # First element will be automatically updated based on train set statistics
   BACKBONE:
     FREEZE_AT: 0
   ANCHOR_GENERATOR:
-    SIZES: [[8, 16, 32, 64, 100, 120, 160]]
-    ASPECT_RATIOS: [[0.01, 0.05, 0.1, 0.3, 0.5, 1.0, 2.0, 5.0, 10.0]]
-    #ANCHOR_GENERATOR.ANGLES: [[-90, 0, 90]] seems unnecessary - could just be zero?
+    SIZES: [[10, 20, 40, 100]] # Will be automatically updated based on train set statistics 
+    ASPECT_RATIOS: [[0.1, 0.3, 1.0, 5.0]]  # Will be automatically updated based on train set statistics 
+    ANGLES: [[-90, 0, 90]] 
   ROI_HEADS:
     NUM_CLASSES: 0 #Will be automatically set to correct number of classes based on project config
     BATCH_SIZE_PER_IMAGE: 256
     NAME: StandardROIHeads
+    SCORE_THRESH_TEST: 0.05 #See https://github.com/facebookresearch/detectron2/blob/main/detectron2/config/defaults.py
+    NMS_THRESH_TEST: 0.5
   RESNETS:
     DEPTH: 50
 INPUT:
@@ -32,7 +36,7 @@ INPUT:
   MAX_SIZE_TRAIN: 0
   MIN_SIZE_TEST: 0 #Set to zero to disable resize in testing.
   MAX_SIZE_TEST: 0
-  MASK_FORMAT: "bitmask"
+  MASK_FORMAT: "bitmask" #Unused
 SOLVER:
   IMS_PER_BATCH: 999 # Not sure if this is actually used right now...
   CHECKPOINT_PERIOD: 2000

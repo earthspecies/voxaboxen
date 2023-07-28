@@ -4,26 +4,15 @@ import librosa
 import torch
 import torchaudio
 from torch.utils.data import DataLoader
+import json
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from detectron2.engine import DefaultTrainer
-from detectron2.structures import Instances, Boxes, BitMasks
-import detectron2.utils.comm as comm
+from detectron2.structures import Instances, Boxes
 from intervaltree import IntervalTree
 
 from source.data.data import DetectionDataset, crop_and_pad
-
-def spectrogram_to_image(spectrogram, image_options):
-    """Add channels to basic spectrogram to make up for differences with (visual) images"""
-    img = spectrogram[None, :, :] #Should be channel=1, f, t
-
-    mask = (img > image_options.FLOOR_THRESHOLD).to(img)
-    img = (img - image_options.FLOOR_THRESHOLD) * mask
-    img = (img / image_options.CEIL_THRESHOLD)*255.0
-
-    boundaries = torch.ones(img.shape, dtype=img.dtype).to(img)
-    full_img = torch.cat((img, mask, boundaries), dim=0) #channels=3, freqs, time
-
-    return full_img.to(torch.float32)
 
 def get_torch_mel_frequencies(f_max, n_mels, f_min=0.0, mel_scale="htk"):
     m_min = torchaudio.functional.functional._hz_to_mel(f_min, mel_scale=mel_scale)
@@ -33,12 +22,13 @@ def get_torch_mel_frequencies(f_max, n_mels, f_min=0.0, mel_scale="htk"):
     return f_pts
 
 class DetectronDataset(DetectionDataset):
-    def __init__(self, detectron_cfg, info_df, train, args, random_seed_shift = 0):
+    def __init__(self, detectron_cfg, info_df, train, args, random_seed_shift = 0, collect_statistics=False):
         super().__init__(info_df, train, args, random_seed_shift)
         self.spectrogram_args = detectron_cfg.SPECTROGRAM
         f_max = float(self.sr // 2)
         self.make_mel_spectrogram = torchaudio.transforms.MelSpectrogram(
             sample_rate = self.sr,
+            f_min = self.spectrogram_args.F_MIN,
             f_max = f_max,
             n_fft = self.spectrogram_args.N_FFT,
             win_length = self.spectrogram_args.WIN_LENGTH,
@@ -46,7 +36,9 @@ class DetectronDataset(DetectionDataset):
             n_mels = self.spectrogram_args.N_MELS,
             )
         self.spectrogram_t = lambda n_frames: (np.arange(n_frames)*self.spectrogram_args.HOP_LENGTH)/self.sr
-        self.spectrogram_f = get_torch_mel_frequencies(f_max=f_max, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults 
+        self.spectrogram_f = get_torch_mel_frequencies(f_max=f_max, f_min=self.spectrogram_args.F_MIN, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults 
+        self.collect_statistics = collect_statistics
+        self.mixup = args.mixup and train
 
     def process_selection_table(self, selection_table_fp):
         selection_table = pd.read_csv(selection_table_fp, sep = '\t')
@@ -91,6 +83,22 @@ class DetectronDataset(DetectionDataset):
         index_intervals = [(aa(iv[0], t), aa(iv[2], f), aa(iv[1], t), aa(iv[3], f)) for iv in intervals]
         return index_intervals
 
+    def power_to_dB(self, mel_spectrogram):
+        return torchaudio.functional.amplitude_to_DB(mel_spectrogram[None, None, :, :], multiplier=10., amin=self.spectrogram_args.REF, db_multiplier=np.log10(self.spectrogram_args.REF)).squeeze()
+
+    def spectrogram_to_image(self, spectrogram):
+        """Add channels to basic spectrogram (in dB) to make up for differences with (visual) images"""
+        img = spectrogram[None, :, :] #Should be channel=1, f, t
+
+        mask = (img > self.spectrogram_args.FLOOR_THRESHOLD).to(img) #TODO: May not be helpful.
+        img = (img - self.spectrogram_args.FLOOR_THRESHOLD) * mask
+        img = (img / self.spectrogram_args.CEIL_THRESHOLD)*255.0
+
+        boundaries = torch.ones(img.shape, dtype=img.dtype).to(img)
+        full_img = torch.cat((img, mask, boundaries), dim=0) #channels=3, freqs, time
+
+        return full_img.to(torch.float32)
+
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
         audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
@@ -104,9 +112,14 @@ class DetectronDataset(DetectionDataset):
         
         pos_intervals = self.get_pos_intervals(fn, start, end)
         record = {"sound_name": fn}
-        mel_spectrogram = self.make_mel_spectrogram(audio) # size: (channel, n_mels, time)
-        mel_spectrogram_dB = torchaudio.functional.amplitude_to_DB(mel_spectrogram[None, None, :, :], multiplier=10., amin=self.spectrogram_args.REF, db_multiplier=np.log10(self.spectrogram_args.REF)).squeeze()
-        record["image"] = torch.as_tensor(spectrogram_to_image(mel_spectrogram_dB, self.spectrogram_args))
+        mel_spectrogram = self.make_mel_spectrogram(audio) # size: (channel if any, n_mels, time)
+        if self.collect_statistics:
+           record["power"] = mel_spectrogram
+        if self.mixup:
+            # Save audio so it can be added to other datapoint's audio later
+            record["audio"] = audio
+        mel_spectrogram_dB = self.power_to_dB(mel_spectrogram)
+        record["image"] = self.spectrogram_to_image(mel_spectrogram_dB)
         record["height"] = mel_spectrogram.shape[0] #f
         record["width"] = mel_spectrogram.shape[1] #t
 
@@ -131,7 +144,7 @@ class SoundEventTrainer(DefaultTrainer):
         for epoch_idx in range(cfg.SOUND_EVENT.n_epochs):
             print(f"Starting epoch {epoch_idx}")
             dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, random_seed_shift = epoch_idx)
-            data_loader = DataLoader(dataset, batch_size=cfg.SOUND_EVENT.batch_size, num_workers=cfg.SOUND_EVENT.num_workers, collate_fn=list_collate)
+            data_loader = DataLoader(dataset, batch_size=cfg.SOUND_EVENT.batch_size, shuffle=True, num_workers=cfg.SOUND_EVENT.num_workers, collate_fn=create_collate_fn(cfg, dataset))
             yield from data_loader
 
     @classmethod
@@ -141,11 +154,95 @@ class SoundEventTrainer(DefaultTrainer):
         return DataLoader(dataset, batch_size=None, collate_fn=list_collate)
 
 
-def list_collate(L):
+def list_collate(list_of_datapoints):
     """ Without this, Dataloader will attempt to batch the record dict
         However, detectron accepts list[dict] 
         See: https://detectron2.readthedocs.io/en/latest/tutorials/models.html#model-input-format
         therefore instead of attempting to collate into dict[Tensor], this simply returns the list[dict]
-        TODO: write collate that does mixup?
     """
-    return L
+    return list_of_datapoints
+
+def create_collate_fn(cfg, dataset):
+    """ Create a collate function with empty annotation filter and mixup as options"""
+    def collate_fn(D):
+        """ Maintain the list[dict] format of the output of Dataset
+        Without this collate function, Dataloader will attempt to batch the list of record dicts from Dataset
+        However, detectron accepts list[dict] 
+        See: https://detectron2.readthedocs.io/en/latest/tutorials/models.html#model-input-format
+        Therefore instead of attempting to collate into dict[Tensor], this function simply returns the list[dict]
+        """
+        if cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS:
+            #Filter out any sounds without events
+            D = [d for d in D if len(d["instances"].gt_boxes) > 0]
+        if cfg.SOUND_EVENT.mixup:
+            #Add each sound to another, and combine the annotations
+            if len(D) > 1:
+                rD = D[::-1]
+                new_records = []
+                for idx in range(len(D)//2):
+                    mixed_audio = rD[idx]["audio"] + D[idx]["audio"]
+                    mel_spectrogram = dataset.make_mel_spectrogram(mixed_audio)
+                    mel_spectrogram_dB = dataset.power_to_dB(mel_spectrogram)
+                    image = dataset.spectrogram_to_image(mel_spectrogram_dB)
+                    instances = Instances(mel_spectrogram.shape)
+                    instances.gt_boxes = Boxes.cat([rD[idx]["instances"].gt_boxes, D[idx]["instances"].gt_boxes]) 
+                    instances.gt_classes = torch.cat([rD[idx]["instances"].gt_classes,D[idx]["instances"].gt_classes])
+                    new_records.append({
+                        "image": image,
+                        "height": D[idx]["height"],
+                        "width": D[idx]["width"], 
+                        "instances": instances
+                    })
+                D = new_records
+        return D
+    return collate_fn
+
+def collect_dataset_statistics(cfg, n_train_samples=500):
+    """Determine data-related config params (regarding spectrogram and boxes), adapted to training set """
+    #Get the minimum of the power spectrogram to determine the spectrogram reference value
+    print(f"Setting vals in CFG based on {n_train_samples} samples from train set")
+    train_info_df = pd.read_csv(cfg.SOUND_EVENT.train_info_fp)
+    dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, collect_statistics=True)
+    min_val = []
+    for example_idx in range(n_train_samples):
+        p = dataset[example_idx]["power"]
+        min_val.append(p[p>0].min().item())
+    ref = min(min_val) * 0.1
+    print("Using spectrogram ref=",  ref)
+    cfg.SPECTROGRAM.REF = ref
+    #Having defined the spectrogram reference value, obtain the pixels and box statistics
+    dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, collect_statistics=False)
+    images = []; box_info = []
+    for example_idx in range(n_train_samples):
+        r = dataset[example_idx]
+        images.append(r["image"][0, :, :])
+        for box in r["instances"].gt_boxes:
+            width = (box[2] - box[0]).item()
+            height = (box[3] - box[1]).item()
+            box_size = np.sqrt(width*height)
+            aspect_ratio = height/width
+            box_info.append((box_size, aspect_ratio))
+    #Define the pixel mean and standard deviation based on the training samples
+    pixel_mean = torch.mean(torch.stack(images)).item()
+    pixel_std = torch.mean(torch.std(torch.stack(images,dim=0),dim=[1,2])).item()
+    print("Mean: ", pixel_mean)
+    print("Std: ", pixel_std)
+    cfg.MODEL.PIXEL_MEAN[0] = pixel_mean
+    cfg.MODEL.PIXEL_STD[0] = pixel_std
+    #Determine and define a set of anchor parameters from the box statistics
+    box_sizes = np.array(box_info) #n_boxes, 2
+    box_size_quartiles = np.round(np.quantile(box_sizes[:,0], [0.05, 0.25,0.5,0.75, 0.95])).astype(int)
+    print("Box size 5/25/50/75/95 quantiles: ", box_size_quartiles)
+    aspect_ratio_quartiles = np.round(10**np.quantile(np.log10(box_sizes[:,1]), [0.05, 0.25,0.5,0.75, 0.95]),decimals=3)
+    print("Aspect ratio 5/25/50/75/95 quantiles: ", aspect_ratio_quartiles)
+    cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[int(l) for l in list(box_size_quartiles)]]
+    cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[float(l) for l in list(aspect_ratio_quartiles)]]
+    # Save a picture of the box statistic distribution for later inspection
+    df = pd.DataFrame({"Size": box_sizes[:,0], "Log10(Aspect ratio)": np.log10(box_sizes[:,1])})
+    sns.jointplot(x="Size", y="Log10(Aspect ratio)", data=df)
+    plt.savefig(cfg.SOUND_EVENT.experiment_dir + "/box_stats.png")
+    plt.close()
+    # Save a text with the pixel information for later inspection
+    with open(cfg.SOUND_EVENT.experiment_dir + "/image_stats.json", "w") as f:
+        json.dump({"ref": ref, "mean": pixel_mean, "std": pixel_std}, f)
+    return cfg
