@@ -22,11 +22,12 @@ def main():
   for k in cfg['label_mapping']:
     if k == 'Unknown':
       new_label_mapping[k] = 'Unknown'
-    elif k in ['EATO','WOTH','BCCH','BTNW','TUTI','NOCA','REVI','AMCR','BLJA','OVEN']:
+    # Remove NOCA, AMCR, BLJA because they have very long boxes
+    elif k in ['EATO','WOTH','BCCH','BTNW','TUTI','REVI','OVEN','COYE','BGGN','SCTA']:
       new_label_mapping[k] = k
       
   cfg['label_mapping'] = new_label_mapping
-  cfg['label_set'] = ['EATO','WOTH','BCCH','BTNW','TUTI','NOCA','REVI','AMCR','BLJA','OVEN']
+  cfg['label_set'] = ['EATO','WOTH','BCCH','BTNW','TUTI','REVI','OVEN','COYE','BGGN','SCTA']
   
   with open(params_file, "w") as f:
     yaml.dump(cfg, f)
