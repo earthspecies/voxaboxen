@@ -2,12 +2,15 @@
 # assumes raw selection tables are saved in raw/selection_tables,
 # with the exception of audio files which are saved in soundscape_data.
 # Can use the tool zenodo_get to download zip files quickly
+# If encountering issues with loading flac with librosa, can convert to .wav with: for i in *.flac; do ffmpeg -i "$i" "${i%.*}.wav"; done
 
 import pandas as pd
 import os
 import tqdm
 import numpy as np
 from glob import glob
+
+file_extension = 'wav' # use 'flac' if not converted
 
 def main():
   cwd = os.getcwd()
@@ -37,7 +40,7 @@ def main():
   test_audio_fps = []
   
   for i in range(1,5):
-    audio_fps = sorted(glob(os.path.join(audio_dir, f"*_S0{i}_*")))
+    audio_fps = sorted(glob(os.path.join(audio_dir, f"*_S0{i}_*.{file_extension}")))
     n_train = int(train_proportion * len(audio_fps))
     n_val = int(val_proportion * len(audio_fps))
     
@@ -45,16 +48,16 @@ def main():
     val_audio_fps.extend(audio_fps[n_train:n_train+n_val])
     test_audio_fps.extend(audio_fps[n_train+n_val:])
   
-  train_fns = [os.path.basename(x) for x in train_audio_fps]
-  val_fns = [os.path.basename(x) for x in val_audio_fps]
-  test_fns = [os.path.basename(x) for x in test_audio_fps]
+  train_fns = [os.path.basename(x).split('.')[0] for x in train_audio_fps]
+  val_fns = [os.path.basename(x).split('.')[0] for x in val_audio_fps]
+  test_fns = [os.path.basename(x).split('.')[0] for x in test_audio_fps]
   
   train_annot_fps = []
   val_annot_fps = []
   test_annot_fps = []
   
   for fn, audio_fp in zip(train_fns, train_audio_fps):
-    sub_annot_df = raw_annot_df[raw_annot_df['Filename'] == fn]
+    sub_annot_df = raw_annot_df[raw_annot_df['Filename'] == f'{fn}.flac']
     sub_annot_df = sub_annot_df.drop('Filename', axis = 1)
     
     annot_fn = f"selection_table_{fn.split('.')[0]}.txt"
@@ -64,7 +67,7 @@ def main():
     train_annot_fps.append(annot_fp)
     
   for fn, audio_fp in zip(val_fns, val_audio_fps):
-    sub_annot_df = raw_annot_df[raw_annot_df['Filename'] == fn]
+    sub_annot_df = raw_annot_df[raw_annot_df['Filename'] == f'{fn}.flac']
     sub_annot_df = sub_annot_df.drop('Filename', axis = 1)
     
     annot_fn = f"selection_table_{fn.split('.')[0]}.txt"
@@ -74,7 +77,7 @@ def main():
     val_annot_fps.append(annot_fp)
     
   for fn, audio_fp in zip(test_fns, test_audio_fps):
-    sub_annot_df = raw_annot_df[raw_annot_df['Filename'] == fn]
+    sub_annot_df = raw_annot_df[raw_annot_df['Filename'] == f'{fn}.flac']
     sub_annot_df = sub_annot_df.drop('Filename', axis = 1)
     
     annot_fn = f"selection_table_{fn.split('.')[0]}.txt"

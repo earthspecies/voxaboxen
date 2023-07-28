@@ -36,7 +36,7 @@ def main():
                   '--project-config-fp=/home/jupyter/sound_event_detection/projects/hawaii_experiment/project_config.yaml',
                   '--name=m0',
                   '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
-                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt'
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
                  ] & FG   
 
 if __name__ == "__main__":

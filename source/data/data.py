@@ -191,7 +191,7 @@ class DetectionDataset(Dataset):
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
         
-        audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
+        audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)         
         audio = torch.from_numpy(audio)
     
     
