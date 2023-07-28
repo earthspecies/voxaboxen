@@ -12,7 +12,7 @@ from detectron2.engine import DefaultTrainer
 from detectron2.structures import Instances, Boxes
 from intervaltree import IntervalTree
 
-from source.data.data import DetectionDataset, crop_and_pad
+from source.data.data import DetectionDataset, SingleClipDataset, crop_and_pad
 
 def get_torch_mel_frequencies(f_max, n_mels, f_min=0.0, mel_scale="htk"):
     m_min = torchaudio.functional.functional._hz_to_mel(f_min, mel_scale=mel_scale)
@@ -132,6 +132,42 @@ class DetectronDataset(DetectionDataset):
 
         return record
 
+class DetectronSingleClipDataset(SingleClipDataset):
+    def __init__(self, detectron_cfg, audio_fp, clip_hop, args, annot_fp=None):
+        super().__init__(audio_fp, clip_hop, args, annot_fp)
+        self.spectrogram_args = detectron_cfg.SPECTROGRAM
+        f_max = float(self.sr // 2)
+        self.make_mel_spectrogram = torchaudio.transforms.MelSpectrogram(
+            sample_rate = self.sr,
+            f_min = self.spectrogram_args.F_MIN,
+            f_max = f_max,
+            n_fft = self.spectrogram_args.N_FFT,
+            win_length = self.spectrogram_args.WIN_LENGTH,
+            hop_length = self.spectrogram_args.HOP_LENGTH,
+            n_mels = self.spectrogram_args.N_MELS,
+            )
+
+    def __getitem__(self, idx):
+        """ Map int idx to dict of torch tensors """
+        start = idx * self.clip_hop
+        
+        audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
+        audio = torch.from_numpy(audio)
+                
+        audio = audio-torch.mean(audio)
+        if file_sr != self.sr:
+          audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
+          audio = crop_and_pad(audio, self.sr, self.clip_duration)
+
+        record = {"sound_name": self.audio_fp, "start_time": start}
+        mel_spectrogram = self.make_mel_spectrogram(audio) # size: (channel if any, n_mels, time)
+        mel_spectrogram_dB = DetectronDataset.power_to_dB(mel_spectrogram)
+        record["image"] = DetectronDataset.spectrogram_to_image(mel_spectrogram_dB)
+        record["height"] = mel_spectrogram.shape[0] #f
+        record["width"] = mel_spectrogram.shape[1] #t
+
+        return record
+
 class SoundEventTrainer(DefaultTrainer):
 
     def __init__(self, cfg):
@@ -152,7 +188,6 @@ class SoundEventTrainer(DefaultTrainer):
         test_info_df = pd.read_csv(cfg.SOUND_EVENT.test_info_fp)
         dataset = DetectronDataset(cfg, test_info_df, False, cfg.SOUND_EVENT)
         return DataLoader(dataset, batch_size=None, collate_fn=list_collate)
-
 
 def list_collate(list_of_datapoints):
     """ Without this, Dataloader will attempt to batch the record dict
