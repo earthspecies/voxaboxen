@@ -22,7 +22,7 @@ def main():
   for k in cfg['label_mapping']:
     if k == 'Unknown':
       new_label_mapping[k] = 'Unknown'
-    # Remove NOCA, AMCR, BLJA because they have very long boxes
+    # omit NOCA, AMCR, BLJA because they have very long boxes
     elif k in ['EATO','WOTH','BCCH','BTNW','TUTI','REVI','OVEN','COYE','BGGN','SCTA']:
       new_label_mapping[k] = k
       
@@ -38,7 +38,65 @@ def main():
                   '--name=m0',
                   '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
                   '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
-                 ] & FG   
+                 ] & FG
+  
+  local['python']['../main.py',
+                  'train-model',
+                  '--project-config-fp=/home/jupyter/sound_event_detection/projects/powdermill_experiment/project_config.yaml',
+                  '--name=m1',
+                  '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
+                  '--lr=.00008'
+                 ] & FG 
+  
+  local['python']['../main.py',
+                  'train-model',
+                  '--project-config-fp=/home/jupyter/sound_event_detection/projects/powdermill_experiment/project_config.yaml',
+                  '--name=m2',
+                  '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
+                  '--lamb=.08'
+                 ] & FG 
+  
+  local['python']['../main.py',
+                  'train-model',
+                  '--project-config-fp=/home/jupyter/sound_event_detection/projects/powdermill_experiment/project_config.yaml',
+                  '--name=m3',
+                  '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
+                  '--rho=.02'
+                 ] & FG 
+  
+  local['python']['../main.py',
+                  'train-model',
+                  '--project-config-fp=/home/jupyter/sound_event_detection/projects/powdermill_experiment/project_config.yaml',
+                  '--name=m4',
+                  '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
+                  '--pos-loss-weight=2'
+                 ] & FG 
+  
+  local['python']['../main.py',
+                  'train-model',
+                  '--project-config-fp=/home/jupyter/sound_event_detection/projects/powdermill_experiment/project_config.yaml',
+                  '--name=m5',
+                  '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
+                  '--batch-size=8'
+                 ] & FG 
+  
+  # Print results
+  
+  evals = {}
+  for i in range(6):
+    name = f'm{i}'
+    results_fp = f'/home/jupyter/sound_event_detection/projects/powdermill_experiment/{name}/val_results/metrics_iou_0.5_class_threshold_0.5.yaml'
+    with open(results_fp, 'r') as f:
+      results = yaml.safe_load(f)
+    evals[name] = results['macro']['f1']
+    
+  print(evals)
+
 
 if __name__ == "__main__":
   main()

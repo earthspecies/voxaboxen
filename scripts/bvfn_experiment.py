@@ -22,7 +22,43 @@ def main():
                     '--clip-duration=2.0',
                     '--clip-hop=1.0',
                     '--omit-empty-clip-prob=0.5'
-                   ] & FG   
+                   ] & FG
+  
+  local['python']['../main.py',
+                  'train-model',
+                  '--project-config-fp=/home/jupyter/sound_event_detection/projects/birdvox_full_night_experiment/project_config.yaml',
+                  '--name=m1',
+                  '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
+                  '--clip-duration=2.0',
+                  '--clip-hop=1.0',
+                  '--omit-empty-clip-prob=0.5',
+                  '--lr=.00008'
+                 ] & FG 
+  
+  local['python']['../main.py',
+                  'train-model',
+                  '--project-config-fp=/home/jupyter/sound_event_detection/projects/birdvox_full_night_experiment/project_config.yaml',
+                  '--name=m2',
+                  '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
+                  '--clip-duration=2.0',
+                  '--clip-hop=1.0',
+                  '--omit-empty-clip-prob=0.5',
+                  '--pos-loss-weight=2'
+                 ] & FG 
+  
+  local['python']['../main.py',
+                  'train-model',
+                  '--project-config-fp=/home/jupyter/sound_event_detection/projects/birdvox_full_night_experiment/project_config.yaml',
+                  '--name=m3',
+                  '--aves-config-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.model_config.json',
+                  '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
+                  '--clip-duration=2.0',
+                  '--clip-hop=1.0',
+                  '--omit-empty-clip-prob=0.5',
+                  '--batch-size=8'
+                 ] & FG 
   
   # Print results
   
