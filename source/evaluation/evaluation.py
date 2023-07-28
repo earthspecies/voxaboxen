@@ -325,6 +325,23 @@ def summarize_metrics(metrics):
   
   return overall
 
+def macro_metrics(summary):
+  # summary (dict) : {class_label: {'f1' : float, 'precision' : float, 'recall' : float, 'TP': int, 'FP' : int, 'FN' : int}}
+  
+  metrics = ['f1', 'precision', 'recall']
+  
+  macro = {}
+  
+  for metric in metrics:
+
+    e = []
+    for l in summary:
+        m = summary[l][metric]
+        e.append(m)
+    macro[metric] = float(np.mean(e))
+  
+  return macro
+
 def plot_confusion_matrix(data, label_names, target_dir, name=""):
   
     fig = plt.figure(num=None, figsize=(12, 8), dpi=80, facecolor='w', edgecolor='k')
@@ -399,6 +416,8 @@ def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, cla
   # summarize and save metrics
   summary = summarize_metrics(metrics)
   metrics['summary'] = summary
+  macro = macro_metrics(summary)
+  metrics['macro'] = macro
   if output_dir is not None:
     metrics_fp = os.path.join(output_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
     with open(metrics_fp, 'w') as f:
