@@ -203,15 +203,17 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
     
   if target_dir is None:
     target_dir = args.experiment_output_dir  
-    
-  target_fp = os.path.join(target_dir, f"detections_{fn}.npy")
-  np.save(target_fp, detections)
+
+#   Debugging
+#
+#   target_fp = os.path.join(target_dir, f"detections_{fn}.npy")
+#   np.save(target_fp, detections)
   
-  target_fp = os.path.join(target_dir, f"regressions_{fn}.npy")
-  np.save(target_fp, regressions)
+#   target_fp = os.path.join(target_dir, f"regressions_{fn}.npy")
+#   np.save(target_fp, regressions)
   
-  target_fp = os.path.join(target_dir, f"classifications_{fn}.npy")
-  np.save(target_fp, classifications)
+#   target_fp = os.path.join(target_dir, f"classifications_{fn}.npy")
+#   np.save(target_fp, classifications)
   
   ## peaks  
   detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
