@@ -146,6 +146,8 @@ class DetectronSingleClipDataset(SingleClipDataset):
             hop_length = self.spectrogram_args.HOP_LENGTH,
             n_mels = self.spectrogram_args.N_MELS,
             )
+        self.spectrogram_t = lambda n_frames: (np.arange(n_frames)*self.spectrogram_args.HOP_LENGTH)/self.sr
+        self.spectrogram_f = get_torch_mel_frequencies(f_max=f_max, f_min=self.spectrogram_args.F_MIN, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults 
 
     def __getitem__(self, idx):
         """ Map int idx to dict of torch tensors """
@@ -161,8 +163,8 @@ class DetectronSingleClipDataset(SingleClipDataset):
 
         record = {"sound_name": self.audio_fp, "start_time": start}
         mel_spectrogram = self.make_mel_spectrogram(audio) # size: (channel if any, n_mels, time)
-        mel_spectrogram_dB = DetectronDataset.power_to_dB(mel_spectrogram)
-        record["image"] = DetectronDataset.spectrogram_to_image(mel_spectrogram_dB)
+        mel_spectrogram_dB = DetectronDataset.power_to_dB(self, mel_spectrogram)
+        record["image"] = DetectronDataset.spectrogram_to_image(self, mel_spectrogram_dB)
         record["height"] = mel_spectrogram.shape[0] #f
         record["width"] = mel_spectrogram.shape[1] #t
 
