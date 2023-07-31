@@ -33,6 +33,8 @@ def get_full_cfg(sound_event_args, detectron_config_fp):
     cfg.SOUND_EVENT = CN(vars(sound_event_args))
 
     # Add in detectron defaults, then detectron custom
+    # TODO add weights cfg.MODEL.WEIGHTS
+    # See https://github.com/facebookresearch/detectron2/blob/main/MODEL_ZOO.md to choose models
     cfg.merge_from_file(model_zoo.get_config_file("./Base-RCNN-FPN.yaml"))
     cfg.merge_from_file(detectron_config_fp)
 
