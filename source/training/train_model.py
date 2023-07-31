@@ -28,13 +28,7 @@ def train_model(args):
   model = DetectionModel(args)
   
   ## Training
-  import torch
-  if args.previous_checkpoint_fp is not None:
-    print(f"loading model weights from {args.previous_checkpoint_fp}")
-    cp = torch.load(args.previous_checkpoint_fp)
-    model.load_state_dict(cp["model_state_dict"])
-  trained_model = model
-  # trained_model = train(model, args)  
+  trained_model = train(model, args)  
   
   ## Evaluation
   test_dataloader = get_test_dataloader(args)

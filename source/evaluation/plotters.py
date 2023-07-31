@@ -1,19 +1,19 @@
 from matplotlib import pyplot as plt
-from pathlib import Path
+import os
 
-def plot_eval(train_evals, learning_rates, args, test_evals = [{}]):
+def plot_eval(train_evals, learning_rates, args, val_evals = [{}]):
   # train_evals : list of dicts, one dict per epoch
-  # test_evals : list of dicts, one dict per epoch
-  plot_fp = Path(args.experiment_dir, "train_progress.svg")
+  # val_evals : list of dicts, one dict per epoch
+  plot_fp = os.path.join(args.experiment_dir, "train_progress.svg")
   train_keys = train_evals[0].keys()  
-  test_keys = test_evals[0].keys()
+  val_keys = val_evals[0].keys()
   
-  n_plots = len(train_keys)+len(test_keys) + 1
+  n_plots = len(train_keys)+len(val_keys) + 1
   fig, ax = plt.subplots(nrows=n_plots, sharex=True, figsize = (12, 4*n_plots))
   
   plot_number = 0
-  for i, eval_dict_list in enumerate([train_evals, test_evals]):
-    fold = {0:"Train", 1:"Test"}[i]
+  for i, eval_dict_list in enumerate([train_evals, val_evals]):
+    fold = {0:"Train", 1:"Val"}[i]
     for key in sorted(eval_dict_list[0].keys()):
       toplot = [d[key] for d in eval_dict_list]
       ax[plot_number].plot(toplot)

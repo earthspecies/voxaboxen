@@ -12,7 +12,7 @@ def project_setup(args):
     os.makedirs(args.project_dir)
   
   all_annots = []
-  for info_fp in [args.train_pool_info_fp, args.val_info_fp, args.test_info_fp]:
+  for info_fp in [args.train_info_fp, args.val_info_fp, args.test_info_fp]:
     if info_fp is None:
       continue
     

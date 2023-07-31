@@ -1,21 +1,22 @@
 import numpy as np
 import torch
-from torch import nn
-import torch.nn as nn
 import torch.nn.functional as F
 import tqdm
 from functools import partial
 import os
 from einops import rearrange
 
-
 from source.evaluation.plotters import plot_eval
 from source.evaluation.evaluation import predict_and_generate_manifest, evaluate_based_on_manifest
 from source.data.data import get_train_dataloader, get_val_dataloader
-from source.model.model import preprocess_and_augment
+from source.model.model import rms_and_mixup
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+if device == "cpu":
+  import warnings
+  warnings.warn("Only using CPU! Check CUDA")
 
 def train(model, args):
   model = model.to(device)
@@ -31,8 +32,8 @@ def train(model, args):
   class_loss_fn = get_class_loss_fn(args)
   
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
-  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.step_size, gamma=0.1, last_epoch=- 1, verbose=False)
-  # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
+  # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.step_size, gamma=0.1, last_epoch=- 1, verbose=False)
+  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
   
   train_evals = []
   learning_rates = []
@@ -57,7 +58,7 @@ def train(model, args):
       if use_val:
         val_eval = val_epoch(model, t, val_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args)
         val_evals.append(val_eval.copy())
-        plot_eval(train_evals, learning_rates, args, test_evals = val_evals)
+        plot_eval(train_evals, learning_rates, args, val_evals = val_evals)
       else:
         plot_eval(train_evals, learning_rates, args)
       scheduler.step()
@@ -127,7 +128,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
       r = r.to(device = device, dtype = torch.float)
       y = y.to(device = device, dtype = torch.float)
       
-      X, d, r, y = preprocess_and_augment(X, d, r, y, True, args)
+      X, d, r, y = rms_and_mixup(X, d, r, y, True, args)
       probs, regression, class_logits = model(X)
       
       # We mask out loss from each end of the clip, so the model isn't forced to learn to detect events that are partially cut off.
