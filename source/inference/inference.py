@@ -36,7 +36,11 @@ def inference(inference_args):
       print(f"Could not locate file {audio_fp}")
       continue
     
-    dataloader = get_single_clip_data(audio_fp, args.clip_duration/2, args)
+    try:
+      dataloader = get_single_clip_data(audio_fp, args.clip_duration/2, args)
+    except:
+      print(f"Could not load file {audio_fp}")
+      continue
     
     if len(dataloader) == 0:
       print(f"Skipping {fn} because it is too short")

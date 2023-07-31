@@ -10,7 +10,7 @@ import seaborn as sns
 import pandas as pd
 
 from source.evaluation.raven_utils import Clip
-from source.model.model import preprocess_and_augment
+from source.model.model import rms_and_mixup
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -122,7 +122,7 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
   with torch.no_grad():
     for i, X in iterator:
       X = X.to(device = device, dtype = torch.float)
-      X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
+      X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
       
       detection, regression, classification = model(X)
       classification = torch.nn.functional.softmax(classification, dim=-1)
@@ -180,7 +180,7 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
   with torch.no_grad():
     for i, X in iterator:
       X = X.to(device = device, dtype = torch.float)
-      X, _, _, _ = preprocess_and_augment(X, None, None, None, False, args)
+      X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
       features = model.generate_features(X)
       all_features.append(features)
     all_features = torch.cat(all_features)
@@ -203,15 +203,17 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
     
   if target_dir is None:
     target_dir = args.experiment_output_dir  
-    
-  target_fp = os.path.join(target_dir, f"detections_{fn}.npy")
-  np.save(target_fp, detections)
+
+#   Debugging
+#
+#   target_fp = os.path.join(target_dir, f"detections_{fn}.npy")
+#   np.save(target_fp, detections)
   
-  target_fp = os.path.join(target_dir, f"regressions_{fn}.npy")
-  np.save(target_fp, regressions)
+#   target_fp = os.path.join(target_dir, f"regressions_{fn}.npy")
+#   np.save(target_fp, regressions)
   
-  target_fp = os.path.join(target_dir, f"classifications_{fn}.npy")
-  np.save(target_fp, classifications)
+#   target_fp = os.path.join(target_dir, f"classifications_{fn}.npy")
+#   np.save(target_fp, classifications)
   
   ## peaks  
   detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
@@ -323,6 +325,23 @@ def summarize_metrics(metrics):
   
   return overall
 
+def macro_metrics(summary):
+  # summary (dict) : {class_label: {'f1' : float, 'precision' : float, 'recall' : float, 'TP': int, 'FP' : int, 'FN' : int}}
+  
+  metrics = ['f1', 'precision', 'recall']
+  
+  macro = {}
+  
+  for metric in metrics:
+
+    e = []
+    for l in summary:
+        m = summary[l][metric]
+        e.append(m)
+    macro[metric] = float(np.mean(e))
+  
+  return macro
+
 def plot_confusion_matrix(data, label_names, target_dir, name=""):
   
     fig = plt.figure(num=None, figsize=(12, 8), dpi=80, facecolor='w', edgecolor='k')
@@ -397,6 +416,8 @@ def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, cla
   # summarize and save metrics
   summary = summarize_metrics(metrics)
   metrics['summary'] = summary
+  macro = macro_metrics(summary)
+  metrics['macro'] = macro
   if output_dir is not None:
     metrics_fp = os.path.join(output_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
     with open(metrics_fp, 'w') as f:

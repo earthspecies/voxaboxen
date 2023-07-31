@@ -2,7 +2,6 @@ import argparse
 import os
 import yaml
 from source.training.params import load_params
-from pathlib import Path
 
 def parse_inference_args(inference_args):
   parser = argparse.ArgumentParser()
