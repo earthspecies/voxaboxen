@@ -21,7 +21,7 @@ def main():
                     '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
                     '--clip-duration=2.0',
                     '--clip-hop=1.0',
-                    '--omit-empty-clip-prob=0.5'
+                    '--omit-empty-clip-prob=0.75'
                    ] & FG
   
   local['python']['../main.py',
@@ -32,7 +32,7 @@ def main():
                   '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
                   '--clip-duration=2.0',
                   '--clip-hop=1.0',
-                  '--omit-empty-clip-prob=0.5',
+                  '--omit-empty-clip-prob=0.75',
                   '--lr=.00008'
                  ] & FG 
   
@@ -44,7 +44,7 @@ def main():
                   '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
                   '--clip-duration=2.0',
                   '--clip-hop=1.0',
-                  '--omit-empty-clip-prob=0.5',
+                  '--omit-empty-clip-prob=0.75',
                   '--pos-loss-weight=2'
                  ] & FG 
   
@@ -56,7 +56,7 @@ def main():
                   '--aves-model-weight-fp=/home/jupyter/sound_event_detection/weights/aves-base-bio.torchaudio.pt',
                   '--clip-duration=2.0',
                   '--clip-hop=1.0',
-                  '--omit-empty-clip-prob=0.5',
+                  '--omit-empty-clip-prob=0.75',
                   '--batch-size=8'
                  ] & FG 
   
