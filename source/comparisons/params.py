@@ -66,8 +66,8 @@ def get_full_cfg(sound_event_args, detectron_args):
 
     # Add in Detectron custom parameters, either by config file or by command line list
     # Since we set _BASE_ above, do not need defaults: cfg.merge_from_file(model_zoo.get_config_file("./Base-RCNN-FPN.yaml"))
-    if detectron_args.config_fp is not None:
-        cfg.merge_from_file(detectron_args.config_fp)
+    if detectron_args.detectron_config_fp is not None:
+        cfg.merge_from_file(detectron_args.detectron_config_fp)
     if detectron_args.opts is not None:
         cfg.merge_from_list(detectron_args.opts)
 
@@ -95,7 +95,7 @@ def parse_args(args):
     parser = argparse.ArgumentParser()
   
     # General
-    parser.add_argument('--config-fp', type = str, required=False, help="If you prefer to indicate a config file for your custom detectron args, use this to point to the custom file.")
+    parser.add_argument('--detectron-config-fp', type = str, required=False, help="If you prefer to indicate a config file for your custom detectron args, use this to point to the custom file.")
     # From https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/detectron2/engine/defaults.py#L134
     # For how to use opts, see https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/docs/tutorials/configs.md
     parser.add_argument(
