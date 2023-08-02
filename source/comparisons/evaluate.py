@@ -14,7 +14,7 @@ from detectron2.config import CfgNode
 from detectron2.modeling import build_model
 from torchvision.ops import boxes as box_ops
 
-from dataloaders import DetectronSingleClipDataset
+from source.comparisons.dataloaders import DetectronSingleClipDataset
 from source.evaluation.evaluation import bbox2raven, write_tsv, evaluate_based_on_manifest
 from nms import nms
 
@@ -52,7 +52,7 @@ def evaluate(args):
         )
 
         boxes, scores, classes, len_t = generate_predictions(model, dataloader)
-        #TODO account for whether to keep arrays as numpy or torch
+        #TODO (low priority) clean up by accounting for whether to keep arrays as numpy or torch?
         events, boxes, scores, classes = account_for_overlapping_clips(boxes, scores, classes, len_t, dataloader)
         if args.time_based_nms:
             #boxes shape: (n_boxes, 2=(onset,offset))
@@ -103,7 +103,7 @@ def generate_predictions(model, dataloader):
                 d["image"] = d["image"].cuda()
             d["image"] = d["image"].squeeze(0) #model does not take batch dimension
             d["height"] = d["height"].item(); d["width"] = d["width"].item()
-            #TODO: Batch evaluation? Right now only takes a single record
+            #TODO (low priority): Batch evaluation? Right now only takes a single record
             outputs = model([d])[0]
             instances = outputs["instances"]
             n_mel_freq_bins, n_time_frames = instances.image_size
@@ -150,7 +150,7 @@ def account_for_overlapping_clips(boxes, scores, classes, len_t, dataloader):
 
     return events, boxes, scores, classes
 
-if __name__ == "__main__":
+def parse_args(args):
     parser = argparse.ArgumentParser()
     parser.add_argument('--file-info-for-inference', type=str, required=True, help = "filepath of info csv listing filenames and filepaths of audio for inference")
     parser.add_argument('--full-param-fp', type=str, required=True, help = "filepath of model params saved as a yaml")
@@ -158,5 +158,8 @@ if __name__ == "__main__":
     parser.add_argument('--nms-thresh-test', type=float, required=False, help="NMS score threshold to get onto the selection table. Defaults to config file.")
     parser.add_argument('--time-based-nms', action="store_true", help = "If true, compute NMS only based on onset/offset but ignore frequency.")
     parser.add_argument('--ignore-interclass-iou', action="store_true", help="If true, ignore overlap between boxes of different classes.")
-    args = parser.parse_args(sys.argv[1:])  
-    evaluate(args)
+    args = parser.parse_args(args)
+    return args
+
+if __name__ == "__main__":
+    evaluate(parse_args[sys.argv[1:]])

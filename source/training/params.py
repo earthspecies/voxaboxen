@@ -6,7 +6,7 @@ import logging
 import os
 import yaml
 
-def parse_args(args):
+def parse_args(args,allow_unknown=False):
   parser = argparse.ArgumentParser()
   
   # General
@@ -55,12 +55,18 @@ def parse_args(args):
   # Inference
   parser.add_argument('--peak-distance', type=float, default=10, help="for finding peaks in detection probability, what radius to use for detecting local maxima. In output frame rate.")
   
-  args = parser.parse_args(args)
-  args = read_config(args)
+  if allow_unknown:
+    args, remaining = parser.parse_known_args(args)
+  else:
+    args = parser.parse_args(args)
   
+  args = read_config(args)
   check_config(args)
   
-  return args
+  if allow_unknown:
+    return args, remaining
+  else:
+    return args
 
 def read_config(args):
   with open(args.project_config_fp, 'r') as f:
