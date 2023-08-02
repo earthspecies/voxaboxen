@@ -271,7 +271,7 @@ def collect_dataset_statistics(cfg, n_train_samples=2000):
     #Having defined the spectrogram reference value, obtain the pixels and box statistics
     dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, collect_statistics=False)
     images = []; box_info = []
-    warnings.warn("Function to set anchor generators is experimental and should be discussed. ")
+    warnings.warn("Function to set anchor generators needs discussion. If this code does not find any boxes, try setting --omit-empty-clip-prob higher")
     while len(box_info) < n_train_samples:
         r = dataset[example_idx]
         images.append(r["image"][0, :, :])
