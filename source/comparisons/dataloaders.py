@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 import json
 import matplotlib.pyplot as plt
 import seaborn as sns
+import warnings
 
 from detectron2.engine import DefaultTrainer
 from detectron2.structures import Instances, Boxes
@@ -63,16 +64,16 @@ class DetectronDataset(DetectionDataset):
               label_idx = -1
             else:
               label_idx = self.label_set.index(label)
+
             tree.addi(start, end, (bottom, top, label_idx))
 
         return tree
 
     def get_pos_intervals(self, fn, start, end):
         tree = self.selection_table_dict[fn]
-
         intervals = tree[start:end]
+        
         intervals = [(max(iv.begin, start)-start, min(iv.end, end)-start, iv.data[0], iv.data[1], iv.data[2]) for iv in intervals]
-
         return intervals          
 
     def convert_intervals_to_boxes(self, intervals, n_time_frames):
@@ -80,7 +81,24 @@ class DetectronDataset(DetectionDataset):
         t = self.spectrogram_t(n_time_frames)
         f = self.spectrogram_f
         aa = lambda x, x0: np.argmin(np.abs(x - x0))
-        index_intervals = [(aa(iv[0], t), aa(iv[2], f), aa(iv[1], t), aa(iv[3], f)) for iv in intervals]
+        index_intervals = []
+        for iv in intervals:
+            onset_idx = aa(iv[0], t)
+            low_f_idx = aa(iv[2], f)
+            offset_idx = aa(iv[1], t)
+            high_f_idx = aa(iv[3], f)
+            # Prevent dimension from collapsing
+            if onset_idx == offset_idx:
+                if onset_idx == len(t) - 1:
+                    onset_idx -= 1
+                else:
+                    offset_idx += 1
+            if low_f_idx == high_f_idx:
+                if low_f_idx == len(f) - 1:
+                    low_f_idx -= 1
+                else:
+                    high_f_idx += 1
+            index_intervals.append([onset_idx, low_f_idx, offset_idx, high_f_idx])
         return index_intervals
 
     def power_to_dB(self, mel_spectrogram):
@@ -129,7 +147,7 @@ class DetectronDataset(DetectionDataset):
         #record["instances"].gt_ibm = BitMasks(masks.permute(0,2,1).contiguous())
         boxes = self.convert_intervals_to_boxes(pos_intervals, mel_spectrogram.shape[1])
         record["instances"].gt_boxes = Boxes(boxes)
-
+        
         return record
 
 class DetectronSingleClipDataset(SingleClipDataset):
@@ -146,6 +164,8 @@ class DetectronSingleClipDataset(SingleClipDataset):
             hop_length = self.spectrogram_args.HOP_LENGTH,
             n_mels = self.spectrogram_args.N_MELS,
             )
+        self.spectrogram_t = lambda n_frames: (np.arange(n_frames)*self.spectrogram_args.HOP_LENGTH)/self.sr
+        self.spectrogram_f = get_torch_mel_frequencies(f_max=f_max, f_min=self.spectrogram_args.F_MIN, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults 
 
     def __getitem__(self, idx):
         """ Map int idx to dict of torch tensors """
@@ -161,11 +181,11 @@ class DetectronSingleClipDataset(SingleClipDataset):
 
         record = {"sound_name": self.audio_fp, "start_time": start}
         mel_spectrogram = self.make_mel_spectrogram(audio) # size: (channel if any, n_mels, time)
-        mel_spectrogram_dB = DetectronDataset.power_to_dB(mel_spectrogram)
-        record["image"] = DetectronDataset.spectrogram_to_image(mel_spectrogram_dB)
+        mel_spectrogram_dB = DetectronDataset.power_to_dB(self, mel_spectrogram)
+        record["image"] = DetectronDataset.spectrogram_to_image(self, mel_spectrogram_dB)
         record["height"] = mel_spectrogram.shape[0] #f
         record["width"] = mel_spectrogram.shape[1] #t
-
+        
         return record
 
 class SoundEventTrainer(DefaultTrainer):
@@ -180,14 +200,20 @@ class SoundEventTrainer(DefaultTrainer):
         for epoch_idx in range(cfg.SOUND_EVENT.n_epochs):
             print(f"Starting epoch {epoch_idx}")
             dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, random_seed_shift = epoch_idx)
-            data_loader = DataLoader(dataset, batch_size=cfg.SOUND_EVENT.batch_size, shuffle=True, num_workers=cfg.SOUND_EVENT.num_workers, collate_fn=create_collate_fn(cfg, dataset))
+            effective_batch_size = cfg.SOUND_EVENT.batch_size*2 if cfg.SOUND_EVENT.mixup else cfg.SOUND_EVENT.batch_size
+            data_loader = DataLoader(dataset, batch_size=effective_batch_size, shuffle=True, num_workers=cfg.SOUND_EVENT.num_workers, collate_fn=create_collate_fn(cfg, dataset))
             yield from data_loader
 
     @classmethod
-    def build_test_loader(cls, cfg):
-        test_info_df = pd.read_csv(cfg.SOUND_EVENT.test_info_fp)
-        dataset = DetectronDataset(cfg, test_info_df, False, cfg.SOUND_EVENT)
+    def build_test_loader(cls, cfg, dataset_name):
+        """ NOTE - see params.py: dataset_name should be cfg.SOUND_EVENT.val_info_fp, but could add additional info_csvs into the list there if desired. """
+        val_info_df = pd.read_csv(dataset_name) #Could also use cfg.SOUND_EVENT.val_info_fp directly
+        dataset = DetectronDataset(cfg, val_info_df, False, cfg.SOUND_EVENT)
         return DataLoader(dataset, batch_size=None, collate_fn=list_collate)
+    
+    # @classmethod
+    # def build_evaluator(cls, cfg, dataset_name):
+    # TODO (high priority): create this
 
 def list_collate(list_of_datapoints):
     """ Without this, Dataloader will attempt to batch the record dict
@@ -206,9 +232,6 @@ def create_collate_fn(cfg, dataset):
         See: https://detectron2.readthedocs.io/en/latest/tutorials/models.html#model-input-format
         Therefore instead of attempting to collate into dict[Tensor], this function simply returns the list[dict]
         """
-        if cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS:
-            #Filter out any sounds without events
-            D = [d for d in D if len(d["instances"].gt_boxes) > 0]
         if cfg.SOUND_EVENT.mixup:
             #Add each sound to another, and combine the annotations
             if len(D) > 1:
@@ -232,7 +255,7 @@ def create_collate_fn(cfg, dataset):
         return D
     return collate_fn
 
-def collect_dataset_statistics(cfg, n_train_samples=500):
+def collect_dataset_statistics(cfg, n_train_samples=2000):
     """Determine data-related config params (regarding spectrogram and boxes), adapted to training set """
     #Get the minimum of the power spectrogram to determine the spectrogram reference value
     print(f"Setting vals in CFG based on {n_train_samples} samples from train set")
@@ -248,7 +271,8 @@ def collect_dataset_statistics(cfg, n_train_samples=500):
     #Having defined the spectrogram reference value, obtain the pixels and box statistics
     dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, collect_statistics=False)
     images = []; box_info = []
-    for example_idx in range(n_train_samples):
+    warnings.warn("Function to set anchor generators needs discussion. If this code does not find any boxes, try setting --omit-empty-clip-prob higher")
+    while len(box_info) < n_train_samples:
         r = dataset[example_idx]
         images.append(r["image"][0, :, :])
         for box in r["instances"].gt_boxes:
@@ -265,11 +289,18 @@ def collect_dataset_statistics(cfg, n_train_samples=500):
     cfg.MODEL.PIXEL_MEAN[0] = pixel_mean
     cfg.MODEL.PIXEL_STD[0] = pixel_std
     #Determine and define a set of anchor parameters from the box statistics
+    #TODO (high priority): Discuss with Ben- I'm not sure this is actually a good way to set anchor generators, I'm a bit confused about how they are defined
+    #For example, this has different sizes for different feature maps https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/configs/Base-RCNN-FPN.yaml
+    #See RPN discussion here: https://medium.com/@hirotoschwert/digging-into-detectron-2-part-4-3d1436f91266
+    #When this code happens to choose only a single box size, it leads to INF in loss_rpn_loc very quickly
+    #Something like birdvox_full_night has very small boxes, using the defaults with pretrained weights (see params.py) actually led to lower loss_rpn_loc to start out with. 
     box_sizes = np.array(box_info) #n_boxes, 2
     box_size_quartiles = np.round(np.quantile(box_sizes[:,0], [0.05, 0.25,0.5,0.75, 0.95])).astype(int)
     print("Box size 5/25/50/75/95 quantiles: ", box_size_quartiles)
+    box_size_quartiles = np.unique(box_size_quartiles)
     aspect_ratio_quartiles = np.round(10**np.quantile(np.log10(box_sizes[:,1]), [0.05, 0.25,0.5,0.75, 0.95]),decimals=3)
     print("Aspect ratio 5/25/50/75/95 quantiles: ", aspect_ratio_quartiles)
+    aspect_ratio_quartiles = np.unique(aspect_ratio_quartiles)
     cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[int(l) for l in list(box_size_quartiles)]]
     cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[float(l) for l in list(aspect_ratio_quartiles)]]
     # Save a picture of the box statistic distribution for later inspection
@@ -277,7 +308,4 @@ def collect_dataset_statistics(cfg, n_train_samples=500):
     sns.jointplot(x="Size", y="Log10(Aspect ratio)", data=df)
     plt.savefig(cfg.SOUND_EVENT.experiment_dir + "/box_stats.png")
     plt.close()
-    # Save a text with the pixel information for later inspection
-    with open(cfg.SOUND_EVENT.experiment_dir + "/image_stats.json", "w") as f:
-        json.dump({"ref": ref, "mean": pixel_mean, "std": pixel_std}, f)
     return cfg

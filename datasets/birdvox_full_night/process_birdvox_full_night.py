@@ -27,7 +27,7 @@ def process_audio_and_annot(annot, audio, sr, train_proportion, val_proportion, 
   
   hz_offset = bandwidth_hz / 2 
   low_freq = list(np.maximum(0, np.array(annot['Freq (Hz)'] - hz_offset)))
-  high_freq = list(np.array(annot['Time (s)'] + hz_offset))
+  high_freq = list(np.array(annot['Freq (Hz)'] + hz_offset))
 
   annotation = ['voc' for _ in begin_time]
   selection_table = pd.DataFrame({'Begin Time (s)' : begin_time, 'End Time (s)' : end_time, 'Annotation' : annotation, 'Low Freq (Hz)' : low_freq, 'High Freq (Hz)' : high_freq})
@@ -129,6 +129,12 @@ def main():
     test_audio_fp = os.path.join(formatted_audio_dir, test_audio_fn)
     sf.write(test_audio_fp, test_audio, sr)
     test_audio_fps.append(test_audio_fp)
+
+    # Clear variables to free memory
+    audio = None
+    test_audio = None
+    val_audio = None
+    train_audio = None
   
   train_info_df = pd.DataFrame({'fn' : train_fns, 'audio_fp' : train_audio_fps, 'selection_table_fp' : train_annot_fps})
   train_info_fp = os.path.join(formatted_data_dir, 'train_info.csv')
