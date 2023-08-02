@@ -255,10 +255,11 @@ def create_collate_fn(cfg, dataset):
         return D
     return collate_fn
 
-def collect_dataset_statistics(cfg, n_train_samples=2000):
+def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=3):
     """Determine data-related config params (regarding spectrogram and boxes), adapted to training set """
+    
     #Get the minimum of the power spectrogram to determine the spectrogram reference value
-    print(f"Setting vals in CFG based on {n_train_samples} samples from train set")
+    print(f"~~~ Setting cfg values based on {n_train_samples} samples from train set.")
     train_info_df = pd.read_csv(cfg.SOUND_EVENT.train_info_fp)
     dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, collect_statistics=True)
     min_val = []
@@ -268,44 +269,66 @@ def collect_dataset_statistics(cfg, n_train_samples=2000):
     ref = min(min_val) * 0.1
     print("Using spectrogram ref=",  ref)
     cfg.SPECTROGRAM.REF = ref
-    #Having defined the spectrogram reference value, obtain the pixels and box statistics
+
+    #Having defined the spectrogram reference value, obtain the pixels
     dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, collect_statistics=False)
-    images = []; box_info = []
-    warnings.warn("Function to set anchor generators needs discussion. If this code does not find any boxes, try setting --omit-empty-clip-prob higher")
-    while len(box_info) < n_train_samples:
+    images = []; box_info = []; random_idxs = np.random.permutation(len(dataset))[:n_train_samples]
+    for example_idx in random_idxs:
         r = dataset[example_idx]
         images.append(r["image"][0, :, :])
+    #Define the pixel mean and standard deviation based on the training samples
+    pixel_mean = torch.mean(torch.stack(images)).item()
+    pixel_std = torch.mean(torch.std(torch.stack(images,dim=0),dim=[1,2])).item()
+    print(f"Pixel mean: {pixel_mean}, Pixel std: {pixel_std}")
+    print(f"(Does not affect cfg) Pixel max: {torch.stack(images).max().item()}, Pixel min: {torch.stack(images).min().item()}")
+    cfg.MODEL.PIXEL_MEAN[0] = pixel_mean
+    cfg.MODEL.PIXEL_STD[0] = pixel_std
+
+    #Finally collect boxes to compute box statistics
+    omit_empty_cfg = cfg.clone() #Do not change original config
+    omit_empty_cfg.SOUND_EVENT.omit_empty_clip_prob = 1.
+    dataset = DetectronDataset(omit_empty_cfg, train_info_df, True, omit_empty_cfg.SOUND_EVENT, collect_statistics=False)
+    box_info = []; example_idx = 0; random_idxs = np.random.permutation(len(dataset))
+    while (len(box_info) < n_train_samples) and (example_idx < len(dataset)):
+        r = dataset[random_idxs[example_idx]]
         for box in r["instances"].gt_boxes:
             width = (box[2] - box[0]).item()
             height = (box[3] - box[1]).item()
             box_size = np.sqrt(width*height)
             aspect_ratio = height/width
             box_info.append((box_size, aspect_ratio))
-    #Define the pixel mean and standard deviation based on the training samples
-    pixel_mean = torch.mean(torch.stack(images)).item()
-    pixel_std = torch.mean(torch.std(torch.stack(images,dim=0),dim=[1,2])).item()
-    print("Mean: ", pixel_mean)
-    print("Std: ", pixel_std)
-    cfg.MODEL.PIXEL_MEAN[0] = pixel_mean
-    cfg.MODEL.PIXEL_STD[0] = pixel_std
+        example_idx += 1
+        if example_idx > box_search_multiplier*n_train_samples:
+            print(f"In {box_search_multiplier*n_train_samples} datapoints, could only find {len(box_info)} boxes < {n_train_samples}")
+            break
+
     #Determine and define a set of anchor parameters from the box statistics
-    #TODO (high priority): Discuss with Ben- I'm not sure this is actually a good way to set anchor generators, I'm a bit confused about how they are defined
-    #For example, this has different sizes for different feature maps https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/configs/Base-RCNN-FPN.yaml
-    #See RPN discussion here: https://medium.com/@hirotoschwert/digging-into-detectron-2-part-4-3d1436f91266
-    #When this code happens to choose only a single box size, it leads to INF in loss_rpn_loc very quickly
-    #Something like birdvox_full_night has very small boxes, using the defaults with pretrained weights (see params.py) actually led to lower loss_rpn_loc to start out with. 
-    box_sizes = np.array(box_info) #n_boxes, 2
-    box_size_quartiles = np.round(np.quantile(box_sizes[:,0], [0.05, 0.25,0.5,0.75, 0.95])).astype(int)
-    print("Box size 5/25/50/75/95 quantiles: ", box_size_quartiles)
-    box_size_quartiles = np.unique(box_size_quartiles)
-    aspect_ratio_quartiles = np.round(10**np.quantile(np.log10(box_sizes[:,1]), [0.05, 0.25,0.5,0.75, 0.95]),decimals=3)
-    print("Aspect ratio 5/25/50/75/95 quantiles: ", aspect_ratio_quartiles)
-    aspect_ratio_quartiles = np.unique(aspect_ratio_quartiles)
-    cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[int(l) for l in list(box_size_quartiles)]]
-    cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[float(l) for l in list(aspect_ratio_quartiles)]]
-    # Save a picture of the box statistic distribution for later inspection
-    df = pd.DataFrame({"Size": box_sizes[:,0], "Log10(Aspect ratio)": np.log10(box_sizes[:,1])})
-    sns.jointplot(x="Size", y="Log10(Aspect ratio)", data=df)
-    plt.savefig(cfg.SOUND_EVENT.experiment_dir + "/box_stats.png")
-    plt.close()
+    if len(box_info) > 0:
+        print("Total boxes found: ", len(box_info))
+        box_sizes = np.array(box_info) #n_boxes, 2
+        # Compute quantiles of box stats
+        qs = [0.05, 0.25, 0.5, 0.75, 0.95] if len(cfg.MODEL.RPN.IN_FEATURES) == 1 else np.linspace(0.05, 0.95, len(cfg.MODEL.RPN.IN_FEATURES))
+        box_size_quantiles = np.round(np.quantile(box_sizes[:,0], qs)).astype(int)
+        aspect_ratio_quantiles = np.round(10**np.quantile(np.log10(box_sizes[:,1]), [0.05, 0.25,0.5,0.75, 0.95]),decimals=3)
+        print(f"Box size {qs} quantiles: ", box_size_quantiles)
+        print(f"Aspect ratio {qs} quantiles: ", aspect_ratio_quantiles)
+        if (len(np.unique(box_size_quantiles)) == 1) or (len(np.unique(aspect_ratio_quantiles)) == 1):
+            warnings.warn("Single size or aspect ratio may cause issues for loss_rpn_loc.")
+        # Set config to box stats
+        cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[float(l) for l in list(np.unique(aspect_ratio_quantiles))]]
+        import pdb; pdb.set_trace()
+        if len(cfg.MODEL.RPN.IN_FEATURES) == 1: 
+            box_size_quantiles = np.unique(box_size_quantiles)
+            cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[int(l) for l in list(box_size_quantiles)]]
+        else:
+            cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[int(l)] for l in list(box_size_quantiles)]
+        # Save a picture of the box statistic distribution for later inspection
+        df = pd.DataFrame({"Size": box_sizes[:,0], "Log10(Aspect ratio)": np.log10(box_sizes[:,1])})
+        sns.jointplot(x="Size", y="Log10(Aspect ratio)", data=df)
+        plt.savefig(cfg.SOUND_EVENT.experiment_dir + "/box_stats.png")
+        plt.close()
+    else: 
+        print(f"No boxes found, using cfg instead. Sizes: {cfg.MODEL.ANCHOR_GENERATOR.SIZES}, Aspect Ratios: {cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS}")
+
+    print("~~~~")
     return cfg
