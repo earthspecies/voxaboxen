@@ -29,12 +29,18 @@ def get_full_cfg(sound_event_args, detectron_args):
     cfg.SPECTROGRAM.CEIL_THRESHOLD = 300.0
     # New Sound Event node
     cfg.SOUND_EVENT = CN(vars(sound_event_args))
+    # New Evaluation node
+    cfg.SOUND_EVENT.EVAL = CN()
+    cfg.SOUND_EVENT.EVAL.TIME_BASED_NMS = False
+    cfg.SOUND_EVENT.EVAL.IGNORE_INTERCLASS_IOU = False
 
     ## Some relevant detectron settings
     cfg.DATALOADER.NUM_WORKERS = -1 # Redundant with usual sound_event_detection args
     cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS = True # Redundant, will instead use value of --omit-empty-clip-prob
     
-    cfg._BASE_ = model_zoo.get_config_file("./Base-RCNN-FPN.yaml")
+    # TODO (high priority): Figure out how to properly set the base config
+    #cfg._BASE_ = model_zoo.get_config_file(detectron_args.detectron_base_config)
+    #cfg.merge_from_file(model_zoo.get_config_file(detectron_args.detectron_base_config))
     cfg.MODEL.WEIGHTS = "detectron2://ImageNetPretrained/MSRA/R-50.pkl" # See https://github.com/facebookresearch/detectron2/blob/main/MODEL_ZOO.md to choose models
     cfg.MODEL.DEVICE = "cuda"
     cfg.MODEL.MASK_ON = False #We do not use any masks, only bounding boxes.
@@ -42,8 +48,8 @@ def get_full_cfg(sound_event_args, detectron_args):
     cfg.MODEL.PIXEL_STD = [-1, 1.0, 1.0]  # First element will be automatically updated based on train set statistics
     cfg.MODEL.BACKBONE.FREEZE_AT = 0 #For audio, we may want to retrain earliest layers?
     
-    cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[4,10,20,100]] # Will be automatically updated based on train set statistics 
-    cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[0.06,0.1,1.0,5.0]] # Will be automatically updated based on train set statistics 
+    cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[4,20,100]] # Will be automatically updated based on train set statistics 
+    cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[0.1,1.0,5.0]] # Will be automatically updated based on train set statistics 
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES= 0 #Will be automatically set to correct number of classes based on project config
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST= 0.05 #See https://github.com/facebookresearch/detectron2/blob/main/detectron2/config/defaults.py
@@ -65,7 +71,6 @@ def get_full_cfg(sound_event_args, detectron_args):
     cfg.SOLVER.MAX_ITER = 100000
 
     # Add in Detectron custom parameters, either by config file or by command line list
-    # Since we set _BASE_ above, do not need defaults: cfg.merge_from_file(model_zoo.get_config_file("./Base-RCNN-FPN.yaml"))
     if detectron_args.detectron_config_fp is not None:
         cfg.merge_from_file(detectron_args.detectron_config_fp)
     if detectron_args.opts is not None:
@@ -95,6 +100,7 @@ def parse_args(args):
     parser = argparse.ArgumentParser()
   
     # General
+    parser.add_argument('--detectron-base-config', type = str, default="./Base-RCNN-FPN.yaml", help="Base config that will be merged in early.")
     parser.add_argument('--detectron-config-fp', type = str, required=False, help="If you prefer to indicate a config file for your custom detectron args, use this to point to the custom file.")
     # From https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/detectron2/engine/defaults.py#L134
     # For how to use opts, see https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/docs/tutorials/configs.md

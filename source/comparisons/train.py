@@ -9,6 +9,7 @@ from glob import glob
 #Import custom code
 from source.comparisons.dataloaders import SoundEventTrainer
 from source.comparisons.params import get_full_cfg, parse_args
+from source.comparisons.evaluate import run_evaluation
 from source.training.train import train
 import source.training.params as aves_params
 
@@ -42,9 +43,13 @@ def train(args):
     print("Let's train~", flush=True)
     trainer.train()
 
-    # ~~~~ Evaluate on test set
-    # cfg.SOUND_EVENT.experiment_dir + "/all_params.yaml"
-    # TODO (high priority) automatically call evaluate.py
+    # ~~~~ Evaluate on val and test set
+    if cfg.SOUND_EVENT.val_info_fp is not None:
+        print("Running evaluation on val set",flush=True)
+        run_evaluation(trainer.model, cfg.SOUND_EVENT.val_info_fp, cfg, "val_results")
+    if cfg.SOUND_EVENT.test_info_fp is not None:
+        print("Running evaluation on test set",flush=True)
+        run_evaluation(trainer.model, cfg.SOUND_EVENT.test_info_fp, cfg, "test_results")
 
 if __name__ == "__main__":
     train(sys.argv[1:])
