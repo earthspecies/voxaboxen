@@ -255,7 +255,7 @@ def create_collate_fn(cfg, dataset):
         return D
     return collate_fn
 
-def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=3):
+def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=3, use_box_statistics=False):
     """Determine data-related config params (regarding spectrogram and boxes), adapted to training set """
     
     #Get the minimum of the power spectrogram to determine the spectrogram reference value
@@ -289,21 +289,22 @@ def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=
     omit_empty_cfg.SOUND_EVENT.omit_empty_clip_prob = 1.
     dataset = DetectronDataset(omit_empty_cfg, train_info_df, True, omit_empty_cfg.SOUND_EVENT, collect_statistics=False)
     box_info = []; example_idx = 0; random_idxs = np.random.permutation(len(dataset))
-    while (len(box_info) < n_train_samples) and (example_idx < len(dataset)):
-        r = dataset[random_idxs[example_idx]]
-        for box in r["instances"].gt_boxes:
-            width = (box[2] - box[0]).item()
-            height = (box[3] - box[1]).item()
-            box_size = np.sqrt(width*height)
-            aspect_ratio = height/width
-            box_info.append((box_size, aspect_ratio))
-        example_idx += 1
-        if example_idx > box_search_multiplier*n_train_samples:
-            print(f"In {box_search_multiplier*n_train_samples} datapoints, could only find {len(box_info)} boxes < {n_train_samples}")
-            break
+    if use_box_statistics:
+        while (len(box_info) < n_train_samples) and (example_idx < len(dataset)):
+            r = dataset[random_idxs[example_idx]]
+            for box in r["instances"].gt_boxes:
+                width = (box[2] - box[0]).item()
+                height = (box[3] - box[1]).item()
+                box_size = np.sqrt(width*height)
+                aspect_ratio = height/width
+                box_info.append((box_size, aspect_ratio))
+            example_idx += 1
+            if example_idx > box_search_multiplier*n_train_samples:
+                print(f"In {box_search_multiplier*n_train_samples} datapoints, could only find {len(box_info)} boxes < {n_train_samples}")
+                break
 
     #Determine and define a set of anchor parameters from the box statistics
-    if len(box_info) > 0:
+    if len(box_info) > 0 and use_box_statistics:
         print("Total boxes found: ", len(box_info))
         box_sizes = np.array(box_info) #n_boxes, 2
         # Compute quantiles of box stats
@@ -327,8 +328,9 @@ def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=
         sns.jointplot(x="Size", y="Log10(Aspect ratio)", data=df)
         plt.savefig(cfg.SOUND_EVENT.experiment_dir + "/box_stats.png")
         plt.close()
+        print(f"Using Box Sizes: {cfg.MODEL.ANCHOR_GENERATOR.SIZES}, Aspect Ratios: {cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS}")
     else: 
-        print(f"No boxes found, using cfg instead. Sizes: {cfg.MODEL.ANCHOR_GENERATOR.SIZES}, Aspect Ratios: {cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS}")
+        print(f"No boxes, using cfg instead. Sizes: {cfg.MODEL.ANCHOR_GENERATOR.SIZES}, Aspect Ratios: {cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS}")
 
     print("~~~~")
     return cfg
