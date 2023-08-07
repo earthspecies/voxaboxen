@@ -12,7 +12,7 @@ For evaluation/inference only:
 ```
 cd source/comparisons
 python evaluate.py --file-info-for-inference=/home/jupyter/sound_event_detection/datasets/synthetic/formatted/train_info.csv --full-param-fp=/home/jupyter/sound_event_detection/projects/synthetic/debug01/all_params.yaml --results-folder-name=train_results
-``
+```
 Also see other options inside `evaluate.py`.
 
 ## Explanation of detectron params for training script
