@@ -310,14 +310,14 @@ def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=
         # Compute quantiles of box stats
         qs = [0.05, 0.25, 0.5, 0.75, 0.95] if len(cfg.MODEL.RPN.IN_FEATURES) == 1 else np.linspace(0.05, 0.95, len(cfg.MODEL.RPN.IN_FEATURES))
         box_size_quantiles = np.round(np.quantile(box_sizes[:,0], qs)).astype(int)
-        aspect_ratio_quantiles = np.round(10**np.quantile(np.log10(box_sizes[:,1]), [0.05, 0.25,0.5,0.75, 0.95]),decimals=3)
+        aspect_ratio_quantiles = np.round(10**np.quantile(np.log10(box_sizes[:,1]), [0.125,0.5,0.875]),decimals=3)
         print(f"Box size {qs} quantiles: ", box_size_quantiles)
         print(f"Aspect ratio {qs} quantiles: ", aspect_ratio_quantiles)
         if (len(np.unique(box_size_quantiles)) == 1) or (len(np.unique(aspect_ratio_quantiles)) == 1):
             warnings.warn("Single size or aspect ratio may cause issues for loss_rpn_loc.")
         # Set config to box stats
         cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[float(l) for l in list(np.unique(aspect_ratio_quantiles))]]
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         if len(cfg.MODEL.RPN.IN_FEATURES) == 1: 
             box_size_quantiles = np.unique(box_size_quantiles)
             cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[int(l) for l in list(box_size_quantiles)]]

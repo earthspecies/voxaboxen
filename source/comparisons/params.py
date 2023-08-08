@@ -54,7 +54,7 @@ def get_full_cfg(sound_event_args, detectron_args):
     # cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[0.1,1.0,5.0]] # Will be automatically updated based on train set statistics 
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES= 0 #Will be automatically set to correct number of classes based on project config
-    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST= 0.80 #See https://github.com/facebookresearch/detectron2/blob/main/detectron2/config/defaults.py
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST= 0.05 #See https://github.com/facebookresearch/detectron2/blob/main/detectron2/config/defaults.py
     cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST= 0.5
     
     #For audio, do not have resizing or flipping
