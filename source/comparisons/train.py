@@ -41,9 +41,14 @@ def train(args):
     trainer = SoundEventTrainer(cfg)
     trainer.resume_or_load(resume=resume) 
     print("Let's train~", flush=True)
-    trainer.train()
+    try:
+        trainer.train()
+    except StopIteration:
+        print("Reached stop iteration. Training complete.")
 
     # ~~~~ Evaluate on val and test set
+    print("Running evaluation on train set",flush=True)
+    run_evaluation(trainer.model, cfg.SOUND_EVENT.train_info_fp, cfg, "train_results")
     if cfg.SOUND_EVENT.val_info_fp is not None:
         print("Running evaluation on val set",flush=True)
         run_evaluation(trainer.model, cfg.SOUND_EVENT.val_info_fp, cfg, "val_results")

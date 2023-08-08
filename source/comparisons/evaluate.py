@@ -15,7 +15,7 @@ from detectron2.config import CfgNode
 from detectron2.modeling import build_model
 from torchvision.ops import boxes as box_ops
 
-from source.comparisons.dataloaders import DetectronSingleClipDataset
+from source.comparisons.dataloaders import DetectronSingleClipDataset, SoundEventTrainer
 from source.evaluation.evaluation import bbox2raven, write_tsv, evaluate_based_on_manifest
 from source.comparisons.nms import nms
 
@@ -27,11 +27,13 @@ def evaluate_from_cfg(args):
     cfg = CfgNode(init_dict=CfgNode.load_yaml_with_base(args.full_param_fp))
     list_of_weights = glob(cfg.OUTPUT_DIR + "/*.pth")
     cfg.MODEL.WEIGHTS = max(list_of_weights, key=os.path.getctime) 
+    print("Loading ", cfg.MODEL.WEIGHTS)
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = if_not_none(args.score_threshold_test, cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST)
     cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = if_not_none(args.nms_thresh_test, cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
-    cfg.MODEL.SOUND_EVENT.EVAL.IGNORE_INTERCLASS_IOU = if_not_none(args.ignore_interclass_iou, cfg.SOUND_EVENT.EVAL.IGNORE_INTERCLASS_IOU)
-    cfg.MODEL.SOUND_EVENT.EVAL.TIME_BASED_NMS = if_not_none(args.time_based_nms, cfg.SOUND_EVENT.EVAL.TIME_BASED_NMS)
+    cfg.SOUND_EVENT.EVAL.IGNORE_INTERCLASS_IOU = if_not_none(args.ignore_interclass_iou, cfg.SOUND_EVENT.EVAL.IGNORE_INTERCLASS_IOU)
+    cfg.SOUND_EVENT.EVAL.TIME_BASED_NMS = if_not_none(args.time_based_nms, cfg.SOUND_EVENT.EVAL.TIME_BASED_NMS)
     model = build_model(cfg)
+    model.load_state_dict(torch.load(cfg.MODEL.WEIGHTS)["model"])
     run_evaluation(model, args.file_info_for_inference, cfg, args.results_folder_name)
     
 def run_evaluation(model, inference_fp, cfg, results_folder_name):
@@ -47,6 +49,9 @@ def run_evaluation(model, inference_fp, cfg, results_folder_name):
 
     target_fps = []
     files_to_infer = pd.read_csv(inference_fp)
+    if len(files_to_infer) == 0:
+        print(f"No sound files specified in {inference_fp}")
+        return 
     for row_idx, row in tqdm(files_to_infer.iterrows(),total=len(files_to_infer)):
         audio_fp = row['audio_fp']
         fn = row['fn']
@@ -126,24 +131,31 @@ def generate_predictions(model, dataloader):
             classes.append(instances.pred_classes); len_t.append(n_time_frames)
     return boxes, scores, classes, len_t
 
-def remove_edge_boxes(boxes, scores, classes, len_t, dataloader):
+def remove_edge_boxes(list_boxes, list_scores, list_classes, list_len_t, dataloader):
     """ Get rid of boxes which are on the edges of clips
         We use half-overlapping windows, must merge across crops of the sound 
         TODO Could potentially be more careful, e.g. https://github.com/ultralytics/yolov5/issues/11821
     """
     events_without_edges = []; boxes_without_edges = []; scores_without_edges = []; classes_without_edges = []
-    for clip_idx, (boxes, scores, classes, n_time_bins) in enumerate(zip(boxes, scores, classes, len_t)):
+    n_time_bins = list_len_t[0]
+    first_quarter = n_time_bins//4
+    last_quarter = n_time_bins - (n_time_bins//2 - first_quarter)
+    for clip_idx in range(len(dataloader.dataset)):
         # Compare https://github.com/earthspecies/sound_event_detection/blob/40817cff603d035ba328c49a8b654b7e6171eb3d/source/evaluation/evaluation.py#L141
+        boxes = list_boxes[clip_idx]
+        scores = list_scores[clip_idx]
+        classes = list_classes[clip_idx]
+        n_time_bins = list_len_t[clip_idx]
         if len(boxes) == 0:
             continue
         xmin = boxes.tensor[:, 0].cpu()
-        if clip_idx == 0 and len(boxes) == 1:
-            include_boxes = xmin >= 0
-        elif clip_idx == 0 and len(boxes) > 1:
-            first_quarter = n_time_bins//4
-            last_quarter = n_time_bins - (n_time_bins//2 - first_quarter)
-            include_boxes = xmin < last_quarter                
-        elif clip_idx == len(boxes) - 1:
+        if clip_idx == 0:
+            if len(dataloader.dataset) > 1:
+                include_boxes = xmin < last_quarter
+            else:
+                # Include all boxes in first clip, if there's only one clip for this sound.
+                include_boxes = xmin > 0           
+        elif clip_idx == len(dataloader.dataset) - 1:
             include_boxes = xmin >= first_quarter
         else:
             include_boxes = (xmin < last_quarter) * (xmin >= first_quarter)

@@ -38,25 +38,25 @@ def get_full_cfg(sound_event_args, detectron_args):
     cfg.DATALOADER.NUM_WORKERS = -1 # Redundant with usual sound_event_detection args
     cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS = True # Redundant, will instead use value of --omit-empty-clip-prob
     
-    # TODO (high priority): Figure out how to properly set the base config
-    #cfg._BASE_ = model_zoo.get_config_file(detectron_args.detectron_base_config)
-    #cfg.merge_from_file(model_zoo.get_config_file(detectron_args.detectron_base_config))
-    cfg.MODEL.WEIGHTS = "detectron2://ImageNetPretrained/MSRA/R-50.pkl" # See https://github.com/facebookresearch/detectron2/blob/main/MODEL_ZOO.md to choose models
+    # See https://github.com/facebookresearch/detectron2/blob/main/MODEL_ZOO.md to choose models
+    # These config files often have pre-trained weights included. To train from scratch, use `--opts MODEL.WEIGHTS ""`
+    cfg.merge_from_file(model_zoo.get_config_file(detectron_args.detectron_base_config))
     cfg.MODEL.DEVICE = "cuda"
     cfg.MODEL.MASK_ON = False #We do not use any masks, only bounding boxes.
     cfg.MODEL.PIXEL_MEAN = [-1, 0.0, 0.0] # First element will be automatically updated based on train set statistics
     cfg.MODEL.PIXEL_STD = [-1, 1.0, 1.0]  # First element will be automatically updated based on train set statistics
     cfg.MODEL.BACKBONE.FREEZE_AT = 0 #For audio, we may want to retrain earliest layers?
     
-    cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[4,20,100]] # Will be automatically updated based on train set statistics 
-    cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[0.1,1.0,5.0]] # Will be automatically updated based on train set statistics 
+    ## If you want these ANCHOR_GENERATOR.SIZES and ANCHOR_GENERATOR.ASPECT_RATIOS to be different than in detectron_base_config, then:
+    # 1. You can try automatic setting with --detectron-use-box-statistics (may not be stable if boxes are small)
+    # 2. Or, use --detectron-config-fp for specifying them (rather than command line - see parse_args)
+    # cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[4,20,100]] # Will be automatically updated based on train set statistics 
+    # cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[0.1,1.0,5.0]] # Will be automatically updated based on train set statistics 
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES= 0 #Will be automatically set to correct number of classes based on project config
-    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST= 0.05 #See https://github.com/facebookresearch/detectron2/blob/main/detectron2/config/defaults.py
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST= 0.80 #See https://github.com/facebookresearch/detectron2/blob/main/detectron2/config/defaults.py
     cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST= 0.5
     
-    cfg.MODEL.RESNETS.DEPTH = 50 #Fits with default cfg.MODEL.WEIGHTS
-
     #For audio, do not have resizing or flipping
     cfg.INPUT.RANDOM_FLIP = "none"
     cfg.INPUT.MIN_SIZE_TRAIN = (0,) #Set to zero if no resizing. https://github.com/facebookresearch/detectron2/blob/dc4897d4d2ca1df7b922720186e481ccc7ba36a6/detectron2/data/transforms/augmentation_impl.py#L158
@@ -83,7 +83,7 @@ def get_full_cfg(sound_event_args, detectron_args):
     cfg.DATASETS.TEST = (sound_event_args.val_info_fp,)
 
     # Update detectron params based on dataset
-    collect_dataset_statistics(cfg); 
+    collect_dataset_statistics(cfg, use_box_statistics=detectron_args.detectron_use_box_statistics); 
     
     # Save a copy of all parameters
     save_all_params(cfg)
@@ -100,7 +100,10 @@ def parse_args(args):
     parser = argparse.ArgumentParser()
   
     # General
-    parser.add_argument('--detectron-base-config', type = str, default="./Base-RCNN-FPN.yaml", help="Base config that will be merged in early.")
+    # To see available: https://github.com/facebookresearch/detectron2/tree/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/configs
+    parser.add_argument('--detectron-base-config', type = str, default="./COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml", help="Base config that will be merged in early.")
+    parser.add_argument('--detectron-use-box-statistics', action="store_true", help="Whether to decide anchor sizes and aspect ratio based on statistics of boxes in training set.")
+    # If you want to change cfg.MODEL.ANCHOR_GENERATOR.SIZES or cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS, recommend to use --detectron-config-fp instead of --ops (hard to specify list of lists as PATH.KEY value pairs in command line.)
     parser.add_argument('--detectron-config-fp', type = str, required=False, help="If you prefer to indicate a config file for your custom detectron args, use this to point to the custom file.")
     # From https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/detectron2/engine/defaults.py#L134
     # For how to use opts, see https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/docs/tutorials/configs.md
