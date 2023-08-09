@@ -28,7 +28,7 @@ def train_model(args):
   model = DetectionModel(args)
   
   ## Training
-  trained_model = train(model, args)  
+  trained_model = train(model, args) 
   
   ## Evaluation
   test_dataloader = get_test_dataloader(args)

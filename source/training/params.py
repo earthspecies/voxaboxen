@@ -53,7 +53,11 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--mixup', action ="store_true", help="Whether to use mixup augmentation") 
   
   # Inference
-  parser.add_argument('--peak-distance', type=float, default=10, help="for finding peaks in detection probability, what radius to use for detecting local maxima. In output frame rate.")
+  parser.add_argument('--peak-distance', type=float, default=5, help="for finding peaks in detection probability, what radius to use for detecting local maxima. In output frame rate.")
+  parser.add_argument('--nms', type = str, default='soft_nms', choices = ['none', 'nms', 'soft_nms'], help="Whether to apply additional nms after finding peaks")
+  parser.add_argument('--soft-nms-sigma', type = float, default = 0.5)
+  parser.add_argument('--soft-nms-thresh', type = float, default = 0.001)
+  parser.add_argument('--nms-thresh', type = float, default = 0.5)
   
   if allow_unknown:
     args, remaining = parser.parse_known_args(args)

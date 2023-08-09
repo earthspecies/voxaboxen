@@ -11,6 +11,7 @@ import pandas as pd
 
 from source.evaluation.raven_utils import Clip
 from source.model.model import rms_and_mixup
+from source.evaluation.nms import nms, soft_nms
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -69,8 +70,8 @@ def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs, unkn
     unknown_label: str
 
     '''
-    if bboxes is None:
-      return [['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']]
+    # if bboxes is None:
+    #   return [['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']]
 
     columns = ['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']
     
@@ -240,13 +241,18 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
   durations = np.array(durations)
   class_idxs = np.array(class_idxs)
   class_probs = np.array(class_probs)
-    
-  if verbose:
-    print(f"Peaks found {len(detection_peaks)} boxes")
   
   pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
   
   bboxes, detection_probs, class_idxs, class_probs = pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_probs, pred_sr)
+  
+  if args.nms == "soft_nms":
+    bboxes, detection_probs, class_idxs, class_probs = soft_nms(bboxes, detection_probs, class_idxs, class_probs, sigma = args.soft_nms_sigma, thresh = args.detection_threshold)
+  elif args.nms == "nms":
+    bboxes, detection_probs, class_idxs, class_probs = nms(bboxes, detection_probs, class_idxs, class_probs, iou_thresh = args.nms_thresh)
+  
+  if verbose:
+    print(f"Found {len(detection_probs)} boxes")
   
   target_fp = os.path.join(target_dir, f"peaks_pred_{fn}.txt")
     
