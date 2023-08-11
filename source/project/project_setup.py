@@ -30,6 +30,9 @@ def project_setup(args):
   label_mapping['Unknown'] = 'Unknown'
   unknown_label = 'Unknown'
   
+  if unknown_label in label_set:
+    label_set.remove(unknown_label)
+  
   setattr(args, "label_set", label_set)
   setattr(args, "label_mapping", label_mapping)
   setattr(args, "unknown_label", unknown_label)
