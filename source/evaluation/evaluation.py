@@ -70,8 +70,8 @@ def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs, unkn
     unknown_label: str
 
     '''
-    # if bboxes is None:
-    #   return [['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']]
+    if bboxes is None:
+      return [['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']]
 
     columns = ['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']
     

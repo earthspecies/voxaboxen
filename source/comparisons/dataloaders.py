@@ -259,10 +259,12 @@ def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=
     """Determine data-related config params (regarding spectrogram and boxes), adapted to training set """
     
     #Get the minimum of the power spectrogram to determine the spectrogram reference value
-    print(f"~~~ Setting cfg values based on {n_train_samples} samples from train set.")
     train_info_df = pd.read_csv(cfg.SOUND_EVENT.train_info_fp)
     dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, collect_statistics=True)
     min_val = []
+    n_train_samples = min(n_train_samples, len(dataset))
+    print(f"~~~ Setting cfg values based on {n_train_samples} samples from train set.")
+
     for example_idx in range(n_train_samples):
         p = dataset[example_idx]["power"]
         min_val.append(p[p>0].min().item())
