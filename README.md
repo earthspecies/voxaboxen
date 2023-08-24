@@ -20,11 +20,11 @@ Process data into correct format:
 
 Project setup:
 
-`python main.py project-setup --train-info-fp=/home/jupyter/sound_event_detection/datasets/MT/formatted/train_info.csv --val-info-fp=/home/jupyter/sound_event_detection/datasets/MT/formatted/val_info.csv --test-info-fp=/home/jupyter/sound_event_detection/datasets/birdvox_full_night/formatted/test_info.csv --project-dir=/home/jupyter/sound_event_detection/projects/MT_experiment`
+`python main.py project-setup --train-info-fp=datasets/MT/formatted/train_info.csv --val-info-fp=datasets/MT/formatted/val_info.csv --test-info-fp=datasets/MT/formatted/test_info.csv --project-dir=projects/MT_experiment`
 
 Train model:
 
-`python main.py train-model --project-config-fp=/home/jupyter/sound_event_detection/projects/MT_experiment/project_config.yaml --name=demo --lr=.00005 --batch-size=4`
+`python main.py train-model --project-config-fp=projects/MT_experiment/project_config.yaml --name=demo --lr=.00005 --batch-size=4`
 
 ## Editing Project Config
 
