@@ -1,6 +1,6 @@
-# AVESDetect
+# Voxaboxen
 
-AVESDetect is a deep learning framework designed to find the start and stop times of (possibly overlapping) sound events in a recording. We designed it with bioacoustics applications in mind, so it accepts annotations in the form of [Raven](https://ravensoundsoftware.com/software/raven-lite/) selection tables. 
+Voxaboxen is a deep learning framework designed to find the start and stop times of (possibly overlapping) sound events in a recording. We designed it with bioacoustics applications in mind, so it accepts annotations in the form of [Raven](https://ravensoundsoftware.com/software/raven-lite/) selection tables. 
 
 ![19_AL_Naranja_1025](https://github.com/earthspecies/sound_event_detection/assets/72874445/dcf9061b-870a-4697-a4e0-96cc35b56edf)
 
@@ -32,8 +32,12 @@ After running `python main.py project-setup`, a `project_config.yaml` file will 
 
 1. `label_set`: This is a list of all the label types that a model will be able to output. It is automatically populated with all the label types that appear in the `Annotation` column of the selection table. If you want your model to ignore a particular label type, perhaps because there are few events with that label type, you must delete that label type from this list.
 
-2. `label_mapping`: This is a set of `key: value` pairs. Often, it is useful to group multiple types of labels into one. For example, maybe in your data there are multiple species from the same family, and you would like the model to treat this entire family with one label type. Upon training, AVESDetect converts each annotation that appears as a `key` into the label specified by the corresponding `value`. When modifying `label_mapping`, you should ensure that each `value` that appears in `label_mapping` either also appears in `label_set`, or is the `unknown_label`.
+2. `label_mapping`: This is a set of `key: value` pairs. Often, it is useful to group multiple types of labels into one. For example, maybe in your data there are multiple species from the same family, and you would like the model to treat this entire family with one label type. Upon training, Voxaboxen converts each annotation that appears as a `key` into the label specified by the corresponding `value`. When modifying `label_mapping`, you should ensure that each `value` that appears in `label_mapping` either also appears in `label_set`, or is the `unknown_label`.
 
 3. `unknown_label`: This is set to `Unknown` by default. Any sound event labeled with the `unknown_label` will be treated as an event of interest, but the label type of the event will be treated as unknown. This may be desireable when there are vocalizations that are clearly audible, but are difficult for an annotator to identify to species. When the model is trained, it learns to predict a uniform distribution across possible label types whenever it encounters an event with the `unknown_label`. When the model is evaluated, it is not penalized for predicting the label of events which are annotated with the `unknown_label`. The `unknown_label` should not appear in the `label_set`.
 
 For example, say you annotate your audio with the labels Red-eyed Vireo `REVI`, Philidelphia Vireo`PHVI`, and Unsure `REVI/PHVI`. To reflect your uncertainty about `REVI/PHVI`, your `label_set` would include `REVI` and `PHVI`, and your `label_mapping` would include the pairs `REVI: REVI`, `PHVI: PHVI`, and `REVI/PHVI: Unknown`. Alternatively, you could group both types of Vireo together by making your `label_set` only include `Vireo`, and your `label_mapping` include `REVI: Vireo`, `PHVI: Vireo`, `REVI/PHVI: Vireo`.
+
+## The name
+
+Voxaboxen is designed to put a *box* around each vocalization (*vox*). It also rhymes with [Roxaboxen](https://www.thriftbooks.com/w/roxaboxen_alice-mclerran/331707/).
