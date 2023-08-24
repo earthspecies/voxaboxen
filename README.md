@@ -2,7 +2,7 @@
 
 Voxaboxen is a deep learning framework designed to find the start and stop times of (possibly overlapping) sound events in a recording. We designed it with bioacoustics applications in mind, so it accepts annotations in the form of [Raven](https://ravensoundsoftware.com/software/raven-lite/) selection tables. 
 
-![19_AL_Naranja_1025](https://github.com/earthspecies/sound_event_detection/assets/72874445/dcf9061b-870a-4697-a4e0-96cc35b56edf)
+![19_AL_Naranja_1025_detect](https://github.com/earthspecies/voxaboxen/assets/72874445/c69439c8-509b-4732-8d69-3bb38658ec9a)
 
 ## Requirements
 
