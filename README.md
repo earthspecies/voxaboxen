@@ -14,9 +14,7 @@ Get the [Meerkat (MT) dataset](https://zenodo.org/record/6012310). Put the files
 
 Get pretrained weights for AVES, which is the backbone model. (https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt) Put them in `weights`. 
 
-Process data into correct format:
-
-`cd datasets/MT; python process_MT.py; cd .. ; cd ..`
+Process data into correct format: `cd datasets/MT; python process_MT.py`
 
 Project setup:
 
