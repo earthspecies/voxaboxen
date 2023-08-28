@@ -40,10 +40,10 @@ For each of these experiments, we performed a small grid search to choose initia
 
 | Dataset | Taxa | Num vox (train / val / test) | Num classes considered | F1@0.5 IoU Voxaboxen | F1@0.5 IoU Faster-RCNN |
 | ------- | ---- | ---------------------------- | ---------------------- | -------------------- | ---------------------- |
-| BirdVox 10h | *Passeriformes* spp. | 4196 / 1064 / 3763 | 1 | 0.583 | 0.095 |
-| Meerkat | *Suricata suricatta* | 773 / 269 / 252 | 1 | 0.869 | 0.467 |
-| Powdermill | Bird spp. | 6849 / 2537 / 2854 | 10 | 0.447 | 0.250 |
-| Hawaii | Bird spp. | 24385 / 9937 / 18034 | 8 | 0.283 | 0.174 |
+| [BirdVox 10h](https://zenodo.org/record/6482837) | *Passeriformes* spp. | 4196 / 1064 / 3763 | 1 | 0.583 | 0.095 |
+| [Meerkat](https://zenodo.org/record/6482837) | *Suricata suricatta* | 773 / 269 / 252 | 1 | 0.869 | 0.467 |
+| [Powdermill](https://zenodo.org/record/4656848) | Bird spp. | 6849 / 2537 / 2854 | 10 | 0.447 | 0.250 |
+| [Hawaii](https://zenodo.org/record/7078499) | Bird spp. | 24385 / 9937 / 18034 | 8 | 0.283 | 0.174 |
 
 Table 1: Macro-averaged F1 score for each model, dataset pair. To compute these scores, we matched each predicted bounding box with at most one human-annotated bounding box, subject to the condition that the intersection over union (IoU) score of the proposed match was at least 0.5. Two of these datasets (BirdVox 10h and Meerkat) were previously used in the [DCASE few-shot detection task](https://dcase.community/challenge2022/task-few-shot-bioacoustic-event-detection). The code for dataset formatting can be found in [datasets](datasets) and the code for replicating these experiments can be found in [scripts](scripts).
 
