@@ -1,6 +1,8 @@
 # Voxaboxen
 
-Voxaboxen is a deep learning framework designed to find the start and stop times of (possibly overlapping) sound events in a recording. We designed it with bioacoustics applications in mind, so it accepts annotations in the form of [Raven](https://ravensoundsoftware.com/software/raven-lite/) selection tables. 
+Voxaboxen is a deep learning framework designed to find the start and stop times of (possibly overlapping) sound events in a recording. We designed it with bioacoustics applications in mind, so it accepts annotations in the form of [Raven](https://ravensoundsoftware.com/software/raven-lite/) selection tables.
+
+If you use this software in your research, please cite it.
 
 ![19_AL_Naranja_1025_detect](https://github.com/earthspecies/voxaboxen/assets/72874445/c69439c8-509b-4732-8d69-3bb38658ec9a)
 
@@ -27,6 +29,23 @@ Use trained model to infer annotations:
 `python main.py inference --model-args-fp=project/MT_experiment/demo/params.yaml --file-info-for-inference=datasets/MT/formatted/test_info.csv`
 
 We provide a [Colab Notebook](https://colab.research.google.com/drive/1Qr1PQnw_bSUeXbvHSRuP91Pomxh1hfoi?usp=sharing) with more details about this process.
+
+## Evaluation
+
+We trained Voxaboxen on four bioacoustics datasets which represent a variety of animal species and recording conditions. These datasets were chosen because they contain expert annotations of bounding boxes that are precisely aligned with the onsets and offsets of vocalizations. In Table 1 we report the performance of Voxaboxen on a held-out test set from each of these datasets. 
+
+As an informal baseline, we fine tuned an image-based [Faster-RCNN](https://papers.nips.cc/paper_files/paper/2015/file/14bfa6bb14875e45bba028a21ed38046-Paper.pdf) object detection model on each dataset. Adapted from the [Detectron2](https://github.com/facebookresearch/detectron2) code base, these networks were pre-trained with images in the COCO detection task and were fine tuned to detect vocalizations from spectrograms. 
+
+For each of these experiments, we performed a small grid search to choose initial learning rate and batch size. For all four datasets, we found that Voxaboxen outperformed Faster-RCNN. 
+
+| Dataset | Taxa | Num vox (train / val / test) | Num classes considered | F1@0.5 IoU Voxaboxen | F1@0.5 IoU Faster-RCNN |
+| ------- | ---- | ---------------------------- | ---------------------- | -------------------- | ---------------------- |
+| BirdVox 10h | *Passeriformes* spp. | 4196 / 1064 / 3763 | 1 | 0.583 | 0.095 |
+| Meerkat | *Suricata suricatta* | 773 / 269 / 252 | 1 | 0.869 | 0.467 |
+| Powdermill | Bird spp. | 6849 / 2537 / 2854 | 10 | 0.447 | 0.250 |
+| Hawaii | Bird spp. | 24385 / 9937 / 18034 | 8 | 0.283 | 0.174 |
+
+Table 1: Macro-averaged F1 score for each model, dataset pair. To compute these scores, we matched each predicted bounding box with at most one human-annotated bounding box, subject to the condition that the intersection over union (IoU) score of the proposed match was at least 0.5. Two of these datasets (BirdVox 10h and Meerkat) were previously used in the [DCASE few-shot detection task](https://dcase.community/challenge2022/task-few-shot-bioacoustic-event-detection). The code for dataset formatting can be found in [datasets](datasets) and the code for replicating these experiments can be found in [scripts](scripts).
 
 ## Editing Project Config
 
