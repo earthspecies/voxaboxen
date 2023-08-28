@@ -10,11 +10,9 @@ Requires `torch > 2.0` and the corresponding version of torchaudio. Other requir
 
 ## Example usage:
 
-Get the [Meerkat (MT) dataset](https://zenodo.org/record/6012310). Put the files from `MT` in `datasets/MT/raw`. Run the script `process_MT.py`.
+Get the preprocessed [Meerkat (MT) dataset](https://zenodo.org/record/6012310):
 
-Get pretrained weights for AVES, which is the backbone model. (https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt) Put them in `weights`. 
-
-Process data into correct format: `cd datasets/MT; python process_MT.py`
+`cd datasets/MT; wget https://storage.googleapis.com/esp-public-files/voxaboxen-demo/formatted.zip; unzip formatted.zip; wget https://storage.googleapis.com/esp-public-files/voxaboxen-demo/original_readme_and_license.md`
 
 Project setup:
 
@@ -23,6 +21,10 @@ Project setup:
 Train model:
 
 `python main.py train-model --project-config-fp=projects/MT_experiment/project_config.yaml --name=demo --lr=.00005 --batch-size=4`
+
+Use trained model to infer annotations:
+
+`python main.py inference --model-args-fp=project/MT_experiment/demo/params.yaml --file-info-for-inference=datasets/MT/formatted/test_info.csv`
 
 ## Editing Project Config
 
