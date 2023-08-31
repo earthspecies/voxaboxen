@@ -10,7 +10,7 @@ If you use this software in your research, please [cite it](CITATION.cff).
 
 Requires `torch > 2.0` and the corresponding version of torchaudio. Other requirements can be installed with `pip intall -r requirements.txt`.
 
-Before running, you will need to get the pretrained weights for [AVES](https://arxiv.org/abs/2210.14493), which is the backbone model. (https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt) Put them in `weights`. 
+Before running, you will need to get the pretrained weights for [AVES](https://arxiv.org/abs/2210.14493), which is the backbone model (https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt). Put them in `weights`. 
 
 ## Example usage:
 
