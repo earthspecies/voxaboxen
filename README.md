@@ -1,5 +1,7 @@
 # Voxaboxen
 
+[![DOI](https://zenodo.org/badge/617502083.svg)](https://zenodo.org/badge/latestdoi/617502083)
+
 Voxaboxen is a deep learning framework designed to find the start and stop times of (possibly overlapping) sound events in a recording. We designed it with bioacoustics applications in mind, so it accepts annotations in the form of [Raven](https://ravensoundsoftware.com/software/raven-lite/) selection tables.
 
 If you use this software in your research, please [cite it](CITATION.cff).
