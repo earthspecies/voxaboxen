@@ -14,6 +14,20 @@ Requires `torch > 2.0` and the corresponding version of torchaudio. Other requir
 
 Before running, you will need to get the pretrained weights for [AVES](https://arxiv.org/abs/2210.14493), which is the backbone model (https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt). Put them in `weights`. 
 
+## Quick start
+
+After obtaining the requirements, create a `train_info.csv` file with three columns:
+
+- `fn`: Unique filename associated with each audio file
+- `audio_fp`: Filepaths to audio files in train set
+- `selection_table_fp`: Filepath to Raven selection tables
+
+Repeat this for the other folds of your dataset, creating `val_info.csv` and `test_info.csv`. Run project setup and model training following the template in the Example Usage below.
+
+Notes:
+- Audio will be automatically resampled to 16000 Hz mono, no resampling is necessary prior to training.
+- Selection tables are `.tsv` files. We only require the following columns: `Begin Time (s)`, `End Time (s)`, `Annotation`.
+
 ## Example usage:
 
 Get the preprocessed [Meerkat (MT) dataset](https://zenodo.org/record/6012310):
