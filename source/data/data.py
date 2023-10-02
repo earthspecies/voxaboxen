@@ -54,6 +54,10 @@ class DetectionDataset(Dataset):
         self.scale_factor_raw_to_prediction = self.scale_factor*self.prediction_scale_factor
         self.rng = default_rng(seed=self.seed)
         self.train=train
+        if hasattr(args, 'stereo') and args.stereo:
+          self.mono = False
+        else:
+          self.mono = True
         
         if self.train:
           self.omit_empty_clip_prob = args.omit_empty_clip_prob
@@ -106,7 +110,7 @@ class DetectionDataset(Dataset):
             fn = row['fn']
             audio_fp = row['audio_fp']
             
-            duration = librosa.get_duration(path=audio_fp)
+            duration = librosa.get_duration(filename=audio_fp)
             selection_table_fp = row['selection_table_fp']
 
             selection_table = self.process_selection_table(selection_table_fp)
@@ -157,7 +161,7 @@ class DetectionDataset(Dataset):
 
     def get_annotation(self, pos_intervals, audio):
         
-        raw_seq_len = audio.shape[0]
+        raw_seq_len = audio.shape[-1]
         seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
         regression_anno = np.zeros((seq_len,))
         class_anno = np.zeros((seq_len, self.n_classes)) 
@@ -191,9 +195,8 @@ class DetectionDataset(Dataset):
     def __getitem__(self, index):
         fn, audio_fp, start, end = self.metadata[index]
         
-        audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)         
+        audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=self.mono)         
         audio = torch.from_numpy(audio)
-    
     
         audio = audio-torch.mean(audio)
         if self.amp_aug and self.train:
@@ -237,13 +240,17 @@ class SingleClipDataset(Dataset):
     def __init__(self, audio_fp, clip_hop, args, annot_fp = None):
         # waveform (samples,)
         super().__init__()
-        self.duration = librosa.get_duration(path=audio_fp)
+        self.duration = librosa.get_duration(filename=audio_fp)
         self.num_clips = max(0, int(np.floor((self.duration - args.clip_duration) // clip_hop)))
         self.audio_fp = audio_fp
         self.clip_hop = clip_hop
         self.clip_duration = args.clip_duration
         self.annot_fp = annot_fp # attribute that is accessed elsewhere
         self.sr = args.sr
+        if hasattr(args, 'stereo') and args.stereo:
+          self.mono = False
+        else:
+          self.mono = True
         
     def __len__(self):
         return self.num_clips
@@ -252,7 +259,7 @@ class SingleClipDataset(Dataset):
         """ Map int idx to dict of torch tensors """
         start = idx * self.clip_hop
         
-        audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
+        audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=self.mono)
         audio = torch.from_numpy(audio)
                 
         audio = audio-torch.mean(audio)

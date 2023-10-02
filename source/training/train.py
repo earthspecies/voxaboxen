@@ -145,8 +145,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
       
       class_logits_clipped = class_logits[:,end_mask_dur:-end_mask_dur,:]
       y_clipped = y[:,end_mask_dur:-end_mask_dur,:]
-      
-      
+
       detection_loss = detection_loss_fn(probs_clipped, d_clipped, pos_loss_weight = args.pos_loss_weight)
       reg_loss = reg_loss_fn(regression_clipped, r_clipped, d_clipped, y_clipped)
       class_loss = class_loss_fn(class_logits_clipped, y_clipped, d_clipped)

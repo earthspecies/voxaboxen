@@ -1,3 +1,13 @@
+# Local data
+datasets/zebra_finch_stereo/test_data/
+datasets/zebra_finch_stereo/train_data/
+datasets/zebra_finch_stereo/tmp 
+datasets/zebra_finch_stereo/test.csv
+datasets/zebra_finch_stereo/train.csv
+datasets/zebra_finch_stereo/val.csv
+projects/zebra_finch_experiment/ 
+weights/ 
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
