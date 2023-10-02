@@ -2,10 +2,13 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
+import torch.hub
 import math
 from einops import rearrange
 from torchaudio.models import wav2vec2_model
 import json
+
+AVES_URL = 'https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt'
 
 class AvesEmbedding(nn.Module):
     def __init__(self, args):
@@ -14,9 +17,10 @@ class AvesEmbedding(nn.Module):
         # reference: https://pytorch.org/audio/stable/_modules/torchaudio/models/wav2vec2/utils/import_fairseq.html
         config = self.load_config(args.aves_config_fp)
         self.model = wav2vec2_model(**config, aux_num_out=None)
-        self.model.load_state_dict(torch.load(args.aves_model_weight_fp))
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        state_dict = torch.hub.load_state_dict_from_url(AVES_URL, map_location=device)
+        self.model.load_state_dict(state_dict)
         self.model.feature_extractor.requires_grad_(False)
-        
         self.sr=args.sr
 
     def load_config(self, config_path):
@@ -127,8 +131,6 @@ class DetectionHead(nn.Module):
 class DetectionModelStereo(DetectionModel):
   def __init__(self, args, embedding_dim=768):
       super().__init__(args, embedding_dim=2*embedding_dim)
-      # self.encoder = AvesEmbedding(args)
-      # self.detection_head = DetectionHead(args, embedding_dim = 2*embedding_dim)
       
   def forward(self, x):
     """
