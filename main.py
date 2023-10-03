@@ -8,19 +8,19 @@ import sys
 def main(mode, args):  
   
   if mode == 'project-setup':
-    from source.project.project_setup import project_setup
+    from voxaboxen.project.project_setup import project_setup
     project_setup(args)
   
   if mode == 'train-model':
-    from source.training.train_model import train_model
+    from voxaboxen.training.train_model import train_model
     train_model(args)
   
   if mode == 'train-comparison':
-    from source.comparisons.train import train
+    from voxaboxen.comparisons.train import train
     train(args)
     
   if mode == 'inference':
-    from source.inference.inference import inference
+    from voxaboxen.inference.inference import inference
     inference(args)
 
 if __name__ == "__main__":
