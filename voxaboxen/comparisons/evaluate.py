@@ -15,9 +15,9 @@ from detectron2.config import CfgNode
 from detectron2.modeling import build_model
 from torchvision.ops import boxes as box_ops
 
-from source.comparisons.dataloaders import DetectronSingleClipDataset, SoundEventTrainer
-from source.evaluation.evaluation import bbox2raven, write_tsv, evaluate_based_on_manifest
-from source.comparisons.nms import nms
+from voxaboxen.comparisons.dataloaders import DetectronSingleClipDataset, SoundEventTrainer
+from voxaboxen.evaluation.evaluation import bbox2raven, write_tsv, evaluate_based_on_manifest
+from voxaboxen.comparisons.nms import nms
 
 def if_not_none(x, y):
     return x if x is not None else y

@@ -3,11 +3,11 @@ import sys
 import pandas as pd
 import torch
 
-from source.inference.params import parse_inference_args
-from source.training.params import load_params
-from source.model.model import DetectionModel
-from source.evaluation.evaluation import generate_predictions, export_to_selection_table
-from source.data.data import get_single_clip_data
+from voxaboxen.inference.params import parse_inference_args
+from voxaboxen.training.params import load_params
+from voxaboxen.model.model import DetectionModel
+from voxaboxen.evaluation.evaluation import generate_predictions, export_to_selection_table
+from voxaboxen.data.data import get_single_clip_data
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 

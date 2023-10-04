@@ -6,10 +6,10 @@ from functools import partial
 import os
 from einops import rearrange
 
-from source.evaluation.plotters import plot_eval
-from source.evaluation.evaluation import predict_and_generate_manifest, evaluate_based_on_manifest
-from source.data.data import get_train_dataloader, get_val_dataloader
-from source.model.model import rms_and_mixup
+from voxaboxen.evaluation.plotters import plot_eval
+from voxaboxen.evaluation.evaluation import predict_and_generate_manifest, evaluate_based_on_manifest
+from voxaboxen.data.data import get_train_dataloader, get_val_dataloader
+from voxaboxen.model.model import rms_and_mixup
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -145,8 +145,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
       
       class_logits_clipped = class_logits[:,end_mask_dur:-end_mask_dur,:]
       y_clipped = y[:,end_mask_dur:-end_mask_dur,:]
-      
-      
+
       detection_loss = detection_loss_fn(probs_clipped, d_clipped, pos_loss_weight = args.pos_loss_weight)
       reg_loss = reg_loss_fn(regression_clipped, r_clipped, d_clipped, y_clipped)
       class_loss = class_loss_fn(class_logits_clipped, y_clipped, d_clipped)

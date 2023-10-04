@@ -6,7 +6,7 @@ import librosa
 from tqdm import tqdm
 import warnings
 
-import source.evaluation.metrics as metrics
+import voxaboxen.evaluation.metrics as metrics
 
 class Clip():
     def __init__(self, label_set = None, unknown_label = None):

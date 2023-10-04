@@ -29,7 +29,8 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--detection-threshold', type=float, default = 0.5, help = "output probability to count as positive detection")
   parser.add_argument('--rms-norm', action="store_true", help = "If true, apply rms normalization to each clip")
   parser.add_argument('--previous-checkpoint-fp', type=str, default=None, help="path to checkpoint of previously trained detection model")
-  
+  parser.add_argument('--aves-url', type=str, default = "https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt")
+
   # Training
   parser.add_argument('--batch-size', type=int, default=32) 
   parser.add_argument('--lr', type=float, default=.00005) 

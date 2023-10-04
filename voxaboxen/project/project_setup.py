@@ -3,7 +3,7 @@ import yaml
 import sys
 import pandas as pd
 import argparse
-from source.project.params import save_params, parse_project_args
+from voxaboxen.project.params import save_params, parse_project_args
 
 def project_setup(args):
   args = parse_project_args(args)

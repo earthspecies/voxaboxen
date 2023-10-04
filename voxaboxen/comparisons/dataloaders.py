@@ -13,7 +13,7 @@ from detectron2.engine import DefaultTrainer
 from detectron2.structures import Instances, Boxes
 from intervaltree import IntervalTree
 
-from source.data.data import DetectionDataset, SingleClipDataset, crop_and_pad
+from voxaboxen.data.data import DetectionDataset, SingleClipDataset, crop_and_pad
 
 def get_torch_mel_frequencies(f_max, n_mels, f_min=0.0, mel_scale="htk"):
     m_min = torchaudio.functional.functional._hz_to_mel(f_min, mel_scale=mel_scale)

@@ -1,8 +1,8 @@
-from source.data.data import get_test_dataloader
-from source.model.model import DetectionModel
-from source.training.train import train
-from source.training.params import parse_args, set_seed, save_params
-from source.evaluation.evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_generate_manifest, evaluate_based_on_manifest
+from voxaboxen.data.data import get_test_dataloader
+from voxaboxen.model.model import DetectionModel, DetectionModelStereo
+from voxaboxen.training.train import train
+from voxaboxen.training.params import parse_args, set_seed, save_params
+from voxaboxen.evaluation.evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_generate_manifest, evaluate_based_on_manifest
 
 import yaml
 import sys
@@ -25,7 +25,10 @@ def train_model(args):
     os.makedirs(args.experiment_output_dir)
   
   save_params(args)
-  model = DetectionModel(args)
+  if hasattr(args,'stereo') and args.stereo:
+    model = DetectionModelStereo(args)
+  else:
+    model = DetectionModel(args)
   
   ## Training
   trained_model = train(model, args) 

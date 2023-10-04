@@ -9,9 +9,9 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 import pandas as pd
 
-from source.evaluation.raven_utils import Clip
-from source.model.model import rms_and_mixup
-from source.evaluation.nms import nms, soft_nms
+from voxaboxen.evaluation.raven_utils import Clip
+from voxaboxen.model.model import rms_and_mixup
+from voxaboxen.evaluation.nms import nms, soft_nms
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 

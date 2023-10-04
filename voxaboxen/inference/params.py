@@ -1,7 +1,7 @@
 import argparse
 import os
 import yaml
-from source.training.params import load_params
+from voxaboxen.training.params import load_params
 
 def parse_inference_args(inference_args):
   parser = argparse.ArgumentParser()

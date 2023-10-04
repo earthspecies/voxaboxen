@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
+import torch.hub
 import math
 from einops import rearrange
 from torchaudio.models import wav2vec2_model
@@ -14,9 +15,10 @@ class AvesEmbedding(nn.Module):
         # reference: https://pytorch.org/audio/stable/_modules/torchaudio/models/wav2vec2/utils/import_fairseq.html
         config = self.load_config(args.aves_config_fp)
         self.model = wav2vec2_model(**config, aux_num_out=None)
-        self.model.load_state_dict(torch.load(args.aves_model_weight_fp))
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        state_dict = torch.hub.load_state_dict_from_url(args.aves_url, map_location=device)
+        self.model.load_state_dict(state_dict)
         self.model.feature_extractor.requires_grad_(False)
-        
         self.sr=args.sr
 
     def load_config(self, config_path):
@@ -81,9 +83,9 @@ class DetectionModel(nn.Module):
         features (Tensor): (batch, time) (time at 50 Hz, aves_sr)
       """
       
-      expected_dur_output = math.ceil(x.size(1)/self.args.scale_factor)
+      expected_dur_output = math.ceil(x.size(-1)/self.args.scale_factor)
             
-      x = x-torch.mean(x,axis=1,keepdim=True)
+      x = x-torch.mean(x,axis=-1,keepdim=True)
       feats = self.encoder(x)
       
       #aves may be off by 1 sample from expected
@@ -124,6 +126,39 @@ class DetectionHead(nn.Module):
       class_logits = x[:,:,2:]
       return detection_logits, reg, class_logits
     
+class DetectionModelStereo(DetectionModel):
+  def __init__(self, args, embedding_dim=768):
+      super().__init__(args, embedding_dim=2*embedding_dim)
+      
+  def forward(self, x):
+    """
+    Input
+      x (Tensor): (batch, channels, time) (time at 16000 Hz, audio_sr)
+    Returns
+      detection_probs (Tensor): (batch, time,) (time at 50 Hz, aves_sr)
+      regression (Tensor): (batch, time,) (time at 50 Hz, aves_sr)
+      class_logits (Tensor): (batch, time, n_classes) (time at 50 Hz, aves_sr)
+
+    """
+    
+    expected_dur_output = math.ceil(x.size(-1)/self.args.scale_factor)
+          
+    x = x-torch.mean(x,axis=-1,keepdim=True)
+    feats0 = self.encoder(x[:,0,:])
+    feats1 = self.encoder(x[:,1,:])
+    feats = torch.cat([feats0,feats1],dim=-1)
+
+    #aves may be off by 1 sample from expected
+    pad = expected_dur_output - feats.size(1)
+    if pad>0:
+      feats = F.pad(feats, (0,0,0,pad), mode='reflect')
+    
+    detection_logits, regression, class_logits = self.detection_head(feats)
+    detection_probs = torch.sigmoid(detection_logits)
+    
+    return detection_probs, regression, class_logits
+  
+
 def rms_and_mixup(X, d, r, y, train, args):
   if args.rms_norm:
     rms = torch.mean(X ** 2, dim = 1, keepdim = True) ** (-1/2)

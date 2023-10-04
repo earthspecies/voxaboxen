@@ -7,11 +7,11 @@ import sys
 from glob import glob
 
 #Import custom code
-from source.comparisons.dataloaders import SoundEventTrainer
-from source.comparisons.params import get_full_cfg, parse_args
-from source.comparisons.evaluate import run_evaluation
-from source.training.train import train
-import source.training.params as aves_params
+from voxaboxen.comparisons.dataloaders import SoundEventTrainer
+from voxaboxen.comparisons.params import get_full_cfg, parse_args
+from voxaboxen.comparisons.evaluate import run_evaluation
+from voxaboxen.training.train import train
+import voxaboxen.training.params as aves_params
 
 def train(args):
 

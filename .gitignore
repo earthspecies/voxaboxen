@@ -1,3 +1,9 @@
+# Local data
+datasets/MT/formatted/
+datasets/MT/formatted.zip 
+datasets/MT/original_readme_and_license.md
+projects/MT_experiment/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

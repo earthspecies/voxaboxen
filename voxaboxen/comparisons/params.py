@@ -6,7 +6,7 @@ from detectron2.config import get_cfg
 from detectron2 import model_zoo
 from detectron2.config import CfgNode as CN
 
-from source.comparisons.dataloaders import collect_dataset_statistics
+from voxaboxen.comparisons.dataloaders import collect_dataset_statistics
 
 def get_full_cfg(sound_event_args, detectron_args):
     """ Combine command-line-arguments from sound event detection, detectron defaults, and custom detectron config
