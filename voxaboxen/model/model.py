@@ -8,8 +8,6 @@ from einops import rearrange
 from torchaudio.models import wav2vec2_model
 import json
 
-AVES_URL = 'https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt'
-
 class AvesEmbedding(nn.Module):
     def __init__(self, args):
         super().__init__()
@@ -18,7 +16,7 @@ class AvesEmbedding(nn.Module):
         config = self.load_config(args.aves_config_fp)
         self.model = wav2vec2_model(**config, aux_num_out=None)
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        state_dict = torch.hub.load_state_dict_from_url(AVES_URL, map_location=device)
+        state_dict = torch.hub.load_state_dict_from_url(args.aves_url, map_location=device)
         self.model.load_state_dict(state_dict)
         self.model.feature_extractor.requires_grad_(False)
         self.sr=args.sr

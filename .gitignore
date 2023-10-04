@@ -1,12 +1,4 @@
 # Local data
-datasets/zebra_finch_stereo/test_data/
-datasets/zebra_finch_stereo/train_data/
-datasets/zebra_finch_stereo/tmp 
-datasets/zebra_finch_stereo/test.csv
-datasets/zebra_finch_stereo/train.csv
-datasets/zebra_finch_stereo/val.csv
-projects/zebra_finch_experiment/ 
-weights/aves-base-bio.torchaudio.pt 
 datasets/MT/formatted/
 datasets/MT/formatted.zip 
 datasets/MT/original_readme_and_license.md
