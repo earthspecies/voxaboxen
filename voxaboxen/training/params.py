@@ -16,7 +16,7 @@ def parse_args(args,allow_unknown=False):
   # Data
   parser.add_argument('--project-config-fp', type = str, required=True)
   parser.add_argument('--clip-duration', type=float, default=6.0, help = "clip duration, in seconds")
-  parser.add_argument('--clip-hop', type=float, default=3.0, help = "clip hop, in seconds")
+  parser.add_argument('--clip-hop', type=float, default=3.0, help = "clip hop, in seconds. Used only during training; clip hop is automatically set to be 1/2 clip duration for inference")
   parser.add_argument('--train-info-fp', type=str, required=False, help = "train info, to override project train info")
   parser.add_argument('--num-workers', type=int, default=8)
   

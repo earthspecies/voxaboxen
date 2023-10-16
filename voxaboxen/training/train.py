@@ -186,7 +186,7 @@ def val_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss_f
         evals[k].append(m)
       evals[k] = float(np.mean(evals[k]))
         
-    print(f"Epoch {t} | Test scores @{args.model_selection_iou}IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
+    print(f"Epoch {t} | Val scores @{args.model_selection_iou}IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
     return evals
 
 def modified_focal_loss(pred, gt, pos_loss_weight = 1):

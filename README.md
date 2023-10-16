@@ -8,13 +8,15 @@ If you use this software in your research, please [cite it](CITATION.cff).
 
 ![19_AL_Naranja_1025_detect](https://github.com/earthspecies/voxaboxen/assets/72874445/c69439c8-509b-4732-8d69-3bb38658ec9a)
 
-## Requirements
+## Installation
 
 Requires `torch > 2.0` and the corresponding version of torchaudio. Other requirements can be installed with `pip install -r requirements.txt`.
 
+Once cloned, Voxaboxen can be installed with `pip install -e .`.
+
 ## Quick start
 
-After obtaining the requirements, create a `train_info.csv` file with three columns:
+Create a `train_info.csv` file with three columns:
 
 - `fn`: Unique filename associated with each audio file
 - `audio_fp`: Filepaths to audio files in train set
