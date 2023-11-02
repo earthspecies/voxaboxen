@@ -44,7 +44,7 @@ Train model:
 
 Use trained model to infer annotations:
 
-`python main.py inference --model-args-fp=project/MT_experiment/demo/params.yaml --file-info-for-inference=datasets/MT/formatted/test_info.csv`
+`python main.py inference --model-args-fp=projects/MT_experiment/demo/params.yaml --file-info-for-inference=datasets/MT/formatted/test_info.csv`
 
 We provide a [Colab Notebook](https://colab.research.google.com/drive/1Qr1PQnw_bSUeXbvHSRuP91Pomxh1hfoi?usp=sharing) with more details about this process.
 
