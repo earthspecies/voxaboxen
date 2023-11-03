@@ -20,10 +20,11 @@ def normalize_sig_np(sig, eps=1e-8):
 def crop_and_pad(wav, sr, dur_sec):
   # crops and pads waveform to be the expected number of samples; used after resampling to ensure proper size
   target_dur_samples = int(sr * dur_sec)
-  wav = wav[:target_dur_samples]
-  pad = target_dur_samples - wav.size(0)
+  wav = wav[..., :target_dur_samples]
+  
+  pad = target_dur_samples - wav.size(-1)
   if pad > 0:
-    wav = F.pad(wav, (0,pad), mode='reflect')
+    wav = F.pad(wav, (0,pad), mode='reflect') #padding starts from last dims
     
   return wav
 
@@ -198,7 +199,7 @@ class DetectionDataset(Dataset):
         audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=self.mono)         
         audio = torch.from_numpy(audio)
     
-        audio = audio-torch.mean(audio)
+        audio = audio-torch.mean(audio, -1, keepdim=True)
         if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)
         if file_sr != self.sr:
@@ -261,8 +262,9 @@ class SingleClipDataset(Dataset):
         
         audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=self.mono)
         audio = torch.from_numpy(audio)
-                
-        audio = audio-torch.mean(audio)
+        
+        
+        audio = audio-torch.mean(audio, -1, keepdim=True)
         if file_sr != self.sr:
           audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
           audio = crop_and_pad(audio, self.sr, self.clip_duration)
