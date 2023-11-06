@@ -24,7 +24,7 @@ def crop_and_pad(wav, sr, dur_sec):
   
   pad = target_dur_samples - wav.size(-1)
   if pad > 0:
-    wav = F.pad(wav, (0,pad), mode='reflect') #padding starts from last dims
+    wav = F.pad(wav, (0,pad)) #padding starts from last dims
     
   return wav
 
@@ -204,7 +204,8 @@ class DetectionDataset(Dataset):
             audio = self.augment_amplitude(audio)
         if file_sr != self.sr:
           audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
-          audio = crop_and_pad(audio, self.sr, self.clip_duration)
+        
+        audio = crop_and_pad(audio, self.sr, self.clip_duration)
         
         pos_intervals = self.get_pos_intervals(fn, start, end)
         anchor_anno, regression_anno, class_anno = self.get_annotation(pos_intervals, audio)
@@ -242,9 +243,9 @@ class SingleClipDataset(Dataset):
         # waveform (samples,)
         super().__init__()
         self.duration = librosa.get_duration(path=audio_fp)
-        self.num_clips = max(0, int(np.floor((self.duration - args.clip_duration) // clip_hop)))
-        self.audio_fp = audio_fp
         self.clip_hop = clip_hop
+        self.num_clips = max(0, int(np.floor(self.duration / self.clip_hop)+1)) #int(np.floor((self.duration - args.clip_duration) // clip_hop))
+        self.audio_fp = audio_fp
         self.clip_duration = args.clip_duration
         self.annot_fp = annot_fp # attribute that is accessed elsewhere
         self.sr = args.sr
@@ -267,7 +268,8 @@ class SingleClipDataset(Dataset):
         audio = audio-torch.mean(audio, -1, keepdim=True)
         if file_sr != self.sr:
           audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
-          audio = crop_and_pad(audio, self.sr, self.clip_duration)
+        
+        audio = crop_and_pad(audio, self.sr, self.clip_duration)
         return audio
       
 def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):
