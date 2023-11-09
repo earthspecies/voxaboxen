@@ -229,7 +229,7 @@ def get_train_dataloader(args, random_seed_shift = 0):
   
   
   train_dataloader = DataLoader(train_dataset,
-                                batch_size=args.batch_size, 
+                                batch_size=effective_batch_size, 
                                 shuffle=True,
                                 num_workers=args.num_workers,
                                 pin_memory=True, 
@@ -270,6 +270,7 @@ class SingleClipDataset(Dataset):
           audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
         
         audio = crop_and_pad(audio, self.sr, self.clip_duration)
+        
         return audio
       
 def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):

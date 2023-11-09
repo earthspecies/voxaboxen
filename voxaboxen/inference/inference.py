@@ -5,7 +5,7 @@ import torch
 
 from voxaboxen.inference.params import parse_inference_args
 from voxaboxen.training.params import load_params
-from voxaboxen.model.model import DetectionModel
+from voxaboxen.model.model import DetectionModel, DetectionModelStereo
 from voxaboxen.evaluation.evaluation import generate_predictions, export_to_selection_table
 from voxaboxen.data.data import get_single_clip_data
 
@@ -21,7 +21,10 @@ def inference(inference_args):
     os.makedirs(output_dir)  
   
   # model  
-  model = DetectionModel(args)
+  if hasattr(args,'stereo') and args.stereo:
+    model = DetectionModelStereo(args)
+  else:
+    model = DetectionModel(args)
   model_checkpoint_fp = os.path.join(args.experiment_dir, "model.pt")
   print(f"Loading model weights from {model_checkpoint_fp}")
   cp = torch.load(model_checkpoint_fp)

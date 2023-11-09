@@ -118,3 +118,4 @@ def load_params(fp):
 
 def check_config(args):
   assert args.end_mask_perc < 0.25, "Masking above 25% of each end during training will interfere with inference"
+  assert ((args.clip_duration * args.sr)/(4*args.scale_factor)).is_integer(), "Must pick clip duration to ensure no rounding errors during inference"

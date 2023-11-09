@@ -161,7 +161,9 @@ class DetectionModelStereo(DetectionModel):
 
 def rms_and_mixup(X, d, r, y, train, args):
   if args.rms_norm:
-    rms = torch.mean(X ** 2, dim = 1, keepdim = True) ** (-1/2)
+    ms = torch.mean(X ** 2, dim = -1, keepdim = True)
+    ms = ms + torch.full_like(ms, 1e-6)
+    rms = ms ** (-1/2)
     X = X * rms
     
   if args.mixup and train:
@@ -169,15 +171,25 @@ def rms_and_mixup(X, d, r, y, train, args):
     
     batch_size = X.size(0)
     
-    X_aug = torch.flip(X, (0,))
-    d_aug = torch.flip(d, (0,))
-    r_aug = torch.flip(r, (0,))
-    y_aug = torch.flip(y, (0,))
+    mask = torch.full((X.size(0),1,1), 0.5, device=X.device)
+    mask = torch.bernoulli(mask)
+    
+    if len(X.size()) == 2:
+        X_aug = torch.flip(X, (0,)) * mask[:,:,0]
+    elif  len(X.size()) == 3:
+        X_aug = torch.flip(X, (0,)) * mask
+        
+    d_aug = torch.flip(d, (0,)) * mask[:,:,0]
+    r_aug = torch.flip(r, (0,)) * mask[:,:,0]
+    y_aug = torch.flip(y, (0,)) * mask
     
     X = (X + X_aug)[:batch_size//2,...]
     d = torch.maximum(d, d_aug)[:batch_size//2,...]
     r = torch.maximum(r, r_aug)[:batch_size//2,...]
     y = torch.maximum(y, y_aug)[:batch_size//2,...]
+    
+    if args.rms_norm:
+      X = X * (1/2)
     
   return X, d, r, y
       
