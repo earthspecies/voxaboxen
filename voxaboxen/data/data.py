@@ -203,7 +203,7 @@ class DetectionDataset(Dataset):
         if self.amp_aug and self.train:
             audio = self.augment_amplitude(audio)
         if file_sr != self.sr:
-          audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
+            audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
         
         audio = crop_and_pad(audio, self.sr, self.clip_duration)
         
@@ -244,7 +244,7 @@ class SingleClipDataset(Dataset):
         super().__init__()
         self.duration = librosa.get_duration(path=audio_fp)
         self.clip_hop = clip_hop
-        self.num_clips = max(0, int(np.floor(self.duration / self.clip_hop)+1)) #int(np.floor((self.duration - args.clip_duration) // clip_hop))
+        self.num_clips = int(np.ceil(self.duration / self.clip_hop)) #max(0, int(np.floor(self.duration / self.clip_hop)+1)) #int(np.floor((self.duration - args.clip_duration) // clip_hop))
         self.audio_fp = audio_fp
         self.clip_duration = args.clip_duration
         self.annot_fp = annot_fp # attribute that is accessed elsewhere
