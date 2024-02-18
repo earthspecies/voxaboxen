@@ -5,6 +5,7 @@ import tqdm
 from functools import partial
 import os
 from einops import rearrange
+import yaml
 
 from voxaboxen.evaluation.plotters import plot_eval
 from voxaboxen.evaluation.evaluation import predict_and_generate_manifest, evaluate_based_on_manifest
@@ -55,10 +56,21 @@ def train(model, args):
       model, train_eval = train_epoch(model, t, train_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args)
       train_evals.append(train_eval.copy())
       learning_rates.append(optimizer.param_groups[0]["lr"])
+      
+      train_evals_by_epoch = {i : e for i, e in enumerate(train_evals)}
+      train_evals_fp = os.path.join(args.experiment_dir, "train_history.yaml")
+      with open(train_evals_fp, 'w') as f:
+        yaml.dump(train_evals_by_epoch, f)
+        
       if use_val:
         val_eval = val_epoch(model, t, val_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args)
         val_evals.append(val_eval.copy())
         plot_eval(train_evals, learning_rates, args, val_evals = val_evals)
+        
+        val_evals_by_epoch = {i : e for i, e in enumerate(val_evals)}
+        val_evals_fp = os.path.join(args.experiment_dir, "val_history.yaml")
+        with open(val_evals_fp, 'w') as f:
+          yaml.dump(val_evals_by_epoch, f)
       else:
         plot_eval(train_evals, learning_rates, args)
       scheduler.step()
