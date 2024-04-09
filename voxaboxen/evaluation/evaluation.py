@@ -12,6 +12,7 @@ import pandas as pd
 from voxaboxen.evaluation.raven_utils import Clip
 from voxaboxen.model.model import rms_and_mixup
 from voxaboxen.evaluation.nms import nms, soft_nms
+plt.switch_backend('agg')
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -408,6 +409,7 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   fns = []
   predictions_fps = []
   rev_predictions_fps = []
+  comb_predictions_fps = []
   annotations_fps = []
 
   for fn in dataloader_dict:
@@ -415,34 +417,79 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
 
     predictions_fp = export_to_selection_table(detections, regressions, classifications, fn, args, is_rev=False, verbose=verbose)
     rev_predictions_fp = export_to_selection_table(rev_detections, rev_regressions, rev_classifications, fn, args, is_rev=True, verbose=verbose)
+    comb_predictions_fp = combine_fwd_bck_preds(args.experiment_output_dir, fn)
 
     annotations_fp = dataloader_dict[fn].dataset.annot_fp
 
     fns.append(fn)
     predictions_fps.append(predictions_fp)
     rev_predictions_fps.append(rev_predictions_fp)
+    comb_predictions_fps.append(comb_predictions_fp)
     annotations_fps.append(annotations_fp)
 
-  manifest = pd.DataFrame({'filename' : fns, 'predictions_fp' : predictions_fps, 'rev_predictions_fp' : rev_predictions_fps, 'annotations_fp' : annotations_fps})
+  manifest = pd.DataFrame({'filename' : fns, 'predictions_fp' : predictions_fps, 'rev_predictions_fp' : rev_predictions_fps, 'comb_predictions_fp' : comb_predictions_fps, 'annotations_fp' : annotations_fps})
   return manifest
 
-def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, class_threshold = 0.0):
+def combine_fwd_bck_preds(target_dir, fn):
+    fwd_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}.txt')
+    bck_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-rev.txt')
+    comb_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-comb.txt')
+    fwd_preds = pd.read_csv(fwd_preds_fp, sep='\t')
+    bck_preds = pd.read_csv(bck_preds_fp, sep='\t')
 
+    c = Clip()
+    c.load_annotations(fwd_preds_fp)
+    c.load_predictions(bck_preds_fp)
+    c.compute_matching(IoU_minimum=0.5)
+    #comb_preds = fwd_preds.copy()
+    match_preds_list = []
+    for fp, bp in c.matching:
+        match_pred = fwd_preds.loc[fp].copy()
+        bck_pred = bck_preds.iloc[bp]
+        bp_end_time = bck_pred['End Time (s)']
+        match_pred['End Time (s)'] = bp_end_time
+        match_pred['Detection Prob'] = 1 - (1-match_pred['Detection Prob'])*(1-bck_pred['Detection Prob'])
+        match_preds_list.append(match_pred)
+
+    match_preds = pd.DataFrame(match_preds_list)
+    # Now include the union of all that weren't matched
+    fwd_matched_idxs = [m[0] for m in c.matching]
+    bck_matched_idxs = [m[1] for m in c.matching]
+    fwd_unmatched = select_from_neg_idxs(fwd_preds, fwd_matched_idxs)
+    bck_unmatched = select_from_neg_idxs(bck_preds, bck_matched_idxs)
+    comb_preds = pd.concat([match_preds, fwd_unmatched, bck_unmatched])
+    assert len(comb_preds) == len(fwd_preds) + len(bck_preds) - len(c.matching)
+    comb_preds.sort_values('Begin Time (s)')
+    comb_preds.index = list(range(len(comb_preds)))
+
+    comb_preds.to_csv(comb_preds_fp, sep='\t', index=False)
+    return comb_preds_fp
+
+def select_from_neg_idxs(df, neg_idxs):
+    bool_mask = [i not in neg_idxs for i in range(len(df))]
+    return df.loc[bool_mask]
+
+def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, class_threshold = 0.0):
   metrics = {}
   confusion_matrix = {}
   rev_metrics = {}
   rev_confusion_matrix = {}
+  comb_metrics = {}
+  comb_confusion_matrix = {}
 
   for i, row in manifest.iterrows():
     fn = row['filename']
     predictions_fp = row['predictions_fp']
     rev_predictions_fp = row['rev_predictions_fp']
+    comb_predictions_fp = row['comb_predictions_fp']
     annotations_fp = row['annotations_fp']
 
     metrics[fn] = get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold)
-    rev_metrics[fn] = get_metrics(rev_predictions_fp, annotations_fp, args, iou, class_threshold)
     confusion_matrix[fn], confusion_matrix_labels = get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold)
+    rev_metrics[fn] = get_metrics(rev_predictions_fp, annotations_fp, args, iou, class_threshold)
     rev_confusion_matrix[fn], rev_confusion_matrix_labels = get_confusion_matrix(rev_predictions_fp, annotations_fp, args, iou, class_threshold)
+    comb_metrics[fn] = get_metrics(comb_predictions_fp, annotations_fp, args, iou, class_threshold)
+    comb_confusion_matrix[fn], comb_confusion_matrix_labels = get_confusion_matrix(comb_predictions_fp, annotations_fp, args, iou, class_threshold)
 
   if output_dir is not None:
     if not os.path.exists(output_dir):
@@ -457,6 +504,10 @@ def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, cla
   rev_metrics['summary'] = rev_summary
   rev_macro = macro_metrics(rev_summary)
   rev_metrics['macro'] = rev_macro
+  comb_summary = summarize_metrics(comb_metrics)
+  comb_metrics['summary'] = comb_summary
+  comb_macro = macro_metrics(comb_summary)
+  comb_metrics['macro'] = comb_macro
   if output_dir is not None:
     metrics_fp = os.path.join(output_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
     with open(metrics_fp, 'w') as f:
@@ -465,7 +516,8 @@ def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, cla
   # summarize and save confusion matrix
   confusion_matrix_summary, confusion_matrix_labels = summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels)
   rev_confusion_matrix_summary, rev_confusion_matrix_labels = summarize_confusion_matrix(rev_confusion_matrix, rev_confusion_matrix_labels)
-  if output_dir is not None:
-    plot_confusion_matrix(confusion_matrix_summary.astype(int), confusion_matrix_labels, output_dir, name=f"cm_iou_{iou}_class_threshold_{class_threshold}")
+  comb_confusion_matrix_summary, comb_confusion_matrix_labels = summarize_confusion_matrix(comb_confusion_matrix, comb_confusion_matrix_labels)
+  #if output_dir is not None:
+    #plot_confusion_matrix(confusion_matrix_summary.astype(int), confusion_matrix_labels, output_dir, name=f"cm_iou_{iou}_class_threshold_{class_threshold}")
 
-  return metrics, confusion_matrix_summary, rev_metrics, rev_confusion_matrix_summary
+  return metrics, confusion_matrix_summary, rev_metrics, rev_confusion_matrix_summary, comb_metrics, comb_confusion_matrix_summary

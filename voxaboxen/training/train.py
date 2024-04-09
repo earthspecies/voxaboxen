@@ -63,10 +63,10 @@ def train(model, args):
         yaml.dump(train_evals_by_epoch, f)
 
       if use_val:
-        val_eval, rev_eval = val_epoch(model, t, val_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args)
+        eval_scores, rev_eval_scores, comb_eval_scores = val_epoch(model, t, val_dataloader, args)
         # TODO: maybe plot rev-evals
-        val_evals.append(val_eval.copy())
-        plot_eval(train_evals, learning_rates, args, val_evals = val_evals)
+        val_evals.append(comb_eval_scores.copy())
+        plot_eval(train_evals, learning_rates, args, val_evals=val_evals)
 
         val_evals_by_epoch = {i : e for i, e in enumerate(val_evals)}
         val_evals_fp = os.path.join(args.experiment_dir, "val_history.yaml")
@@ -77,7 +77,7 @@ def train(model, args):
       scheduler.step()
 
       if use_val and args.early_stopping:
-        current_f1 = val_eval['f1']
+        current_f1 = comb_eval_scores['f1']
         if current_f1 > best_f1:
           print('found new best model')
           best_f1 = current_f1
@@ -93,7 +93,7 @@ def train(model, args):
 
           torch.save(
               checkpoint_dict,
-              os.path.join(args.experiment_dir, f"model.pt"),
+              os.path.join(args.experiment_dir, "model.pt"),
           )
 
       else:
@@ -108,18 +108,18 @@ def train(model, args):
 
         torch.save(
               checkpoint_dict,
-              os.path.join(args.experiment_dir, f"model.pt"),
+              os.path.join(args.experiment_dir, "model.pt"),
           )
 
 
   print("Done!")
 
-  cp = torch.load(os.path.join(args.experiment_dir, f"model.pt"))
+  cp = torch.load(os.path.join(args.experiment_dir, "model.pt"))
   model.load_state_dict(cp["model_state_dict"])
 
   # resave validation with best model
   if use_val:
-    val_epoch(model, t+1, val_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args)
+    val_epoch(model, t+1, val_dataloader, args)
 
   return model
 
@@ -215,7 +215,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
 
       optimizer.step()
       if i > 10:
-        data_iterator.set_description(f"loss {np.mean(losses[-10:]):.6f}, det {np.mean(detection_losses[-10:]):.6f}, reg {np.mean(regression_losses[-10:]):.6f}, class {np.mean(class_losses[-10:]):.6f} revloss {np.mean(rev_losses[-10:]):.6f}, revdet {np.mean(rev_detection_losses[-10:]):.6f}, revreg {np.mean(rev_regression_losses[-10:]):.6f}, revclass {np.mean(rev_class_losses[-10:]):.6f}")
+        data_iterator.set_description(f"loss {np.mean(losses[-10:]):.5f}, det {np.mean(detection_losses[-10:]):.5f}, reg {np.mean(regression_losses[-10:]):.5f}, class {np.mean(class_losses[-10:]):.5f} revloss {np.mean(rev_losses[-10:]):.5f}, revdet {np.mean(rev_detection_losses[-10:]):.5f}, revreg {np.mean(rev_regression_losses[-10:]):.5f}, revclass {np.mean(rev_class_losses[-10:]):.5f}")
 
       if args.is_test and i == 15: break
 
@@ -225,27 +225,29 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
     print(f"Epoch {t} | Train loss: {train_loss:1.3f}")
     return model, evals
 
-def val_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args):
+def val_epoch(model, t, dataloader, args):
     model.eval()
 
     manifest = predict_and_generate_manifest(model, dataloader, args, verbose = False)
-    e, _, rev_e, _ = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
-
-    summary = e['summary']
+    e, _, rev_e, _, comb_e, _  = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
 
     evals = {k:[] for k in ['precision','recall','f1']}
     rev_evals = {k:[] for k in ['precision','recall','f1']}
+    comb_evals = {k:[] for k in ['precision','recall','f1']}
     for k in ['precision','recall','f1']:
       for l in args.label_set:
         m = e['summary'][l][k]
         rev_m = rev_e['summary'][l][k]
+        comb_m = comb_e['summary'][l][k]
         evals[k].append(m)
         rev_evals[k].append(rev_m)
+        comb_evals[k].append(comb_m)
       evals[k] = float(np.mean(evals[k]))
       rev_evals[k] = float(np.mean(rev_evals[k]))
+      comb_evals[k] = float(np.mean(comb_evals[k]))
 
-    print(f"Epoch {t} | Val scores @{args.model_selection_iou}IoU: prec: {evals['precision']:1.3f} rec: {evals['recall']:1.3f} F1: {evals['f1']:1.3f} rev_prec: {rev_evals['precision']:1.3f} rev_rec: {rev_evals['recall']:1.3f} rev_F1: {rev_evals['f1']:1.3f}")
-    return evals, rev_evals
+    print(f"Epoch {t} | val@{args.model_selection_iou}IoU: prec: {evals['precision']:1.3f} rec: {evals['recall']:1.3f} F1: {evals['f1']:1.3f} revprec: {rev_evals['precision']:1.3f} revrec: {rev_evals['recall']:1.3f} revF1: {rev_evals['f1']:1.3f} combprec: {comb_evals['precision']:1.3f} combrec: {comb_evals['recall']:1.3f} combF1: {comb_evals['f1']:1.3f}")
+    return evals, rev_evals, comb_evals
 
 def modified_focal_loss(pred, gt, pos_loss_weight = 1):
   # Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
