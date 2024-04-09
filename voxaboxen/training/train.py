@@ -21,25 +21,25 @@ if device == "cpu":
 
 def train(model, args):
   model = model.to(device)
-  
+
   if args.previous_checkpoint_fp is not None:
     print(f"loading model weights from {args.previous_checkpoint_fp}")
     cp = torch.load(args.previous_checkpoint_fp)
     model.load_state_dict(cp["model_state_dict"])
-  
+
   detection_loss_fn = modified_focal_loss
   reg_loss_fn = get_reg_loss_fn(args)
-  
+
   class_loss_fn = get_class_loss_fn(args)
-  
+
   optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
   # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.step_size, gamma=0.1, last_epoch=- 1, verbose=False)
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
-  
+
   train_evals = []
   learning_rates = []
   val_evals = []
-  
+
   if args.early_stopping:
     assert args.val_info_fp is not None
     best_f1 = 0
@@ -49,24 +49,25 @@ def train(model, args):
     use_val = True
   else:
     use_val = False
-      
+
   for t in range(args.n_epochs):
       print(f"Epoch {t}\n-------------------------------")
       train_dataloader = get_train_dataloader(args, random_seed_shift = t) # reinitialize dataloader with different negatives each epoch
       model, train_eval = train_epoch(model, t, train_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args)
       train_evals.append(train_eval.copy())
       learning_rates.append(optimizer.param_groups[0]["lr"])
-      
+
       train_evals_by_epoch = {i : e for i, e in enumerate(train_evals)}
       train_evals_fp = os.path.join(args.experiment_dir, "train_history.yaml")
       with open(train_evals_fp, 'w') as f:
         yaml.dump(train_evals_by_epoch, f)
-        
+
       if use_val:
-        val_eval = val_epoch(model, t, val_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args)
+        val_eval, rev_eval = val_epoch(model, t, val_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args)
+        # TODO: maybe plot rev-evals
         val_evals.append(val_eval.copy())
         plot_eval(train_evals, learning_rates, args, val_evals = val_evals)
-        
+
         val_evals_by_epoch = {i : e for i, e in enumerate(val_evals)}
         val_evals_fp = os.path.join(args.experiment_dir, "val_history.yaml")
         with open(val_evals_fp, 'w') as f:
@@ -74,7 +75,7 @@ def train(model, args):
       else:
         plot_eval(train_evals, learning_rates, args)
       scheduler.step()
-      
+
       if use_val and args.early_stopping:
         current_f1 = val_eval['f1']
         if current_f1 > best_f1:
@@ -89,13 +90,13 @@ def train(model, args):
           "train_evals": train_evals,
           "val_evals" : val_evals
           }
-          
+
           torch.save(
               checkpoint_dict,
               os.path.join(args.experiment_dir, f"model.pt"),
-          ) 
-          
-      else:  
+          )
+
+      else:
         checkpoint_dict = {
         "epoch": t,
         "model_state_dict": model.state_dict(),
@@ -104,110 +105,155 @@ def train(model, args):
         "train_evals": train_evals,
         "val_evals" : val_evals
         }
-        
+
         torch.save(
               checkpoint_dict,
               os.path.join(args.experiment_dir, f"model.pt"),
-          ) 
-          
-  
+          )
+
+
   print("Done!")
-  
+
   cp = torch.load(os.path.join(args.experiment_dir, f"model.pt"))
   model.load_state_dict(cp["model_state_dict"])
-  
+
   # resave validation with best model
   if use_val:
     val_epoch(model, t+1, val_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args)
-  
-  return model  
-  
+
+  return model
+
+def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, reg_loss_fn):
+    end_mask_perc = args.end_mask_perc
+    end_mask_dur = int(det_preds.size(1)*end_mask_perc)
+
+    det_preds_clipped = det_preds[:,end_mask_dur:-end_mask_dur]
+    dets_clipped = dets[:,end_mask_dur:-end_mask_dur]
+
+    reg_preds_clipped = reg_preds[:,end_mask_dur:-end_mask_dur]
+    regs_clipped = regs[:,end_mask_dur:-end_mask_dur]
+
+    #y_preds_clipped = y_preds[:,end_mask_dur:-end_mask_dur,:]
+    y_clipped = y[:,end_mask_dur:-end_mask_dur,:]
+
+    detection_loss = modified_focal_loss(det_preds_clipped, dets_clipped, pos_loss_weight=args.pos_loss_weight)
+    reg_loss = reg_loss_fn(reg_preds_clipped, regs_clipped, dets_clipped, y_clipped)
+    #class_loss = class_loss_fn(y_preds_clipped, y_clipped, dets_clipped)
+    class_loss = torch.tensor(0)
+    return detection_loss, reg_loss, class_loss
+
 def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args):
     model.train()
     if t < args.unfreeze_encoder_epoch:
       model.freeze_encoder()
     else:
       model.unfreeze_encoder()
-    
-    
+
+
     evals = {}
-    train_loss = 0; losses = []; detection_losses = []; regression_losses = []; class_losses = []
+    normal_train_loss = 0; normal_losses = []; detection_losses = []; regression_losses = []; class_losses = []
+    rev_train_loss = 0; rev_losses = []; rev_detection_losses = []; rev_regression_losses = []; rev_class_losses = []
+    train_loss = 0; losses = []
     data_iterator = tqdm.tqdm(dataloader)
-    for i, (X, d, r, y) in enumerate(data_iterator):
+    for i, (X, d, r, y, rev_d, rev_r, rev_y) in enumerate(data_iterator):
       num_batches_seen = i
       X = X.to(device = device, dtype = torch.float)
       d = d.to(device = device, dtype = torch.float)
       r = r.to(device = device, dtype = torch.float)
       y = y.to(device = device, dtype = torch.float)
-      
+      rev_d = rev_d.to(device = device, dtype = torch.float)
+      rev_r = rev_r.to(device = device, dtype = torch.float)
+      rev_y = rev_y.to(device = device, dtype = torch.float)
+
       X, d, r, y = rms_and_mixup(X, d, r, y, True, args)
-      probs, regression, class_logits = model(X)
-      
+      _, rev_d, rev_r, rev_y = rms_and_mixup(X, rev_d, rev_r, rev_y, True, args)
+      probs, regression, class_logits, rev_probs, rev_regression, rev_class_logits = model(X)
+
       # We mask out loss from each end of the clip, so the model isn't forced to learn to detect events that are partially cut off.
       # This does not affect inference, because during inference we overlap clips at 50%
-      
-      end_mask_perc = args.end_mask_perc
-      end_mask_dur = int(probs.size(1)*end_mask_perc) 
-      
-      d_clipped = d[:,end_mask_dur:-end_mask_dur]
-      probs_clipped = probs[:,end_mask_dur:-end_mask_dur]
-      
-      regression_clipped = regression[:,end_mask_dur:-end_mask_dur]
-      r_clipped = r[:,end_mask_dur:-end_mask_dur]
-      
-      class_logits_clipped = class_logits[:,end_mask_dur:-end_mask_dur,:]
-      y_clipped = y[:,end_mask_dur:-end_mask_dur,:]
 
-      detection_loss = detection_loss_fn(probs_clipped, d_clipped, pos_loss_weight = args.pos_loss_weight)
-      reg_loss = reg_loss_fn(regression_clipped, r_clipped, d_clipped, y_clipped)
-      class_loss = class_loss_fn(class_logits_clipped, y_clipped, d_clipped)
-      
-      loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
+      detection_loss, reg_loss, class_loss = lf(d, probs, r, regression, class_logits, y, args=args, reg_loss_fn=reg_loss_fn)
+      rev_detection_loss, rev_reg_loss, rev_class_loss = lf(rev_d, rev_probs, rev_r, rev_regression, rev_class_logits, rev_y, args=args, reg_loss_fn=reg_loss_fn)
+      normal_loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
+      rev_loss = args.rho * rev_class_loss + rev_detection_loss + args.lamb * rev_reg_loss
+      loss = (normal_loss + rev_loss)/2
+      #end_mask_perc = args.end_mask_perc
+      #end_mask_dur = int(probs.size(1)*end_mask_perc)
+
+      #d_clipped = d[:,end_mask_dur:-end_mask_dur]
+      #probs_clipped = probs[:,end_mask_dur:-end_mask_dur]
+
+      #regression_clipped = regression[:,end_mask_dur:-end_mask_dur]
+      #r_clipped = r[:,end_mask_dur:-end_mask_dur]
+
+      #class_logits_clipped = class_logits[:,end_mask_dur:-end_mask_dur,:]
+      #y_clipped = y[:,end_mask_dur:-end_mask_dur,:]
+
+      #detection_loss = detection_loss_fn(probs_clipped, d_clipped, pos_loss_weight = args.pos_loss_weight)
+      #reg_loss = reg_loss_fn(regression_clipped, r_clipped, d_clipped, y_clipped)
+      #class_loss = class_loss_fn(class_logits_clipped, y_clipped, d_clipped)
+
+      #loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
       train_loss += loss.item()
+      rev_train_loss += rev_loss.item()
+      normal_train_loss += normal_loss.item()
+      normal_losses.append(normal_loss.item())
+      rev_losses.append(rev_loss.item())
       losses.append(loss.item())
       detection_losses.append(detection_loss.item())
       regression_losses.append(args.lamb * reg_loss.item())
       class_losses.append(args.rho * class_loss.item())
-      
+      rev_detection_losses.append(rev_detection_loss.item())
+      rev_regression_losses.append(args.lamb * rev_reg_loss.item())
+      rev_class_losses.append(args.rho * rev_class_loss.item())
+
+      #if i > 150:
+          #breakpoint()
       # Backpropagation
       optimizer.zero_grad()
       loss.backward()
-      
+
       optimizer.step()
       if i > 10:
-        data_iterator.set_description(f"Loss {np.mean(losses[-10:]):.7f}, Detection Loss {np.mean(detection_losses[-10:]):.7f}, Regression Loss {np.mean(regression_losses[-10:]):.7f}, Classification Loss {np.mean(class_losses[-10:]):.7f}")
-    
+        data_iterator.set_description(f"loss {np.mean(losses[-10:]):.6f}, det {np.mean(detection_losses[-10:]):.6f}, reg {np.mean(regression_losses[-10:]):.6f}, class {np.mean(class_losses[-10:]):.6f} revloss {np.mean(rev_losses[-10:]):.6f}, revdet {np.mean(rev_detection_losses[-10:]):.6f}, revreg {np.mean(rev_regression_losses[-10:]):.6f}, revclass {np.mean(rev_class_losses[-10:]):.6f}")
+
+      if args.is_test and i == 15: break
+
     train_loss = train_loss / num_batches_seen
     evals['loss'] = float(train_loss)
-    
+
     print(f"Epoch {t} | Train loss: {train_loss:1.3f}")
     return model, evals
-                        
+
 def val_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, args):
     model.eval()
-    
+
     manifest = predict_and_generate_manifest(model, dataloader, args, verbose = False)
-    e, _ = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
-        
+    e, _, rev_e, _ = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
+
     summary = e['summary']
-    
+
     evals = {k:[] for k in ['precision','recall','f1']}
+    rev_evals = {k:[] for k in ['precision','recall','f1']}
     for k in ['precision','recall','f1']:
       for l in args.label_set:
-        m = summary[l][k]
+        m = e['summary'][l][k]
+        rev_m = rev_e['summary'][l][k]
         evals[k].append(m)
+        rev_evals[k].append(rev_m)
       evals[k] = float(np.mean(evals[k]))
-        
-    print(f"Epoch {t} | Val scores @{args.model_selection_iou}IoU: Precision: {evals['precision']:1.3f} Recall: {evals['recall']:1.3f} F1: {evals['f1']:1.3f}")
-    return evals
+      rev_evals[k] = float(np.mean(rev_evals[k]))
+
+    print(f"Epoch {t} | Val scores @{args.model_selection_iou}IoU: prec: {evals['precision']:1.3f} rec: {evals['recall']:1.3f} F1: {evals['f1']:1.3f} rev_prec: {rev_evals['precision']:1.3f} rev_rec: {rev_evals['recall']:1.3f} rev_F1: {rev_evals['f1']:1.3f}")
+    return evals, rev_evals
 
 def modified_focal_loss(pred, gt, pos_loss_weight = 1):
   # Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
-  ''' 
+  '''
       pred [batch, time,]
       gt [batch, time,]
-  ''' 
-  
+  '''
+
   pos_inds = gt.eq(1).float()
   neg_inds = gt.lt(1).float()
 
@@ -217,48 +263,48 @@ def modified_focal_loss(pred, gt, pos_loss_weight = 1):
 
   pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds * pos_loss_weight
   neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
-  
+
   loss = -1.*(neg_loss + pos_loss)
-  
+
   loss = loss.mean()
   return loss
-  
-  
+
+
 def masked_reg_loss(regression, r, d, y, class_weights = None):
   # regression, r (Tensor): [batch, time,]
   # r (Tensor) : [batch, time,], float tensor
   # d (Tensor) : [batch, time,], float tensor
   # y (Tensor) : [batch, time, n_classes]
   # class_weights (Tensor) : [n_classes,]
-    
+
   reg_loss = F.l1_loss(regression, r, reduction='none')
   mask = d.eq(1).float()
-  
+
   reg_loss = reg_loss * mask
-  
+
   if class_weights is not None:
     y = rearrange(y, 'b t c -> b c t')
 
     high_prob = torch.amax(y, dim = 1)
     knowns = high_prob.eq(1).float()
     unknowns = high_prob.lt(1).float()
-  
+
     reg_loss_unknowns = reg_loss * unknowns
-        
+
     class_weights = torch.reshape(class_weights, (1, -1, 1))
     class_weights = y * class_weights
     class_weights = torch.amax(class_weights, dim = 1)
-    
+
     reg_loss_knowns = reg_loss * knowns * class_weights
-    
+
     reg_loss = reg_loss_unknowns + reg_loss_knowns
-    
+
   reg_loss = torch.sum(reg_loss)
   n_pos = mask.sum()
-  
+
   if n_pos>0:
     reg_loss = reg_loss / n_pos
-    
+
   return reg_loss
 
 def masked_classification_loss(class_logits, y, d, class_weights = None):
@@ -266,41 +312,41 @@ def masked_classification_loss(class_logits, y, d, class_weights = None):
   # y (Tensor): [batch, time,n_classes]
   # d (Tensor) : [batch, time,], float tensor
   # class_weight : [n_classes,], float tensor
-  
+
   class_logits = rearrange(class_logits, 'b t c -> b c t')
   y = rearrange(y, 'b t c -> b c t')
-  
+
   high_prob = torch.amax(y, dim = 1)
   knowns = high_prob.eq(1).float()
   unknowns = high_prob.lt(1).float()
-  
+
   mask = d.eq(1).float() # mask out time steps where no event is present
-  
+
   known_class_loss = F.cross_entropy(class_logits, y, weight=class_weights, reduction='none')
   known_class_loss = known_class_loss * mask * knowns
   known_class_loss = torch.sum(known_class_loss)
-  
+
   unknown_class_loss = F.cross_entropy(class_logits, y, weight=None, reduction='none')
   unknown_class_loss = unknown_class_loss * mask * unknowns
   unknown_class_loss = torch.sum(unknown_class_loss)
-  
+
   class_loss = known_class_loss + unknown_class_loss
   n_pos = mask.sum()
-  
+
   if n_pos>0:
     class_loss = class_loss / n_pos
-    
+
   return class_loss
-  
+
 def get_class_loss_fn(args):
   dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
   class_proportions = dataloader_temp.dataset.get_class_proportions()
   class_weights = 1. / (class_proportions + 1e-6)
-    
+
   class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
-  
+
   print(f"Using class weights {class_weights}")
-  
+
   class_weights = torch.Tensor(class_weights).to(device)
   return partial(masked_classification_loss, class_weights = class_weights)
 
@@ -308,9 +354,9 @@ def get_reg_loss_fn(args):
   dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
   class_proportions = dataloader_temp.dataset.get_class_proportions()
   class_weights = 1. / (class_proportions + 1e-6)
-    
+
   class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
-  
+
   class_weights = torch.Tensor(class_weights).to(device)
   return partial(masked_reg_loss, class_weights = class_weights)
-                               
+

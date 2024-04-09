@@ -8,10 +8,11 @@ import yaml
 
 def parse_args(args,allow_unknown=False):
   parser = argparse.ArgumentParser()
-  
+
   # General
   parser.add_argument('--name', type = str, required=True)
   parser.add_argument('--seed', type=int, default=0)
+  parser.add_argument('--is_test', '-t', action='store_true')
 
   # Data
   parser.add_argument('--project-config-fp', type = str, required=True)
@@ -19,7 +20,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--clip-hop', type=float, default=None, help = "clip hop, in seconds. If None, automatically set to be half clip duration. Used only during training; clip hop is automatically set to be 1/2 clip duration for inference")
   parser.add_argument('--train-info-fp', type=str, required=False, help = "train info, to override project train info")
   parser.add_argument('--num-workers', type=int, default=8)
-  
+
   # Model
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by aves")
@@ -33,11 +34,11 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--stereo', action='store_true', help="If passed, will process stereo data as stereo")
 
   # Training
-  parser.add_argument('--batch-size', type=int, default=32) 
-  parser.add_argument('--lr', type=float, default=.00005) 
+  parser.add_argument('--batch-size', type=int, default=32)
+  parser.add_argument('--lr', type=float, default=.00005)
   parser.add_argument('--n-epochs', type=int, default=50)
   parser.add_argument('--unfreeze-encoder-epoch', type=int, default=3)
-  parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the frames on each end of the clip") 
+  parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the frames on each end of the clip")
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0, help="if a clip has no annotations, do not use for training with this probability")
   parser.add_argument('--lamb', type=float, default=.04, help="parameter controlling strength regression loss")
   parser.add_argument('--rho', type=float, default = .01, help="parameter controlling strength of classification loss")
@@ -47,31 +48,31 @@ def parse_args(args,allow_unknown=False):
 
   parser.add_argument('--early-stopping', action ="store_true", help="Whether to use early stopping based on val performance")
   parser.add_argument('--pos-loss-weight', type=float, default=1, help="Weights positive component of loss")
-  
+
   # Augmentations
-  parser.add_argument('--amp-aug', action ="store_true", help="Whether to use amplitude augmentation") 
-  parser.add_argument('--amp-aug-low-r', type=float, default = 0.8) 
-  parser.add_argument('--amp-aug-high-r', type=float, default = 1.2) 
-  parser.add_argument('--mixup', action ="store_true", help="Whether to use mixup augmentation") 
-  
+  parser.add_argument('--amp-aug', action ="store_true", help="Whether to use amplitude augmentation")
+  parser.add_argument('--amp-aug-low-r', type=float, default = 0.8)
+  parser.add_argument('--amp-aug-high-r', type=float, default = 1.2)
+  parser.add_argument('--mixup', action ="store_true", help="Whether to use mixup augmentation")
+
   # Inference
   parser.add_argument('--peak-distance', type=float, default=5, help="for finding peaks in detection probability, what radius to use for detecting local maxima. In output frame rate.")
   parser.add_argument('--nms', type = str, default='soft_nms', choices = ['none', 'nms', 'soft_nms'], help="Whether to apply additional nms after finding peaks")
   parser.add_argument('--soft-nms-sigma', type = float, default = 0.5)
   parser.add_argument('--soft-nms-thresh', type = float, default = 0.001)
   parser.add_argument('--nms-thresh', type = float, default = 0.5)
-  
+
   if allow_unknown:
     args, remaining = parser.parse_known_args(args)
   else:
     args = parser.parse_args(args)
-  
+
   args = read_config(args)
   check_config(args)
 
   if args.clip_hop is None:
     setattr(args, "clip_hop", args.clip_duration/2)
-  
+
   if allow_unknown:
     return args, remaining
   else:
@@ -80,10 +81,10 @@ def parse_args(args,allow_unknown=False):
 def read_config(args):
   with open(args.project_config_fp, 'r') as f:
     project_config = yaml.safe_load(f)
-    
+
   for key in project_config:
     setattr(args,key,project_config[key])
-    
+
   return args
 
 def set_seed(seed):
@@ -104,7 +105,7 @@ def save_params(args):
 
   with open(params_file, "w") as f:
     yaml.dump(args_dict, f)
-      
+
 def load_params(fp):
   with open(fp, 'r') as f:
     args_dict = yaml.safe_load(f)
