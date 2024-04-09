@@ -32,6 +32,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--previous-checkpoint-fp', type=str, default=None, help="path to checkpoint of previously trained detection model")
   parser.add_argument('--aves-url', type=str, default = "https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt")
   parser.add_argument('--stereo', action='store_true', help="If passed, will process stereo data as stereo")
+  parser.add_argument('--comb-threshold', type=float, default=0.75, help="discard combined detections whose prob is below this threshold")
 
   # Training
   parser.add_argument('--batch-size', type=int, default=32)

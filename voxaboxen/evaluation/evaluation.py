@@ -417,7 +417,7 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
 
     predictions_fp = export_to_selection_table(detections, regressions, classifications, fn, args, is_rev=False, verbose=verbose)
     rev_predictions_fp = export_to_selection_table(rev_detections, rev_regressions, rev_classifications, fn, args, is_rev=True, verbose=verbose)
-    comb_predictions_fp = combine_fwd_bck_preds(args.experiment_output_dir, fn)
+    comb_predictions_fp = combine_fwd_bck_preds(args.experiment_output_dir, fn, discard_threshold=args.comb_threshold)
 
     annotations_fp = dataloader_dict[fn].dataset.annot_fp
 
@@ -430,7 +430,7 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   manifest = pd.DataFrame({'filename' : fns, 'predictions_fp' : predictions_fps, 'rev_predictions_fp' : rev_predictions_fps, 'comb_predictions_fp' : comb_predictions_fps, 'annotations_fp' : annotations_fps})
   return manifest
 
-def combine_fwd_bck_preds(target_dir, fn):
+def combine_fwd_bck_preds(target_dir, fn, discard_threshold):
     fwd_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}.txt')
     bck_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-rev.txt')
     comb_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-comb.txt')
@@ -459,6 +459,7 @@ def combine_fwd_bck_preds(target_dir, fn):
     bck_unmatched = select_from_neg_idxs(bck_preds, bck_matched_idxs)
     comb_preds = pd.concat([match_preds, fwd_unmatched, bck_unmatched])
     assert len(comb_preds) == len(fwd_preds) + len(bck_preds) - len(c.matching)
+    comb_preds = comb_preds.loc[comb_preds['Detection Prob']>discard_threshold]
     comb_preds.sort_values('Begin Time (s)')
     comb_preds.index = list(range(len(comb_preds)))
 
