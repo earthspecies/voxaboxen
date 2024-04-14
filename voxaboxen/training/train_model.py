@@ -38,13 +38,13 @@ def train_model(args):
 
   manifest = predict_and_generate_manifest(trained_model, test_dataloader, args)
 
+  class_threshes = [0] if len(args.label_set)==1 else [0.0, 0.5, 0.95]
   for iou in [0.2, 0.5, 0.8]:
-    for class_threshold in [0.0, 0.5, 0.95]:
-      metrics, conf_mat, rev_metrics, rev_conf_mat, comb_metrics, comb_conf_mat  = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou = iou, class_threshold = class_threshold)
+    for class_threshold in class_threshes:
+      metrics, conf_mats = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou = iou, class_threshold = class_threshold)
       print(f'IOU: {iou} class_thresh: {class_threshold}')
-      print('Fwd:', metrics['summary'])
-      print('Bck:', rev_metrics['summary'])
-      print('Comb:', comb_metrics['summary'], '\n')
+      for pred_type in metrics.keys():
+          print(f'{pred_type}:', {k1:{k:round(100*v,4) for k,v in v1.items()} for k1,v1 in metrics[pred_type]['summary'].items()})
 
 if __name__ == "__main__":
   train_model(sys.argv[1:])

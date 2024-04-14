@@ -63,9 +63,11 @@ def train(model, args):
         yaml.dump(train_evals_by_epoch, f)
 
       if use_val:
-        eval_scores, rev_eval_scores, comb_eval_scores = val_epoch(model, t, val_dataloader, args)
+        #eval_scores, rev_eval_scores, comb_eval_scores = val_epoch(model, t, val_dataloader, args)
+        eval_scores = val_epoch(model, t, val_dataloader, args)
+        #for pt,pt_es in eval_scores.items():
         # TODO: maybe plot rev-evals
-        val_evals.append(comb_eval_scores.copy())
+        val_evals.append(eval_scores['comb'].copy())
         plot_eval(train_evals, learning_rates, args, val_evals=val_evals)
 
         val_evals_by_epoch = {i : e for i, e in enumerate(val_evals)}
@@ -77,7 +79,7 @@ def train(model, args):
       scheduler.step()
 
       if use_val and args.early_stopping:
-        current_f1 = comb_eval_scores['f1']
+        current_f1 = eval_scores['comb']['f1']
         if current_f1 > best_f1:
           print('found new best model')
           best_f1 = current_f1
@@ -229,25 +231,33 @@ def val_epoch(model, t, dataloader, args):
     model.eval()
 
     manifest = predict_and_generate_manifest(model, dataloader, args, verbose = False)
-    e, _, rev_e, _, comb_e, _  = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
+    #e, _, rev_e, _, comb_e, _  = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
+    e, _  = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
 
-    evals = {k:[] for k in ['precision','recall','f1']}
-    rev_evals = {k:[] for k in ['precision','recall','f1']}
-    comb_evals = {k:[] for k in ['precision','recall','f1']}
-    for k in ['precision','recall','f1']:
-      for l in args.label_set:
-        m = e['summary'][l][k]
-        rev_m = rev_e['summary'][l][k]
-        comb_m = comb_e['summary'][l][k]
-        evals[k].append(m)
-        rev_evals[k].append(rev_m)
-        comb_evals[k].append(comb_m)
-      evals[k] = float(np.mean(evals[k]))
-      rev_evals[k] = float(np.mean(rev_evals[k]))
-      comb_evals[k] = float(np.mean(comb_evals[k]))
+    print(f"Epoch {t} | val@{args.model_selection_iou}IoU:")
+    evals = {}
+    for pt in e.keys():
+        evals[pt] = {k:[] for k in ['precision','recall','f1']}
+    #evals = {k:[] for k in ['precision','recall','f1']}
+    #rev_evals = {k:[] for k in ['precision','recall','f1']}
+    #comb_evals = {k:[] for k in ['precision','recall','f1']}
+        for k in ['precision','recall','f1']:
+          for l in args.label_set:
+            m = e[pt]['summary'][l][k]
+            #rev_m = rev_e['summary'][l][k]
+            #comb_m = comb_e['summary'][l][k]
+            evals[pt][k].append(m)
+            #rev_evals[k].append(rev_m)
+            #comb_evals[k].append(comb_m)
+          evals[pt][k] = float(np.mean(evals[pt][k]))
+          #rev_evals[k] = float(np.mean(rev_evals[k]))
+          #comb_evals[k] = float(np.mean(comb_evals[k]))
 
-    print(f"Epoch {t} | val@{args.model_selection_iou}IoU: prec: {evals['precision']:1.3f} rec: {evals['recall']:1.3f} F1: {evals['f1']:1.3f} revprec: {rev_evals['precision']:1.3f} revrec: {rev_evals['recall']:1.3f} revF1: {rev_evals['f1']:1.3f} combprec: {comb_evals['precision']:1.3f} combrec: {comb_evals['recall']:1.3f} combF1: {comb_evals['f1']:1.3f}")
-    return evals, rev_evals, comb_evals
+        print(f"{pt}prec: {evals[pt]['precision']:1.3f} {pt}rec: {evals[pt]['recall']:1.3f} {pt}F1: {evals[pt]['f1']:1.3f}", end=' ')
+        #revprec: {rev_evals['precision']:1.3f} revrec: {rev_evals['recall']:1.3f} revF1: {rev_evals['f1']:1.3f} combprec: {comb_evals['precision']:1.3f} combrec: {comb_evals['recall']:1.3f} combF1: {comb_evals['f1']:1.3f}")
+    #return evals, rev_evals, comb_evals
+    print()
+    return evals
 
 def modified_focal_loss(pred, gt, pos_loss_weight = 1):
   # Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
