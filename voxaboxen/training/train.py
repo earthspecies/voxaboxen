@@ -63,10 +63,8 @@ def train(model, args):
         yaml.dump(train_evals_by_epoch, f)
 
       if use_val:
-        #eval_scores, rev_eval_scores, comb_eval_scores = val_epoch(model, t, val_dataloader, args)
         eval_scores = val_epoch(model, t, val_dataloader, args)
-        #for pt,pt_es in eval_scores.items():
-        # TODO: maybe plot rev-evals
+        # TODO: maybe plot evals for other pred_types
         val_evals.append(eval_scores['comb'].copy())
         plot_eval(train_evals, learning_rates, args, val_evals=val_evals)
 
@@ -125,7 +123,7 @@ def train(model, args):
 
   return model
 
-def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, reg_loss_fn):
+def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, reg_loss_fn, class_loss_fn):
     end_mask_perc = args.end_mask_perc
     end_mask_dur = int(det_preds.size(1)*end_mask_perc)
 
@@ -135,13 +133,15 @@ def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, reg_loss_fn):
     reg_preds_clipped = reg_preds[:,end_mask_dur:-end_mask_dur]
     regs_clipped = regs[:,end_mask_dur:-end_mask_dur]
 
-    #y_preds_clipped = y_preds[:,end_mask_dur:-end_mask_dur,:]
     y_clipped = y[:,end_mask_dur:-end_mask_dur,:]
 
     detection_loss = modified_focal_loss(det_preds_clipped, dets_clipped, pos_loss_weight=args.pos_loss_weight)
     reg_loss = reg_loss_fn(reg_preds_clipped, regs_clipped, dets_clipped, y_clipped)
-    #class_loss = class_loss_fn(y_preds_clipped, y_clipped, dets_clipped)
-    class_loss = torch.tensor(0)
+    if len(args.label_set)==1:
+        class_loss = torch.tensor(0)
+    else:
+        y_preds_clipped = y_preds[:,end_mask_dur:-end_mask_dur,:]
+        class_loss = class_loss_fn(y_preds_clipped, y_clipped, dets_clipped)
     return detection_loss, reg_loss, class_loss
 
 def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args):
@@ -174,8 +174,8 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
       # We mask out loss from each end of the clip, so the model isn't forced to learn to detect events that are partially cut off.
       # This does not affect inference, because during inference we overlap clips at 50%
 
-      detection_loss, reg_loss, class_loss = lf(d, probs, r, regression, class_logits, y, args=args, reg_loss_fn=reg_loss_fn)
-      rev_detection_loss, rev_reg_loss, rev_class_loss = lf(rev_d, rev_probs, rev_r, rev_regression, rev_class_logits, rev_y, args=args, reg_loss_fn=reg_loss_fn)
+      detection_loss, reg_loss, class_loss = lf(d, probs, r, regression, y, class_logits, args=args, reg_loss_fn=reg_loss_fn, class_loss_fn=class_loss_fn)
+      rev_detection_loss, rev_reg_loss, rev_class_loss = lf(rev_d, rev_probs, rev_r, rev_regression, rev_y, rev_class_logits, args=args, reg_loss_fn=reg_loss_fn, class_loss_fn=class_loss_fn)
       normal_loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
       rev_loss = args.rho * rev_class_loss + rev_detection_loss + args.lamb * rev_reg_loss
       loss = (normal_loss + rev_loss)/2
@@ -209,9 +209,6 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
       rev_regression_losses.append(args.lamb * rev_reg_loss.item())
       rev_class_losses.append(args.rho * rev_class_loss.item())
 
-      #if i > 150:
-          #breakpoint()
-      # Backpropagation
       optimizer.zero_grad()
       loss.backward()
 
@@ -231,31 +228,19 @@ def val_epoch(model, t, dataloader, args):
     model.eval()
 
     manifest = predict_and_generate_manifest(model, dataloader, args, verbose = False)
-    #e, _, rev_e, _, comb_e, _  = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
-    e, _  = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'val_results'), iou = args.model_selection_iou, class_threshold = args.model_selection_class_threshold)
+    e, _ = evaluate_based_on_manifest(manifest, args, output_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_threshold)
 
     print(f"Epoch {t} | val@{args.model_selection_iou}IoU:")
     evals = {}
     for pt in e.keys():
         evals[pt] = {k:[] for k in ['precision','recall','f1']}
-    #evals = {k:[] for k in ['precision','recall','f1']}
-    #rev_evals = {k:[] for k in ['precision','recall','f1']}
-    #comb_evals = {k:[] for k in ['precision','recall','f1']}
         for k in ['precision','recall','f1']:
           for l in args.label_set:
             m = e[pt]['summary'][l][k]
-            #rev_m = rev_e['summary'][l][k]
-            #comb_m = comb_e['summary'][l][k]
             evals[pt][k].append(m)
-            #rev_evals[k].append(rev_m)
-            #comb_evals[k].append(comb_m)
           evals[pt][k] = float(np.mean(evals[pt][k]))
-          #rev_evals[k] = float(np.mean(rev_evals[k]))
-          #comb_evals[k] = float(np.mean(comb_evals[k]))
 
         print(f"{pt}prec: {evals[pt]['precision']:1.3f} {pt}rec: {evals[pt]['recall']:1.3f} {pt}F1: {evals[pt]['f1']:1.3f}", end=' ')
-        #revprec: {rev_evals['precision']:1.3f} revrec: {rev_evals['recall']:1.3f} revF1: {rev_evals['f1']:1.3f} combprec: {comb_evals['precision']:1.3f} combrec: {comb_evals['recall']:1.3f} combF1: {comb_evals['f1']:1.3f}")
-    #return evals, rev_evals, comb_evals
     print()
     return evals
 
