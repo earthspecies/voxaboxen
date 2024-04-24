@@ -1,5 +1,5 @@
 import pandas as pd
-from voxaboxen.data.data import get_test_dataloader
+from voxaboxen.data.data import get_test_dataloader, get_val_dataloader
 import torch
 from voxaboxen.model.model import DetectionModel, DetectionModelStereo
 from voxaboxen.training.train import train
@@ -10,7 +10,13 @@ import yaml
 import sys
 import os
 
+
+def print_metrics(metrics, just_one_label):
+    for pred_type in metrics.keys():
+        to_print = {k1:{k:round(100*v,4) for k,v in v1.items()} for k1,v1 in metrics[pred_type]['summary'].items()} if just_one_label else dict(pd.DataFrame(metrics[pred_type]['summary']).mean(axis=1).round(4))
+        print(f'{pred_type}:', to_print)
 def train_model(args):
+
   ## Setup
   args = parse_args(args)
 
@@ -34,7 +40,6 @@ def train_model(args):
     model = DetectionModel(args)
 
   if args.reload_from is not None:
-    #model.load_state_dict(os.path.join(args.experiment_dir), 'model.pt')
     checkpoint = torch.load(os.path.join(args.project_dir, args.reload_from, 'model.pt'))
     model.load_state_dict(checkpoint['model_state_dict'])
 
@@ -46,19 +51,27 @@ def train_model(args):
 
   ## Evaluation
   test_dataloader = get_test_dataloader(args)
+  val_dataloader = get_val_dataloader(args)
 
-  manifest = predict_and_generate_manifest(trained_model, test_dataloader, args)
+  val_manifest = predict_and_generate_manifest(trained_model, val_dataloader, args)
 
-  #class_threshes = [0] if len(args.label_set)==1 else [0.0, 0.5, 0.95]
-  class_threshes = [0.0, 0.5, 0.95]
+  best_comb_discard_thresh = -1
+  best_f1 = 0
+  for comb_discard_thresh in [.3,.35,.4,.45,.5,.55,.6,.65,.75,.8,.85,.9]:
+    val_metrics, val_conf_mats = evaluate_based_on_manifest(val_manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou=0.5, class_threshold=0.5, comb_discard_threshold=comb_discard_thresh)
+    new_f1 = val_metrics['comb']['macro']['f1']
+    if new_f1 > best_f1:
+      best_comb_discard_thresh = comb_discard_thresh
+      best_f1 = new_f1
+    print(f'IOU: 0.5 class_thresh: 0.5 Comb discard threshold: {comb_discard_thresh}')
+    print_metrics(val_metrics, just_one_label=(len(args.label_set)==1))
+
+  test_manifest = predict_and_generate_manifest(trained_model, test_dataloader, args)
+  print(f'Using thresh: {best_comb_discard_thresh}')
   for iou in [0.2, 0.5, 0.8]:
-    for class_threshold in class_threshes:
-        for comb_discard_thresh in [0.85]:
-          metrics, conf_mats = evaluate_based_on_manifest(manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou=iou, class_threshold=class_threshold, comb_discard_threshold=comb_discard_thresh)
-          print(f'IOU: {iou} class_thresh: {class_threshold} Comb discard threshold: {comb_discard_thresh}')
-          for pred_type in metrics.keys():
-              to_print = {k1:{k:round(100*v,4) for k,v in v1.items()} for k1,v1 in metrics[pred_type]['summary'].items()} if len(args.label_set)==1 else dict(pd.DataFrame(metrics[pred_type]['summary']).mean(axis=1).round(4))
-              print(f'{pred_type}:', to_print)
+    test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou=iou, class_threshold=0.5, comb_discard_threshold=best_comb_discard_thresh)
+    print(f'Test with IOU{iou}')
+    print_metrics(test_metrics, just_one_label=(len(args.label_set)==1))
 
 if __name__ == "__main__":
   train_model(sys.argv[1:])
