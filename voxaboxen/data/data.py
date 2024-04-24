@@ -238,8 +238,7 @@ def get_train_dataloader(args, random_seed_shift = 0):
   train_dataloader = DataLoader(train_dataset,
                                 batch_size=effective_batch_size,
                                 shuffle=True,
-                                #num_workers=args.num_workers,
-                                num_workers=0,
+                                num_workers=args.num_workers,
                                 pin_memory=True,
                                 drop_last = True)
 

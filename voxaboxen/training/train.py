@@ -179,23 +179,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
       normal_loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
       rev_loss = args.rho * rev_class_loss + rev_detection_loss + args.lamb * rev_reg_loss
       loss = (normal_loss + rev_loss)/2
-      #end_mask_perc = args.end_mask_perc
-      #end_mask_dur = int(probs.size(1)*end_mask_perc)
 
-      #d_clipped = d[:,end_mask_dur:-end_mask_dur]
-      #probs_clipped = probs[:,end_mask_dur:-end_mask_dur]
-
-      #regression_clipped = regression[:,end_mask_dur:-end_mask_dur]
-      #r_clipped = r[:,end_mask_dur:-end_mask_dur]
-
-      #class_logits_clipped = class_logits[:,end_mask_dur:-end_mask_dur,:]
-      #y_clipped = y[:,end_mask_dur:-end_mask_dur,:]
-
-      #detection_loss = detection_loss_fn(probs_clipped, d_clipped, pos_loss_weight = args.pos_loss_weight)
-      #reg_loss = reg_loss_fn(regression_clipped, r_clipped, d_clipped, y_clipped)
-      #class_loss = class_loss_fn(class_logits_clipped, y_clipped, d_clipped)
-
-      #loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
       train_loss += loss.item()
       rev_train_loss += rev_loss.item()
       normal_train_loss += normal_loss.item()

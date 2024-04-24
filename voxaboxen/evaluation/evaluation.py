@@ -222,7 +222,6 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
 
   return all_features.detach().cpu().numpy()
 
-#def export_to_selection_table(dets, regs, classifs, fn, args, is_bck, verbose=True, target_dir=None, det_threshold=0.5, classif_threshold=0):
 def export_to_selection_table(dets, regs, classifs, fn, args, is_bck, verbose=True, target_dir=None, classif_threshold=0):
 
   if target_dir is None:
@@ -414,8 +413,6 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   fns = []
   fwd_predictions_fps = []
   bck_predictions_fps = []
-  #comb_predictions_fps = []
-  #match_predictions_fps = []
   annotations_fps = []
 
   for fn in dataloader_dict:
@@ -430,7 +427,6 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
     bck_predictions_fps.append(bck_predictions_fp)
     annotations_fps.append(annotations_fp)
 
-  #manifest = pd.DataFrame({'filename' : fns, 'fwd_predictions_fp' : fwd_predictions_fps, 'bck_predictions_fp' : bck_predictions_fps, 'comb_predictions_fp' : comb_predictions_fps, 'match_predictions_fp' : match_predictions_fps, 'annotations_fp' : annotations_fps})
   manifest = pd.DataFrame({'filename' : fns, 'fwd_predictions_fp' : fwd_predictions_fps, 'bck_predictions_fp' : bck_predictions_fps, 'annotations_fp' : annotations_fps})
   return manifest
 
@@ -487,11 +483,13 @@ def combine_fwd_bck_preds(target_dir, fn, comb_iou_threshold, comb_discard_thres
         bck_pred = bck_preds.iloc[bp]
         bp_end_time = bck_pred['End Time (s)']
         match_pred['End Time (s)'] = bp_end_time
+        # Sorta like assuming forward and back predictions are independent, gives a high prob for the matched predictions
         match_pred['Detection Prob'] = 1 - (1-match_pred['Detection Prob'])*(1-bck_pred['Detection Prob'])
         match_preds_list.append(match_pred)
 
     match_preds = pd.DataFrame(match_preds_list, columns=fwd_preds.columns)
-    # Now include the union of all that weren't matched
+
+    # Include the union of all predictions that weren't part of the matching
     fwd_matched_idxs = [m[0] for m in c.matching]
     bck_matched_idxs = [m[1] for m in c.matching]
     fwd_unmatched = select_from_neg_idxs(fwd_preds, fwd_matched_idxs)
@@ -499,8 +497,9 @@ def combine_fwd_bck_preds(target_dir, fn, comb_iou_threshold, comb_discard_thres
     to_concat = [x for x in [match_preds, fwd_unmatched, bck_unmatched] if x.shape[0]>0]
     comb_preds = pd.concat(to_concat) if len(to_concat)>0 else fwd_preds
     assert len(comb_preds) == len(fwd_preds) + len(bck_preds) - len(c.matching)
+
+    # Finally, keep only predictions above a threshold, this will include almost all matches
     comb_preds = comb_preds.loc[comb_preds['Detection Prob']>comb_discard_threshold]
-    #print(f'Using combdiscardthresh {args.comb_discard_threshold} and comb_preds has shape {comb_preds.shape}')
     comb_preds.sort_values('Begin Time (s)')
     comb_preds.index = list(range(len(comb_preds)))
 

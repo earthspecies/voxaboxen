@@ -12,8 +12,8 @@ def parse_args(args,allow_unknown=False):
   # General
   parser.add_argument('--name', type = str, required=True)
   parser.add_argument('--seed', type=int, default=0)
-  parser.add_argument('--is_test', '-t', action='store_true')
-  parser.add_argument('--overwrite', action='store_true')
+  parser.add_argument('--is_test', '-t', action='store_true', help='run a quick version for testing')
+  parser.add_argument('--overwrite', action='store_true', help='overwrite an experiment of the same name, if it exists')
 
   # Data
   parser.add_argument('--project-config-fp', type = str, required=True)
@@ -33,8 +33,8 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--previous-checkpoint-fp', type=str, default=None, help="path to checkpoint of previously trained detection model")
   parser.add_argument('--aves-url', type=str, default = "https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt")
   parser.add_argument('--stereo', action='store_true', help="If passed, will process stereo data as stereo")
-  parser.add_argument('--comb-discard-threshold', type=float, default=0.75, help="discard combined detections whose prob is below this threshold")
-  parser.add_argument('--comb-iou-threshold', type=float, default=0.5, help="discard combined detections whose prob is below this threshold")
+  parser.add_argument('--comb-discard-threshold', type=float, default=0.75, help="during evaluation, discard combined detections whose prob is below this threshold")
+  parser.add_argument('--comb-iou-threshold', type=float, default=0.5, help="minimum iou to match a forward and backward prediction")
   parser.add_argument('--reload-from', type=str)
 
   # Training

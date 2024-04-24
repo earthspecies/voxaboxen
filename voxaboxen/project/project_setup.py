@@ -27,7 +27,6 @@ def project_setup(args):
 
   label_set = sorted(set(all_annots))
   label_mapping = {x : x for x in label_set}
-  breakpoint()
   label_mapping['Unknown'] = 'Unknown'
   unknown_label = 'Unknown'
 
