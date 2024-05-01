@@ -24,7 +24,7 @@ def train_model(args):
 
   experiment_dir = os.path.join(args.project_dir, args.name)
   setattr(args, 'experiment_dir', str(experiment_dir))
-  if os.path.exists(args.experiment_dir) and not args.overwrite:
+  if os.path.exists(args.experiment_dir) and args.overwrite and args.name!='demo':
     sys.exit('experiment already exists with this name')
     os.makedirs(args.experiment_dir)
 
