@@ -44,11 +44,17 @@ class AvesEmbedding(nn.Module):
 class DetectionModel(nn.Module):
   def __init__(self, args, embedding_dim=768):
       super().__init__()
+      self.is_bidirectional = args.bidirectional
+      self.is_stereo = args.stereo
+      self.is_segmentation = args.segmentation
+      if self.is_stereo:
+          embedding_dim *= 2
       self.encoder = AvesEmbedding(args)
       self.args = args
       aves_sr = args.sr // args.scale_factor
       self.detection_head = DetectionHead(args, embedding_dim = embedding_dim)
-      self.rev_detection_head = DetectionHead(args, embedding_dim = embedding_dim)
+      if self.is_bidirectional:
+          self.rev_detection_head = DetectionHead(args, embedding_dim = embedding_dim)
 
   def forward(self, x):
       """
@@ -64,7 +70,12 @@ class DetectionModel(nn.Module):
       expected_dur_output = math.ceil(x.size(1)/self.args.scale_factor)
 
       x = x-torch.mean(x,axis=1,keepdim=True)
-      feats = self.encoder(x)
+      if self.is_stereo:
+          feats0 = self.encoder(x[:,0,:])
+          feats1 = self.encoder(x[:,1,:])
+          feats = torch.cat([feats0,feats1],dim=-1)
+      else:
+          feats = self.encoder(x)
 
       #aves may be off by 1 sample from expected
       pad = expected_dur_output - feats.size(1)
@@ -73,8 +84,11 @@ class DetectionModel(nn.Module):
 
       detection_logits, regression, class_logits = self.detection_head(feats)
       detection_probs = torch.sigmoid(detection_logits)
-      rev_detection_logits, rev_regression, rev_class_logits = self.rev_detection_head(feats)
-      rev_detection_probs = torch.sigmoid(rev_detection_logits)
+      if self.is_bidirectional:
+          rev_detection_logits, rev_regression, rev_class_logits = self.rev_detection_head(feats)
+          rev_detection_probs = torch.sigmoid(rev_detection_logits)
+      else:
+          rev_detection_probs = rev_regression = rev_class_logits = None
 
       return detection_probs, regression, class_logits, rev_detection_probs, rev_regression, rev_class_logits
 
@@ -160,7 +174,6 @@ class DetectionModelStereo(DetectionModel):
     detection_probs = torch.sigmoid(detection_logits)
 
     return detection_probs, regression, class_logits
-
 
 def rms_and_mixup(X, d, r, y, train, args):
   if args.rms_norm:

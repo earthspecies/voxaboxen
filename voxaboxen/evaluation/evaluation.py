@@ -133,16 +133,18 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
       X = X.to(device = device, dtype = torch.float)
       X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
 
-      detection, regression, classif, rev_detection, rev_regression, rev_classif  = model(X)
-      classif = torch.nn.functional.softmax(classif, dim=-1)
-      rev_classif = torch.nn.functional.softmax(rev_classif, dim=-1)
-
-      all_detections.append(detection)
-      all_regressions.append(regression)
-      all_classifs.append(classif)
-      all_rev_detections.append(rev_detection)
-      all_rev_regressions.append(rev_regression)
-      all_rev_classifs.append(rev_classif)
+      model_outputs = model(X)
+      assert isinstance(model_outputs, tuple)
+      all_detections.append(model_outputs[0])
+      all_regressions.append(model_outputs[1])
+      all_classifs.append(model_outputs[2].softmax(-1))
+      if model.is_bidirectional:
+          assert all(x is not None for x in model_outputs)
+          all_rev_detections.append(model_outputs[3])
+          all_rev_regressions.append(model_outputs[4])
+          all_rev_classifs.append(model_outputs[5].softmax(-1))
+      else:
+          assert all(x is None for x in model_outputs[3:])
 
       if args.is_test and i==15:
         break
@@ -150,10 +152,10 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
     all_detections = torch.cat(all_detections)
     all_regressions = torch.cat(all_regressions)
     all_classifs = torch.cat(all_classifs)
-    all_rev_detections = torch.cat(all_rev_detections)
-    all_rev_regressions = torch.cat(all_rev_regressions)
-    all_rev_classifs = torch.cat(all_rev_classifs)
-
+    if model.is_bidirectional:
+        all_rev_detections = torch.cat(all_rev_detections)
+        all_rev_regressions = torch.cat(all_rev_regressions)
+        all_rev_classifs = torch.cat(all_rev_classifs)
 
     ######## Todo: Need better checking that preds are the correct dur
     assert all_detections.size(dim=1) % 2 == 0
@@ -186,7 +188,10 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
         return assembled_d.detach().cpu().numpy(), assembled_r.detach().cpu().numpy(), assembled_c.detach().cpu().numpy(),
 
     assembled_dets, assembled_regs, assembled_classifs = assemble(all_detections, all_regressions, all_classifs)
-    assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs = assemble(all_rev_detections, all_rev_regressions, all_rev_classifs)
+    if model.is_bidirectional:
+        assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs = assemble(all_rev_detections, all_rev_regressions, all_rev_classifs)
+    else:
+        assembled_rev_dets = assembled_rev_regs = assembled_rev_classifs = None
     return assembled_dets, assembled_regs, assembled_classifs, assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs
 
 def generate_features(model, single_clip_dataloader, args, verbose = True):
@@ -419,7 +424,12 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
     fwd_detections, fwd_regressions, fwd_classifications, bck_detections, bck_regressions, bck_classifications  = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
 
     fwd_predictions_fp = export_to_selection_table(fwd_detections, fwd_regressions, fwd_classifications, fn, args, is_bck=False, verbose=verbose)
-    bck_predictions_fp = export_to_selection_table(bck_detections, bck_regressions, bck_classifications, fn, args, is_bck=True, verbose=verbose)
+    if model.is_bidirectional:
+        assert all(x is not None for x in [bck_detections, bck_classifications, bck_regressions])
+        bck_predictions_fp = export_to_selection_table(bck_detections, bck_regressions, bck_classifications, fn, args, is_bck=True, verbose=verbose)
+    else:
+        assert all(x is None for x in [bck_detections, bck_classifications, bck_regressions])
+        bck_predictions_fp = None
     annotations_fp = dataloader_dict[fn].dataset.annot_fp
 
     fns.append(fn)
@@ -431,20 +441,21 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   return manifest
 
 def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold, comb_discard_threshold):
-  pred_types = ('fwd', 'bck', 'comb', 'match')
+  pred_types = ('fwd', 'bck', 'comb', 'match') if args.bidirectional else ('fwd',)
   metrics = {p:{} for p in pred_types}
   conf_mats = {p:{} for p in pred_types}
   conf_mat_labels = {}
 
   for i, row in manifest.iterrows():
-    fn = row['filename']
-    annots_fp = row['annotations_fp']
-    row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_threshold, comb_discard_threshold=comb_discard_threshold)
+      fn = row['filename']
+      annots_fp = row['annotations_fp']
+      if args.bidirectional:
+        row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_threshold, comb_discard_threshold=comb_discard_threshold)
 
-    for pred_type in pred_types:
-        preds_fp = row[f'{pred_type}_predictions_fp']
-        metrics[pred_type][fn] = get_metrics(preds_fp, annots_fp, args, iou, class_threshold)
-        conf_mats[pred_type][fn], conf_mat_labels[pred_type] = get_confusion_matrix(preds_fp, annots_fp, args, iou, class_threshold)
+      for pred_type in pred_types:
+          preds_fp = row[f'{pred_type}_predictions_fp']
+          metrics[pred_type][fn] = get_metrics(preds_fp, annots_fp, args, iou, class_threshold)
+          conf_mats[pred_type][fn], conf_mat_labels[pred_type] = get_confusion_matrix(preds_fp, annots_fp, args, iou, class_threshold)
 
   if output_dir is not None:
     if not os.path.exists(output_dir):
@@ -452,7 +463,7 @@ def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold,
 
   # summarize and save metrics
   conf_mat_summaries = {}
-  for pred_type in ('fwd', 'bck', 'comb', 'match'):
+  for pred_type in pred_types:
       summary = summarize_metrics(metrics[pred_type])
       metrics[pred_type]['summary'] = summary
       metrics[pred_type]['macro'] = macro_metrics(summary)

@@ -65,7 +65,7 @@ def train(model, args):
       if use_val:
         eval_scores = val_epoch(model, t, val_dataloader, args)
         # TODO: maybe plot evals for other pred_types
-        val_evals.append(eval_scores['comb'].copy())
+        val_evals.append(eval_scores['fwd'].copy())
         plot_eval(train_evals, learning_rates, args, val_evals=val_evals)
 
         val_evals_by_epoch = {i : e for i, e in enumerate(val_evals)}
@@ -77,7 +77,7 @@ def train(model, args):
       scheduler.step()
 
       if use_val and args.early_stopping:
-        current_f1 = eval_scores['comb']['f1']
+        current_f1 = eval_scores['comb']['f1'] if model.is_bidirectional else eval_scores['fwd']['f1']
         if current_f1 > best_f1:
           print('found new best model')
           best_f1 = current_f1
@@ -119,7 +119,7 @@ def train(model, args):
 
   # resave validation with best model
   if use_val:
-    val_epoch(model, t+1, val_dataloader, args)
+    val_epoch(model, args.n_epochs, val_dataloader, args)
 
   return model
 
@@ -153,52 +153,63 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
 
 
     evals = {}
-    normal_train_loss = 0; normal_losses = []; detection_losses = []; regression_losses = []; class_losses = []
+    train_loss = 0; losses = []; detection_losses = []; regression_losses = []; class_losses = []
     rev_train_loss = 0; rev_losses = []; rev_detection_losses = []; rev_regression_losses = []; rev_class_losses = []
-    train_loss = 0; losses = []
+
     data_iterator = tqdm.tqdm(dataloader)
-    for i, (X, d, r, y, rev_d, rev_r, rev_y) in enumerate(data_iterator):
+    #for i, (X, d, r, y, rev_d, rev_r, rev_y) in enumerate(data_iterator):
+    for i, batch in enumerate(data_iterator):
       num_batches_seen = i
-      X = X.to(device = device, dtype = torch.float)
-      d = d.to(device = device, dtype = torch.float)
-      r = r.to(device = device, dtype = torch.float)
-      y = y.to(device = device, dtype = torch.float)
-      rev_d = rev_d.to(device = device, dtype = torch.float)
-      rev_r = rev_r.to(device = device, dtype = torch.float)
-      rev_y = rev_y.to(device = device, dtype = torch.float)
-
-      X, d, r, y = rms_and_mixup(X, d, r, y, True, args)
-      _, rev_d, rev_r, rev_y = rms_and_mixup(X, rev_d, rev_r, rev_y, True, args)
-      probs, regression, class_logits, rev_probs, rev_regression, rev_class_logits = model(X)
-
+      batch = [item.to(device, dtype=torch.float) for item in batch]
+      X, d, r, y = batch[:4]
+      #X = X.to(device = device, dtype = torch.float)
+      #d = d.to(device = device, dtype = torch.float)
+      #r = r.to(device = device, dtype = torch.float)
+      #y = y.to(device = device, dtype = torch.float)
       # We mask out loss from each end of the clip, so the model isn't forced to learn to detect events that are partially cut off.
       # This does not affect inference, because during inference we overlap clips at 50%
-
+      X, d, r, y = rms_and_mixup(X, d, r, y, True, args)
+      probs, regression, class_logits, rev_probs, rev_regression, rev_class_logits = model(X)
+      #model_outputs = model(X)
+      #probs, regression, class_logits = model_outputs[:3]
       detection_loss, reg_loss, class_loss = lf(d, probs, r, regression, y, class_logits, args=args, reg_loss_fn=reg_loss_fn, class_loss_fn=class_loss_fn)
-      rev_detection_loss, rev_reg_loss, rev_class_loss = lf(rev_d, rev_probs, rev_r, rev_regression, rev_y, rev_class_logits, args=args, reg_loss_fn=reg_loss_fn, class_loss_fn=class_loss_fn)
-      normal_loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
-      rev_loss = args.rho * rev_class_loss + rev_detection_loss + args.lamb * rev_reg_loss
-      loss = (normal_loss + rev_loss)/2
 
+      loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
       train_loss += loss.item()
-      rev_train_loss += rev_loss.item()
-      normal_train_loss += normal_loss.item()
-      normal_losses.append(normal_loss.item())
-      rev_losses.append(rev_loss.item())
       losses.append(loss.item())
       detection_losses.append(detection_loss.item())
       regression_losses.append(args.lamb * reg_loss.item())
       class_losses.append(args.rho * class_loss.item())
-      rev_detection_losses.append(rev_detection_loss.item())
-      rev_regression_losses.append(args.lamb * rev_reg_loss.item())
-      rev_class_losses.append(args.rho * rev_class_loss.item())
+
+      pbar_str = f"loss {np.mean(losses[-10:]):.5f}, det {np.mean(detection_losses[-10:]):.5f}, reg {np.mean(regression_losses[-10:]):.5f}, class {np.mean(class_losses[-10:]):.5f}"
+
+      if model.is_bidirectional:
+          assert all(x is not None for x in [rev_probs, rev_regression, rev_class_logits])
+          rev_d, rev_r, rev_y = batch[4:]
+          #rev_probs, rev_regression, rev_class_logits = model_outputs[3:]
+          _, rev_d, rev_r, rev_y = rms_and_mixup(X, rev_d, rev_r, rev_y, True, args)
+
+
+          rev_detection_loss, rev_reg_loss, rev_class_loss = lf(rev_d, rev_probs, rev_r, rev_regression, rev_y, rev_class_logits, args=args, reg_loss_fn=reg_loss_fn, class_loss_fn=class_loss_fn)
+          rev_loss = args.rho * rev_class_loss + rev_detection_loss + args.lamb * rev_reg_loss
+          rev_train_loss += rev_loss.item()
+          rev_losses.append(rev_loss.item())
+          rev_detection_losses.append(rev_detection_loss.item())
+          rev_regression_losses.append(args.lamb * rev_reg_loss.item())
+          rev_class_losses.append(args.rho * rev_class_loss.item())
+          loss = (loss + rev_loss)/2
+
+          pbar_str += f" revloss {np.mean(rev_losses[-10:]):.5f}, revdet {np.mean(rev_detection_losses[-10:]):.5f}, revreg {np.mean(rev_regression_losses[-10:]):.5f}, revclass {np.mean(rev_class_losses[-10:]):.5f}"
+      else:
+          assert all(x is None for x in [rev_probs, rev_regression, rev_class_logits])
+
 
       optimizer.zero_grad()
       loss.backward()
 
       optimizer.step()
       if i > 10:
-        data_iterator.set_description(f"loss {np.mean(losses[-10:]):.5f}, det {np.mean(detection_losses[-10:]):.5f}, reg {np.mean(regression_losses[-10:]):.5f}, class {np.mean(class_losses[-10:]):.5f} revloss {np.mean(rev_losses[-10:]):.5f}, revdet {np.mean(rev_detection_losses[-10:]):.5f}, revreg {np.mean(rev_regression_losses[-10:]):.5f}, revclass {np.mean(rev_class_losses[-10:]):.5f}")
+        data_iterator.set_description(pbar_str)
 
       if args.is_test and i == 15: break
 

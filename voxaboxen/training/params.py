@@ -23,6 +23,8 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--num-workers', type=int, default=8)
 
   # Model
+  parser.add_argument('--bidirectional', action='store_true', help="train and inference in both directions and combine results")
+  parser.add_argument('--segmentation', action='store_true')
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by aves")
   parser.add_argument('--aves-model-weight-fp', type=str, default = "weights/aves-base-bio.torchaudio.pt")
@@ -76,6 +78,9 @@ def parse_args(args,allow_unknown=False):
 
   if args.clip_hop is None:
     setattr(args, "clip_hop", args.clip_duration/2)
+
+  if args.bidirectional and args.segmentation:
+    raise ValueError("bidirectional and segmentation settings are not currently compatible")
 
   if allow_unknown:
     return args, remaining

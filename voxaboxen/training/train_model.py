@@ -34,20 +34,14 @@ def train_model(args):
     os.makedirs(args.experiment_output_dir)
 
   save_params(args)
-  if hasattr(args,'stereo') and args.stereo:
-    model = DetectionModelStereo(args)
-  else:
-    model = DetectionModel(args)
+  model = DetectionModel(args)
 
   if args.reload_from is not None:
     checkpoint = torch.load(os.path.join(args.project_dir, args.reload_from, 'model.pt'))
     model.load_state_dict(checkpoint['model_state_dict'])
 
   ## Training
-  if args.n_epochs == 0:
-    trained_model = model
-  else:
-      trained_model = train(model, args)
+  trained_model = train(model, args)
 
   ## Evaluation
   test_dataloader = get_test_dataloader(args)
@@ -55,21 +49,22 @@ def train_model(args):
 
   val_manifest = predict_and_generate_manifest(trained_model, val_dataloader, args)
 
-  best_comb_discard_thresh = -1
-  best_f1 = 0
-  for comb_discard_thresh in [.3,.35,.4,.45,.5,.55,.6,.65,.75,.8,.85,.9]:
-    val_metrics, val_conf_mats = evaluate_based_on_manifest(val_manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou=0.5, class_threshold=0.5, comb_discard_threshold=comb_discard_thresh)
-    new_f1 = val_metrics['comb']['macro']['f1']
-    if new_f1 > best_f1:
-      best_comb_discard_thresh = comb_discard_thresh
-      best_f1 = new_f1
-    print(f'IOU: 0.5 class_thresh: 0.5 Comb discard threshold: {comb_discard_thresh}')
-    print_metrics(val_metrics, just_one_label=(len(args.label_set)==1))
+  model.comb_discard_thresh = -1
+  if model.is_bidirectional:
+      best_f1 = 0
+      for comb_discard_thresh in [.3,.35,.4,.45,.5,.55,.6,.65,.75,.8,.85,.9]:
+        val_metrics, val_conf_mats = evaluate_based_on_manifest(val_manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou=0.5, class_threshold=0.5, comb_discard_threshold=comb_discard_thresh)
+        new_f1 = val_metrics['comb']['macro']['f1']
+        if new_f1 > best_f1:
+          model.comb_discard_thresh = comb_discard_thresh
+          best_f1 = new_f1
+        print(f'IOU: 0.5 class_thresh: 0.5 Comb discard threshold: {comb_discard_thresh}')
+        print_metrics(val_metrics, just_one_label=(len(args.label_set)==1))
+      print(f'Using comb_discard_thresh: {model.comb_discard_thresh}')
 
   test_manifest = predict_and_generate_manifest(trained_model, test_dataloader, args)
-  print(f'Using thresh: {best_comb_discard_thresh}')
   for iou in [0.2, 0.5, 0.8]:
-    test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou=iou, class_threshold=0.5, comb_discard_threshold=best_comb_discard_thresh)
+    test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, args, output_dir = os.path.join(args.experiment_dir, 'test_results') , iou=iou, class_threshold=0.5, comb_discard_threshold=model.comb_discard_thresh)
     print(f'Test with IOU{iou}')
     print_metrics(test_metrics, just_one_label=(len(args.label_set)==1))
 
