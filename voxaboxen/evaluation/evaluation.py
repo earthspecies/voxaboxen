@@ -227,7 +227,7 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
 
   return all_features.detach().cpu().numpy()
 
-def export_to_selection_table(dets, regs, classifs, fn, args, is_bck, verbose=True, target_dir=None, classif_threshold=0):
+def export_to_selection_table(dets, regs, classifs, fn, args, is_bck, verbose=True, target_dir=None, detection_threshold=0, classif_threshold=0):
 
   if target_dir is None:
     target_dir = args.experiment_output_dir
@@ -248,7 +248,7 @@ def export_to_selection_table(dets, regs, classifs, fn, args, is_bck, verbose=Tr
 #   np.save(target_fp, classifs)
 
   ## peaks
-  det_peaks, properties = find_peaks(dets, height=args.detection_threshold, distance=args.peak_distance)
+  det_peaks, properties = find_peaks(dets, height=detection_threshold, distance=args.peak_distance)
   det_probs = properties['peak_heights']
 
   ## regs and classifs
@@ -278,7 +278,7 @@ def export_to_selection_table(dets, regs, classifs, fn, args, is_bck, verbose=Tr
   bboxes, det_probs, class_idxs, class_probs = pred2bbox(det_peaks, det_probs, durations, class_idxs, class_probs, pred_sr, is_bck)
 
   if args.nms == "soft_nms":
-    bboxes, det_probs, class_idxs, class_probs = soft_nms(bboxes, det_probs, class_idxs, class_probs, sigma=args.soft_nms_sigma, thresh=args.detection_threshold)
+    bboxes, det_probs, class_idxs, class_probs = soft_nms(bboxes, det_probs, class_idxs, class_probs, sigma=args.soft_nms_sigma, thresh=detection_threshold)
   elif args.nms == "nms":
     bboxes, det_probs, class_idxs, class_probs = nms(bboxes, det_probs, class_idxs, class_probs, iou_thresh=args.nms_thresh)
 
@@ -423,10 +423,10 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   for fn in dataloader_dict:
     fwd_detections, fwd_regressions, fwd_classifications, bck_detections, bck_regressions, bck_classifications  = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
 
-    fwd_predictions_fp = export_to_selection_table(fwd_detections, fwd_regressions, fwd_classifications, fn, args, is_bck=False, verbose=verbose)
+    fwd_predictions_fp = export_to_selection_table(fwd_detections, fwd_regressions, fwd_classifications, fn, args, is_bck=False, verbose=verbose, detection_threshold=args.detection_threshold)
     if model.is_bidirectional:
         assert all(x is not None for x in [bck_detections, bck_classifications, bck_regressions])
-        bck_predictions_fp = export_to_selection_table(bck_detections, bck_regressions, bck_classifications, fn, args, is_bck=True, verbose=verbose)
+        bck_predictions_fp = export_to_selection_table(bck_detections, bck_regressions, bck_classifications, fn, args, is_bck=True, verbose=verbose, detection_threshold=args.detection_threshold)
     else:
         assert all(x is None for x in [bck_detections, bck_classifications, bck_regressions])
         bck_predictions_fp = None

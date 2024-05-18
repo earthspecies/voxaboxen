@@ -53,6 +53,7 @@ class DetectionModel(nn.Module):
       self.args = args
       aves_sr = args.sr // args.scale_factor
       self.detection_head = DetectionHead(args, embedding_dim = embedding_dim)
+      self.comb_discard_thresh = nn.Parameter(torch.tensor(0.))
       if self.is_bidirectional:
           self.rev_detection_head = DetectionHead(args, embedding_dim = embedding_dim)
 
