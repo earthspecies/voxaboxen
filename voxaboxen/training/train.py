@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torchvision
 import tqdm
 from functools import partial
 import os
@@ -27,7 +28,7 @@ def train(model, args):
     cp = torch.load(args.previous_checkpoint_fp)
     model.load_state_dict(cp["model_state_dict"])
   
-  detection_loss_fn = modified_focal_loss
+  detection_loss_fn = get_detection_loss_fn(args)
   reg_loss_fn = get_reg_loss_fn(args)
   
   class_loss_fn = get_class_loss_fn(args)
@@ -291,26 +292,52 @@ def masked_classification_loss(class_logits, y, d, class_weights = None):
     class_loss = class_loss / n_pos
     
   return class_loss
+
+def segmentation_loss(class_logits, y, d, class_weights=None):
+  # class_logits (Tensor): [batch, time,n_classes]
+  # y (Tensor): [batch, time,n_classes]
+  # d (Tensor) : [batch, time,], float tensor
+  # class_weight : [n_classes,], float tensor
+  
+  default_focal_loss = torchvision.ops.sigmoid_focal_loss(class_logits, y, reduction='mean')
+  return default_focal_loss
+
   
 def get_class_loss_fn(args):
-  dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
-  class_proportions = dataloader_temp.dataset.get_class_proportions()
-  class_weights = 1. / (class_proportions + 1e-6)
-    
-  class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
-  
-  print(f"Using class weights {class_weights}")
-  
-  class_weights = torch.Tensor(class_weights).to(device)
-  return partial(masked_classification_loss, class_weights = class_weights)
+  if hasattr(args,"segmentation_based") and args.segmentation_based:
+    return segmentation_loss
+  else:
+    dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
+    class_proportions = dataloader_temp.dataset.get_class_proportions()
+    class_weights = 1. / (class_proportions + 1e-6)
+
+    class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
+
+    print(f"Using class weights {class_weights}")
+
+    class_weights = torch.Tensor(class_weights).to(device)
+    return partial(masked_classification_loss, class_weights = class_weights)
 
 def get_reg_loss_fn(args):
-  dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
-  class_proportions = dataloader_temp.dataset.get_class_proportions()
-  class_weights = 1. / (class_proportions + 1e-6)
-    
-  class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
-  
-  class_weights = torch.Tensor(class_weights).to(device)
-  return partial(masked_reg_loss, class_weights = class_weights)
+  if hasattr(args,"segmentation_based") and args.segmentation_based:
+    def zrl(regression, r, d, y, class_weights = None):
+      return torch.tensor(0.)
+    return zrl
+  else:
+    dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
+    class_proportions = dataloader_temp.dataset.get_class_proportions()
+    class_weights = 1. / (class_proportions + 1e-6)
+
+    class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
+
+    class_weights = torch.Tensor(class_weights).to(device)
+    return partial(masked_reg_loss, class_weights = class_weights)
                                
+def get_detection_loss_fn(args):
+  if hasattr(args,"segmentation_based") and args.segmentation_based:
+    def zdl(pred, gt, pos_loss_weight = 1):
+      return torch.tensor(0.)
+    return zdl
+  else:
+    return modified_focal_loss
+  

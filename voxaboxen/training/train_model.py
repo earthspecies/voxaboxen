@@ -1,5 +1,5 @@
 from voxaboxen.data.data import get_test_dataloader
-from voxaboxen.model.model import DetectionModel, DetectionModelStereo
+from voxaboxen.model.model import DetectionModel, DetectionModelStereo, DetectionModelMultichannel
 from voxaboxen.training.train import train
 from voxaboxen.training.params import parse_args, set_seed, save_params
 from voxaboxen.evaluation.evaluation import generate_predictions, export_to_selection_table, get_metrics, summarize_metrics, predict_and_generate_manifest, evaluate_based_on_manifest
@@ -27,6 +27,8 @@ def train_model(args):
   save_params(args)
   if hasattr(args,'stereo') and args.stereo:
     model = DetectionModelStereo(args)
+  elif hasattr(args,'multichannel') and args.multichannel:
+    model = DetectionModelMultichannel(args)
   else:
     model = DetectionModel(args)
   

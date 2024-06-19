@@ -126,7 +126,10 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
       X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
       
       detection, regression, classification = model(X)
-      classification = torch.nn.functional.softmax(classification, dim=-1)
+      if hasattr(args, "segmentation_based") and args.segmentation_based:
+        classification=torch.nn.functional.sigmoid(classification)
+      else:
+        classification=torch.nn.functional.softmax(classification, dim=-1)
       
       all_detections.append(detection)
       all_regressions.append(regression)
@@ -200,51 +203,104 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
     
   return all_features.detach().cpu().numpy()
 
+def fill_holes(m, max_hole):
+    stops = m[:-1] * ~m[1:]
+    stops = np.where(stops)[0]
+    
+    for stop in stops:
+        look_forward = m[stop+1:stop+1+max_hole]
+        if np.any(look_forward):
+            next_start = np.amin(np.where(look_forward)[0]) + stop + 1
+            m[stop : next_start] = True
+            
+    return m
+
+def delete_short(m, min_pos):
+    starts = m[1:] * ~m[:-1]
+
+    starts = np.where(starts)[0] + 1
+
+    clips = []
+
+    for start in starts:
+        look_forward = m[start:]
+        ends = np.where(~look_forward)[0]
+        if len(ends)>0:
+            clips.append((start, start+np.amin(ends)))
+            
+    m = np.zeros_like(m).astype(bool)
+    for clip in clips:
+        if clip[1] - clip[0] >= min_pos:
+            m[clip[0]:clip[1]] = True
+        
+    return m
+
 def export_to_selection_table(detections, regressions, classifications, fn, args, verbose=True, target_dir=None, detection_threshold = 0.5, classification_threshold = 0):
     
   if target_dir is None:
     target_dir = args.experiment_output_dir  
+  
+  if hasattr(args, "segmentation_based") and args.segmentation_based:
+    pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
+    bboxes = []
+    detection_probs = []
+    class_idxs = []
+    class_probs = []
+    for c in range(np.shape(classifications)[1]):
+      classifications_sub=classifications[:,c]
+      classifications_sub_binary=(classifications_sub>=detection_threshold)
+      classifications_sub_binary=fill_holes(classifications_sub_binary,int(0.1*pred_sr)) #TODO add arg
+      classifications_sub_binary=delete_short(classifications_sub_binary,int(0.02*pred_sr)) #TODO add arg
+      
+      starts = classifications_sub_binary[1:] * ~classifications_sub_binary[:-1]
+      starts = np.where(starts)[0] + 1
+      
+      for start in starts:
+          look_forward = classifications_sub_binary[start:]
+          ends = np.where(~look_forward)[0]
+          if len(ends)>0:
+              end = start+np.amin(ends)
+              bbox = [start/pred_sr,end/pred_sr]
+              bboxes.append(bbox)
+              detection_probs.append(classifications_sub[start:end].mean())
+              class_idxs.append(c)
+              class_probs.append(classifications_sub[start:end].mean())
+          
+    bboxes=np.array(bboxes)
+    detection_probs=np.array(detection_probs)
+    class_idxs=np.array(class_idxs)
+    class_probs=np.array(class_probs)
+      
+  else:
+    ## peaks  
+    detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
+    detection_probs = properties['peak_heights']
 
-#   Debugging
-#
-#   target_fp = os.path.join(target_dir, f"detections_{fn}.npy")
-#   np.save(target_fp, detections)
-  
-#   target_fp = os.path.join(target_dir, f"regressions_{fn}.npy")
-#   np.save(target_fp, regressions)
-  
-#   target_fp = os.path.join(target_dir, f"classifications_{fn}.npy")
-#   np.save(target_fp, classifications)
-  
-  ## peaks  
-  detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
-  detection_probs = properties['peak_heights']
-    
-  ## regressions and classifications
-  durations = []
-  class_idxs = []
-  class_probs = []
-  
-  for i in detection_peaks:
-    dur = regressions[i]
-    durations.append(dur)
-    
-    c = np.argmax(classifications[i,:])    
-    p = classifications[i,c]
-    
-    if p < classification_threshold:
-      c = -1
-    
-    class_idxs.append(c)
-    class_probs.append(p)
-        
-  durations = np.array(durations)
-  class_idxs = np.array(class_idxs)
-  class_probs = np.array(class_probs)
-  
-  pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
-  
-  bboxes, detection_probs, class_idxs, class_probs = pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_probs, pred_sr)
+    ## regressions and classifications
+    durations = []
+    class_idxs = []
+    class_probs = []
+
+    for i in detection_peaks:
+      dur = regressions[i]
+      durations.append(dur)
+
+      c = np.argmax(classifications[i,:])    
+      p = classifications[i,c]
+
+      if p < classification_threshold:
+        c = -1
+
+      class_idxs.append(c)
+      class_probs.append(p)
+
+    durations = np.array(durations)
+    class_idxs = np.array(class_idxs)
+    class_probs = np.array(class_probs)
+
+    pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
+
+    bboxes, detection_probs, class_idxs, class_probs = pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_probs, pred_sr)
   
   if args.nms == "soft_nms":
     bboxes, detection_probs, class_idxs, class_probs = soft_nms(bboxes, detection_probs, class_idxs, class_probs, sigma = args.soft_nms_sigma, thresh = args.detection_threshold)

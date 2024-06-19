@@ -22,7 +22,7 @@ def project_setup(args):
     for annot_fp in annot_fps:
       if annot_fp != "None":
         selection_table = pd.read_csv(annot_fp, delimiter = '\t')
-        annots = list(selection_table['Annotation'])
+        annots = list(selection_table['Annotation'].astype(str))
         all_annots.extend(annots)
         
   label_set = sorted(set(all_annots))

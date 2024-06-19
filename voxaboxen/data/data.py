@@ -57,6 +57,8 @@ class DetectionDataset(Dataset):
         self.train=train
         if hasattr(args, 'stereo') and args.stereo:
           self.mono = False
+        elif hasattr(args, 'multichannel') and args.multichannel:
+          self.mono = False
         else:
           self.mono = True
         
@@ -66,7 +68,8 @@ class DetectionDataset(Dataset):
         else:
           self.omit_empty_clip_prob = 0
           self.clip_start_offset = 0
-        
+          
+        self.args=args
         # make metadata
         self.make_metadata()
 
@@ -177,16 +180,23 @@ class DetectionDataset(Dataset):
             
             start_idx = int(math.floor(start*anno_sr))
             start_idx = max(min(start_idx, seq_len-1), 0)
-            dur_samples = np.ceil(dur * anno_sr)
+            dur_samples = int(np.ceil(dur * anno_sr))
             
             anchor_anno = get_anchor_anno(start_idx, dur_samples, seq_len)
             anchor_annos.append(anchor_anno)
             regression_anno[start_idx] = dur
-
-            if class_idx != -1:
-              class_anno[start_idx, class_idx] = 1.
+            
+            if hasattr(self.args,"segmentation_based") and self.args.segmentation_based:
+              if class_idx == -1:
+                pass
+              else:
+                class_anno[start_idx:start_idx+dur_samples,class_idx]=1.
+            
             else:
-              class_anno[start_idx, :] = 1./self.n_classes # if unknown, enforce uncertainty
+              if class_idx != -1:
+                class_anno[start_idx, class_idx] = 1.
+              else:
+                class_anno[start_idx, :] = 1./self.n_classes # if unknown, enforce uncertainty
         
         anchor_annos = np.stack(anchor_annos)
         anchor_annos = np.amax(anchor_annos, axis = 0)
@@ -222,14 +232,14 @@ def get_train_dataloader(args, random_seed_shift = 0):
   
   train_dataset = DetectionDataset(train_info_df, True, args, random_seed_shift = random_seed_shift)
   
-  if args.mixup:
-    effective_batch_size = args.batch_size*2 # double batch size because half will be discarded before being passed to model
-  else:
-    effective_batch_size = args.batch_size
+  # if args.mixup:
+  #   effective_batch_size = args.batch_size*2 # double batch size because half will be discarded before being passed to model
+  # else:
+  #   effective_batch_size = args.batch_size
   
   
   train_dataloader = DataLoader(train_dataset,
-                                batch_size=effective_batch_size, 
+                                batch_size=args.batch_size, #effective_batch_size, 
                                 shuffle=True,
                                 num_workers=args.num_workers,
                                 pin_memory=True, 
@@ -250,6 +260,8 @@ class SingleClipDataset(Dataset):
         self.annot_fp = annot_fp # attribute that is accessed elsewhere
         self.sr = args.sr
         if hasattr(args, 'stereo') and args.stereo:
+          self.mono = False
+        elif hasattr(args, 'multichannel') and args.multichannel:
           self.mono = False
         else:
           self.mono = True
