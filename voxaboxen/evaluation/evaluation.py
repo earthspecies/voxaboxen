@@ -227,6 +227,8 @@ def delete_short(m, min_pos):
         ends = np.where(~look_forward)[0]
         if len(ends)>0:
             clips.append((start, start+np.amin(ends)))
+        else:
+            clips.append((start, len(m)-1))
             
     m = np.zeros_like(m).astype(bool)
     for clip in clips:
@@ -249,8 +251,8 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
     for c in range(np.shape(classifications)[1]):
       classifications_sub=classifications[:,c]
       classifications_sub_binary=(classifications_sub>=detection_threshold)
-      classifications_sub_binary=fill_holes(classifications_sub_binary,int(0.1*pred_sr)) #TODO add arg
-      classifications_sub_binary=delete_short(classifications_sub_binary,int(0.02*pred_sr)) #TODO add arg
+      classifications_sub_binary=fill_holes(classifications_sub_binary,int(args.fill_holes_dur_sec*pred_sr))
+      classifications_sub_binary=delete_short(classifications_sub_binary,int(args.delete_short_dur_sec*pred_sr))
       
       starts = classifications_sub_binary[1:] * ~classifications_sub_binary[:-1]
       starts = np.where(starts)[0] + 1
@@ -260,11 +262,14 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
           ends = np.where(~look_forward)[0]
           if len(ends)>0:
               end = start+np.amin(ends)
-              bbox = [start/pred_sr,end/pred_sr]
-              bboxes.append(bbox)
-              detection_probs.append(classifications_sub[start:end].mean())
-              class_idxs.append(c)
-              class_probs.append(classifications_sub[start:end].mean())
+          else:
+              end = len(classifications_sub_binary)-1
+              
+          bbox = [start/pred_sr,end/pred_sr]
+          bboxes.append(bbox)
+          detection_probs.append(classifications_sub[start:end].mean())
+          class_idxs.append(c)
+          class_probs.append(classifications_sub[start:end].mean())
           
     bboxes=np.array(bboxes)
     detection_probs=np.array(detection_probs)
