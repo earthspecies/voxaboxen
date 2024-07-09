@@ -77,6 +77,15 @@ After running `python main.py project-setup`, a `project_config.yaml` file will 
 
 For example, say you annotate your audio with the labels Red-eyed Vireo `REVI`, Philidelphia Vireo`PHVI`, and Unsure `REVI/PHVI`. To reflect your uncertainty about `REVI/PHVI`, your `label_set` would include `REVI` and `PHVI`, and your `label_mapping` would include the pairs `REVI: REVI`, `PHVI: PHVI`, and `REVI/PHVI: Unknown`. Alternatively, you could group both types of Vireo together by making your `label_set` only include `Vireo`, and your `label_mapping` include `REVI: Vireo`, `PHVI: Vireo`, `REVI/PHVI: Vireo`.
 
+## Other features
+
+Here are some additional options that can be applied during training:
+
+- Flag `--stereo` accepts stereo audio. Order of channels matters; used for e.g. speaker diarization.
+- Flag `--multichannel` accepts audio with >1 channel. Order of channels does not matter.
+- Flag `--segmentation-based` switches to a frame-based approach. If used, we recommend putting `--rho=1`.
+- Flag `--mixup` applies mixup augmentation.
+
 ## The name
 
 Voxaboxen is designed to put a *box* around each vocalization (*vox*). It also rhymes with [Roxaboxen](https://www.thriftbooks.com/w/roxaboxen_alice-mclerran/331707/).
