@@ -80,7 +80,7 @@ class DetectionModel(nn.Module):
       Input
         x (Tensor): (batch, time) (time at 16000 Hz, audio_sr)
       Returns
-        features (Tensor): (batch, time) (time at 50 Hz, aves_sr)
+        features (Tensor): (batch, time, embedding_dim) (time at 50 Hz, aves_sr)
       """
       
       expected_dur_output = math.ceil(x.size(-1)/self.args.scale_factor)
@@ -157,6 +157,79 @@ class DetectionModelStereo(DetectionModel):
     detection_probs = torch.sigmoid(detection_logits)
     
     return detection_probs, regression, class_logits
+
+class DetectionModelMultichannel(DetectionModel):
+  # supports >1 channel, but unlike Stereo model does not assume the order of channels matters.
+  def __init__(self, args, embedding_dim=768):
+      super().__init__(args, embedding_dim=embedding_dim)
+      self.n_classes = len(args.label_set)
+      
+  def forward(self, x):
+    """
+    Input
+      x (Tensor): (batch, channels, time) (time at 16000 Hz, audio_sr)
+    Returns
+      detection_probs (Tensor): (batch, time,) (time at 50 Hz, aves_sr)
+      regression (Tensor): (batch, time,) (time at 50 Hz, aves_sr)
+      class_logits (Tensor): (batch, time, n_classes) (time at 50 Hz, aves_sr)
+
+    """
+    
+#     expected_dur_output = math.ceil(x.size(-1)/self.args.scale_factor)
+          
+#     x = x-torch.mean(x,axis=-1,keepdim=True)
+#     feats=[]
+#     for i in range(x.size(1)):
+#       feats.append(self.encoder(x[:,i,:]))
+#     feats = sum(feats)
+
+#     #aves may be off by 1 sample from expected
+#     pad = expected_dur_output - feats.size(1)
+#     if pad>0:
+#       feats = F.pad(feats, (0,0,0,pad), mode='reflect')
+    
+#     detection_logits, regression, class_logits = self.detection_head(feats)
+#     detection_probs = torch.sigmoid(detection_logits)
+
+
+    expected_dur_output = math.ceil(x.size(-1)/self.args.scale_factor)
+          
+    x = x-torch.mean(x,axis=-1,keepdim=True)
+    
+    detection_logits = []
+    regression = []
+    class_logits = []
+    
+    for i in range(x.size(1)):
+      feats = self.encoder(x[:,i,:])
+      #aves may be off by 1 sample from expected
+      pad = expected_dur_output - feats.size(1)
+      if pad>0:
+        feats = F.pad(feats, (0,0,0,pad), mode='reflect')
+
+      dl, rg, cl = self.detection_head(feats)
+      detection_logits.append(dl)
+      regression.append(rg)
+      class_logits.append(cl)
+      
+    detection_logits = torch.stack(detection_logits, dim=0)
+    regression = torch.stack(regression, dim=0)
+    class_logits = torch.stack(class_logits, dim=0)
+    
+    if hasattr(self.args, "segmentation_based") and self.args.segmentation_based:
+      detection_logits=torch.max(detection_logits,dim=0)[0]
+      regression=torch.max(regression,dim=0)[0]
+      class_logits=torch.max(class_logits,dim=0)[0]
+    else:
+      mask_based_on_logits = torch.eq(torch.max(detection_logits, dim=0,keepdim=True)[0], detection_logits)
+
+      detection_logits = torch.sum(detection_logits*mask_based_on_logits, dim=0)
+      regression = torch.sum(regression*mask_based_on_logits,dim=0)
+      class_logits = torch.sum(class_logits* mask_based_on_logits.unsqueeze(-1).repeat(1,1,1,self.n_classes), dim=0)
+
+    detection_probs = torch.sigmoid(detection_logits)
+      
+    return detection_probs, regression, class_logits
   
 
 def rms_and_mixup(X, d, r, y, train, args):
@@ -168,26 +241,26 @@ def rms_and_mixup(X, d, r, y, train, args):
     
   if args.mixup and train:
     # TODO: For mixup, add in a check that there aren't extremely overlapping vocs
-    
+
     batch_size = X.size(0)
-    
+
     mask = torch.full((X.size(0),1,1), 0.5, device=X.device)
     mask = torch.bernoulli(mask)
-    
+
     if len(X.size()) == 2:
         X_aug = torch.flip(X, (0,)) * mask[:,:,0]
     elif  len(X.size()) == 3:
         X_aug = torch.flip(X, (0,)) * mask
-        
+
     d_aug = torch.flip(d, (0,)) * mask[:,:,0]
     r_aug = torch.flip(r, (0,)) * mask[:,:,0]
     y_aug = torch.flip(y, (0,)) * mask
-    
-    X = (X + X_aug)[:batch_size//2,...]
-    d = torch.maximum(d, d_aug)[:batch_size//2,...]
-    r = torch.maximum(r, r_aug)[:batch_size//2,...]
-    y = torch.maximum(y, y_aug)[:batch_size//2,...]
-    
+
+    X = (X + X_aug)#[:batch_size//2,...]
+    d = torch.maximum(d, d_aug)#[:batch_size//2,...]
+    r = torch.maximum(r, r_aug)#[:batch_size//2,...]
+    y = torch.maximum(y, y_aug)#[:batch_size//2,...]
+
     if args.rms_norm:
       X = X * (1/2)
     

@@ -5,7 +5,7 @@ import torch
 
 from voxaboxen.inference.params import parse_inference_args
 from voxaboxen.training.params import load_params
-from voxaboxen.model.model import DetectionModel, DetectionModelStereo
+from voxaboxen.model.model import DetectionModel, DetectionModelStereo, DetectionModelMultichannel
 from voxaboxen.evaluation.evaluation import generate_predictions, export_to_selection_table
 from voxaboxen.data.data import get_single_clip_data
 
@@ -23,6 +23,8 @@ def inference(inference_args):
   # model  
   if hasattr(args,'stereo') and args.stereo:
     model = DetectionModelStereo(args)
+  elif hasattr(args,'multichannel') and args.multichannel:
+    model = DetectionModelMultichannel(args)
   else:
     model = DetectionModel(args)
   model_checkpoint_fp = os.path.join(args.experiment_dir, "model.pt")

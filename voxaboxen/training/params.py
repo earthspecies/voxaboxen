@@ -23,14 +23,15 @@ def parse_args(args,allow_unknown=False):
   # Model
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by aves")
-  parser.add_argument('--aves-model-weight-fp', type=str, default = "weights/aves-base-bio.torchaudio.pt")
-  parser.add_argument('--aves-config-fp', type=str, default = "weights/aves-base-bio.torchaudio.model_config.json")
-  parser.add_argument('--prediction-scale-factor', type=int, default = 1, help = "downsampling rate from aves sr to prediction sr")
+  parser.add_argument('--aves-config-fp', type=str, default = "weights/birdaves-biox-base.torchaudio.model_config.json")
+  parser.add_argument('--prediction-scale-factor', type=int, default = 1, help = "downsampling rate from aves sr to prediction sr. Deprecated.")
   parser.add_argument('--detection-threshold', type=float, default = 0.5, help = "output probability to count as positive detection")
   parser.add_argument('--rms-norm', action="store_true", help = "If true, apply rms normalization to each clip")
   parser.add_argument('--previous-checkpoint-fp', type=str, default=None, help="path to checkpoint of previously trained detection model")
   parser.add_argument('--aves-url', type=str, default = "https://storage.googleapis.com/esp-public-files/ported_aves/aves-base-bio.torchaudio.pt")
-  parser.add_argument('--stereo', action='store_true', help="If passed, will process stereo data as stereo")
+  parser.add_argument('--stereo', action='store_true', help="If passed, will process stereo data as stereo. order of channels matters")
+  parser.add_argument('--multichannel', action='store_true', help="If passed, will encode each audio channel seperately, then add together the encoded audio before final layer")
+  parser.add_argument('--segmentation-based', action='store_true', help="If passed, will make predictions based on frame-wise segmentations rather than box starts")
 
   # Training
   parser.add_argument('--batch-size', type=int, default=32) 
@@ -60,6 +61,8 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--soft-nms-sigma', type = float, default = 0.5)
   parser.add_argument('--soft-nms-thresh', type = float, default = 0.001)
   parser.add_argument('--nms-thresh', type = float, default = 0.5)
+  parser.add_argument('--delete-short-dur-sec', type=float, default=0.1, help="if using segmentation based model, delete vox shorter than this as a post-processing step")
+  parser.add_argument('--fill-holes-dur-sec', type=float, default=0.1, help="if using segmentation based model, fill holes shorter than this as a post-processing step")
   
   if allow_unknown:
     args, remaining = parser.parse_known_args(args)
@@ -119,3 +122,7 @@ def load_params(fp):
 def check_config(args):
   assert args.end_mask_perc < 0.25, "Masking above 25% of each end during training will interfere with inference"
   assert ((args.clip_duration * args.sr)/(4*args.scale_factor)).is_integer(), "Must pick clip duration to ensure no rounding errors during inference"
+  if args.segmentation_based and (args.rho!=1):
+      import warnings
+      warnings.warn("when using segmentation-based framework, recommend setting args.rho=1")
+      

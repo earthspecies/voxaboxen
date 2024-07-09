@@ -126,7 +126,10 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
       X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
       
       detection, regression, classification = model(X)
-      classification = torch.nn.functional.softmax(classification, dim=-1)
+      if hasattr(args, "segmentation_based") and args.segmentation_based:
+        classification=torch.nn.functional.sigmoid(classification)
+      else:
+        classification=torch.nn.functional.softmax(classification, dim=-1)
       
       all_detections.append(detection)
       all_regressions.append(regression)
@@ -200,51 +203,109 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
     
   return all_features.detach().cpu().numpy()
 
+def fill_holes(m, max_hole):
+    stops = m[:-1] * ~m[1:]
+    stops = np.where(stops)[0]
+    
+    for stop in stops:
+        look_forward = m[stop+1:stop+1+max_hole]
+        if np.any(look_forward):
+            next_start = np.amin(np.where(look_forward)[0]) + stop + 1
+            m[stop : next_start] = True
+            
+    return m
+
+def delete_short(m, min_pos):
+    starts = m[1:] * ~m[:-1]
+
+    starts = np.where(starts)[0] + 1
+
+    clips = []
+
+    for start in starts:
+        look_forward = m[start:]
+        ends = np.where(~look_forward)[0]
+        if len(ends)>0:
+            clips.append((start, start+np.amin(ends)))
+        else:
+            clips.append((start, len(m)-1))
+            
+    m = np.zeros_like(m).astype(bool)
+    for clip in clips:
+        if clip[1] - clip[0] >= min_pos:
+            m[clip[0]:clip[1]] = True
+        
+    return m
+
 def export_to_selection_table(detections, regressions, classifications, fn, args, verbose=True, target_dir=None, detection_threshold = 0.5, classification_threshold = 0):
     
   if target_dir is None:
     target_dir = args.experiment_output_dir  
+  
+  if hasattr(args, "segmentation_based") and args.segmentation_based:
+    pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
+    bboxes = []
+    detection_probs = []
+    class_idxs = []
+    class_probs = []
+    for c in range(np.shape(classifications)[1]):
+      classifications_sub=classifications[:,c]
+      classifications_sub_binary=(classifications_sub>=detection_threshold)
+      classifications_sub_binary=fill_holes(classifications_sub_binary,int(args.fill_holes_dur_sec*pred_sr))
+      classifications_sub_binary=delete_short(classifications_sub_binary,int(args.delete_short_dur_sec*pred_sr))
+      
+      starts = classifications_sub_binary[1:] * ~classifications_sub_binary[:-1]
+      starts = np.where(starts)[0] + 1
+      
+      for start in starts:
+          look_forward = classifications_sub_binary[start:]
+          ends = np.where(~look_forward)[0]
+          if len(ends)>0:
+              end = start+np.amin(ends)
+          else:
+              end = len(classifications_sub_binary)-1
+              
+          bbox = [start/pred_sr,end/pred_sr]
+          bboxes.append(bbox)
+          detection_probs.append(classifications_sub[start:end].mean())
+          class_idxs.append(c)
+          class_probs.append(classifications_sub[start:end].mean())
+          
+    bboxes=np.array(bboxes)
+    detection_probs=np.array(detection_probs)
+    class_idxs=np.array(class_idxs)
+    class_probs=np.array(class_probs)
+      
+  else:
+    ## peaks  
+    detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
+    detection_probs = properties['peak_heights']
 
-#   Debugging
-#
-#   target_fp = os.path.join(target_dir, f"detections_{fn}.npy")
-#   np.save(target_fp, detections)
-  
-#   target_fp = os.path.join(target_dir, f"regressions_{fn}.npy")
-#   np.save(target_fp, regressions)
-  
-#   target_fp = os.path.join(target_dir, f"classifications_{fn}.npy")
-#   np.save(target_fp, classifications)
-  
-  ## peaks  
-  detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
-  detection_probs = properties['peak_heights']
-    
-  ## regressions and classifications
-  durations = []
-  class_idxs = []
-  class_probs = []
-  
-  for i in detection_peaks:
-    dur = regressions[i]
-    durations.append(dur)
-    
-    c = np.argmax(classifications[i,:])    
-    p = classifications[i,c]
-    
-    if p < classification_threshold:
-      c = -1
-    
-    class_idxs.append(c)
-    class_probs.append(p)
-        
-  durations = np.array(durations)
-  class_idxs = np.array(class_idxs)
-  class_probs = np.array(class_probs)
-  
-  pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
-  
-  bboxes, detection_probs, class_idxs, class_probs = pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_probs, pred_sr)
+    ## regressions and classifications
+    durations = []
+    class_idxs = []
+    class_probs = []
+
+    for i in detection_peaks:
+      dur = regressions[i]
+      durations.append(dur)
+
+      c = np.argmax(classifications[i,:])    
+      p = classifications[i,c]
+
+      if p < classification_threshold:
+        c = -1
+
+      class_idxs.append(c)
+      class_probs.append(p)
+
+    durations = np.array(durations)
+    class_idxs = np.array(class_idxs)
+    class_probs = np.array(class_probs)
+
+    pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
+
+    bboxes, detection_probs, class_idxs, class_probs = pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_probs, pred_sr)
   
   if args.nms == "soft_nms":
     bboxes, detection_probs, class_idxs, class_probs = soft_nms(bboxes, detection_probs, class_idxs, class_probs, sigma = args.soft_nms_sigma, thresh = args.detection_threshold)
@@ -261,8 +322,9 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
   
   return target_fp
   
-def get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold):
+def get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold, duration):
   c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
+  c.duration = duration
   
   c.load_predictions(predictions_fp)
   c.threshold_class_predictions(class_threshold)
@@ -292,12 +354,12 @@ def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_thresh
 def summarize_metrics(metrics):
   # metrics (dict) : {fp : fp_metrics}
   # where
-  # fp_metrics (dict) : {class_label: {'TP': int, 'FP' : int, 'FN' : int}}
+  # fp_metrics (dict) : {class_label: {'TP': int, 'FP' : int, 'FN' : int, 'TP_seg' : int, 'FP_seg' : int, 'FN_seg' : int}}
   
   fps = sorted(metrics.keys())
   class_labels = sorted(metrics[fps[0]].keys())
   
-  overall = { l: {'TP' : 0, 'FP' : 0, 'FN' : 0} for l in class_labels}
+  overall = { l: {'TP' : 0, 'FP' : 0, 'FN' : 0, 'TP_seg' : 0, 'FP_seg' : 0, 'FN_seg' : 0} for l in class_labels}
   
   for fp in fps:
     for l in class_labels:
@@ -305,36 +367,60 @@ def summarize_metrics(metrics):
       overall[l]['TP'] += counts['TP']
       overall[l]['FP'] += counts['FP']
       overall[l]['FN'] += counts['FN']
+      overall[l]['TP_seg'] += counts['TP_seg']
+      overall[l]['FP_seg'] += counts['FP_seg']
+      overall[l]['FN_seg'] += counts['FN_seg']
       
   for l in class_labels:
     tp = overall[l]['TP']
     fp = overall[l]['FP']
     fn = overall[l]['FN']
+    tp_seg = overall[l]['TP_seg']
+    fp_seg = overall[l]['FP_seg']
+    fn_seg = overall[l]['FN_seg']
 
     if tp + fp == 0:
       prec = 1
     else:
       prec = tp / (tp + fp)
     overall[l]['precision'] = prec
+    
+    if tp_seg + fp_seg == 0:
+      prec_seg = 1
+    else:
+      prec_seg = tp_seg / (tp_seg + fp_seg)
+    overall[l]['precision_seg'] = prec_seg
 
     if tp + fn == 0:
       rec = 1
     else:
       rec = tp / (tp + fn)
     overall[l]['recall'] = rec
+    
+    if tp_seg + fn_seg == 0:
+      rec_seg = 1
+    else:
+      rec_seg = tp_seg / (tp_seg + fn_seg)
+    overall[l]['recall_seg'] = rec_seg
 
     if prec + rec == 0:
       f1 = 0
     else:
       f1 = 2*prec*rec / (prec + rec)
     overall[l]['f1'] = f1
+    
+    if prec_seg + rec_seg == 0:
+      f1_seg = 0
+    else:
+      f1_seg = 2*prec_seg*rec_seg / (prec_seg + rec_seg)
+    overall[l]['f1_seg'] = f1_seg
   
   return overall
 
 def macro_metrics(summary):
-  # summary (dict) : {class_label: {'f1' : float, 'precision' : float, 'recall' : float, 'TP': int, 'FP' : int, 'FN' : int}}
+  # summary (dict) : {class_label: {'f1' : float, 'precision' : float, 'recall' : float, 'f1_seg' : float, 'precision_seg' : float, 'recall_seg' : float, 'TP': int, 'FP' : int, 'FN' : int, TP_seg': int, 'FP_seg' : int, 'FN_seg' : int}}
   
-  metrics = ['f1', 'precision', 'recall']
+  metrics = ['f1', 'precision', 'recall', 'f1_seg', 'precision_seg', 'recall_seg']
   
   macro = {}
   
@@ -387,6 +473,7 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   fns = []
   predictions_fps = []
   annotations_fps = []
+  durations = []
                                
   for fn in dataloader_dict:
     detections, regressions, classifications = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
@@ -398,8 +485,9 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
     fns.append(fn)
     predictions_fps.append(predictions_fp)
     annotations_fps.append(annotations_fp)
+    durations.append(np.shape(detections)[0]*args.scale_factor/args.sr)
     
-  manifest = pd.DataFrame({'filename' : fns, 'predictions_fp' : predictions_fps, 'annotations_fp' : annotations_fps})
+  manifest = pd.DataFrame({'filename' : fns, 'predictions_fp' : predictions_fps, 'annotations_fp' : annotations_fps, 'duration_sec' : durations})
   return manifest
                                   
 def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, class_threshold = 0.0):
@@ -411,8 +499,9 @@ def evaluate_based_on_manifest(manifest, args, output_dir = None, iou = 0.5, cla
     fn = row['filename']
     predictions_fp = row['predictions_fp']
     annotations_fp = row['annotations_fp']
+    duration = row['duration_sec']
   
-    metrics[fn] = get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold)
+    metrics[fn] = get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold, duration)
     confusion_matrix[fn], confusion_matrix_labels = get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold)
     
   if output_dir is not None:

@@ -104,6 +104,57 @@ def iou(ref, est, method="fast"):
             S[ref_id, matching_est_id] = intersection_over_union
 
     return S
+  
+def compute_intersection(ref, est, method="fast"):
+    """Compute pairwise intersection between reference
+    events and estimated events.
+    Let us denote by a_i and b_i the onset and offset of reference event i.
+    Let us denote by u_j and v_j the onset and offset of estimated event j.
+    The Intersection between events i and j is defined as
+        (min(b_i, v_j)-max(a_i, u_j)) 
+    if the events are non-disjoint, and equal to zero otherwise.
+    Parameters
+    ----------
+    ref: np.ndarray [shape=(2, n)], real-valued
+         Array of reference events. Each column is an event.
+         The first row denotes onset times and the second row denotes offset times.
+    est: np.ndarray [shape=(2, m)], real-valued
+         Array of estimated events. Each column is an event.
+         The first row denotes onset times and the second row denotes offset times.
+    method: str, optional.
+         If "fast" (default), computes pairwise intersections via a custom
+         dynamic programming algorithm, see fast_intersect.
+         If "slow", computes pairwise intersections via bruteforce quadratic
+         search, see slow_intersect.
+    Returns
+    -------
+    S: scipy.sparse.dok.dok_matrix, real-valued
+        Sparse 2-D matrix. S[i,j] contains the Intersection between ref[i] and est[j]
+        if these events are non-disjoint and zero otherwise.
+    """
+    n_refs = ref.shape[1]
+    n_ests = est.shape[1]
+    S = scipy.sparse.dok_matrix((n_refs, n_ests))
+
+    if method == "fast":
+        matches = fast_intersect(ref, est)
+    elif method == "slow":
+        matches = slow_intersect(ref, est)
+
+    for ref_id in range(n_refs):
+        matching_ests = matches[ref_id]
+        ref_on = ref[0, ref_id]
+        ref_off = ref[1, ref_id]
+
+        for matching_est_id in matching_ests:
+            est_on = est[0, matching_est_id]
+            est_off = est[1, matching_est_id]
+            intersection = min(ref_off, est_off) - max(ref_on, est_on)
+            # union = max(ref_off, est_off) - min(ref_on, est_on)
+            # intersection_over_union = intersection / union
+            S[ref_id, matching_est_id] = intersection #_over_union
+
+    return S
 
 
 def match_events(ref, est, min_iou=0.0, method="fast"):

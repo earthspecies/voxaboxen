@@ -45,6 +45,8 @@ class Clip():
         self.samples, self.sr = librosa.load(fp, sr = None)
         self.duration = len(self.samples) / self.sr
         
+    
+        
     def play_audio(self, start_sec, end_sec):
         start_sample = int(self.sr * start_sec)
         end_sample = int(self.sr *end_sec)
@@ -82,16 +84,38 @@ class Clip():
         self.matched_annotations = [p[0] for p in self.matching]
         self.matched_predictions = [p[1] for p in self.matching]
         
-    def evaluate(self):     
+    def evaluate(self):
+        
+        eval_sr = 50
+        dur_samples = int(self.duration * eval_sr) # compute frame-wise metrics at 50Hz
       
         if self.label_set is None:
           TP = len(self.matching)
           FP = len(self.predictions) - TP
           FN = len(self.annotations) - TP
-          return {'all' : {'TP' : TP, 'FP' : FP, 'FN' : FN}}
+          
+          # segmentation-based metrics
+          seg_annotations = np.zeros((dur_samples,))
+          seg_predictions = np.zeros((dur_samples,))
+          
+          for i, row in self.annotations.iterrows():
+              start_sample = int(row['Begin Time (s)'] * eval_sr)
+              end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
+              seg_annotations[start_sample:end_sample] = 1
+              
+          for i, row in self.predictions.iterrows():
+              start_sample = int(row['Begin Time (s)'] * eval_sr)
+              end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
+              seg_predictions[start_sample:end_sample] = 1
+          
+          TP_seg = int((seg_predictions * seg_annotations).sum())
+          FP_seg = int((seg_predictions * (1-seg_annotations)).sum())
+          FN_seg = int(((1-seg_predictions) * seg_annotations).sum())
+          
+          return {'all' : {'TP' : TP, 'FP' : FP, 'FN' : FN, 'TP_seg' : TP_seg, 'FP_seg' : FP_seg, 'FN_seg' : FN_seg}}
         
         else:
-          out = {label : {'TP':0, 'FP':0, 'FN' : 0} for label in self.label_set}
+          out = {label : {'TP':0, 'FP':0, 'FN' : 0, 'TP_seg':0, 'FP_seg':0, 'FN_seg':0} for label in self.label_set}
           pred_label = np.array(self.predictions['Annotation'])
           annot_label = np.array(self.annotations['Annotation'])
           for p in self.matching:
@@ -110,6 +134,30 @@ class Clip():
             n_pred = int((pred_label == label).sum())
             out[label]['FP'] = out[label]['FP'] + n_pred - out[label]['TP']
             out[label]['FN'] = out[label]['FN'] + n_annot - out[label]['TP']
+            
+            # segmentation-based metrics
+            seg_annotations = np.zeros((dur_samples,))
+            seg_predictions = np.zeros((dur_samples,))
+            
+            annot_sub = self.annotations[self.annotations["Annotation"] == label]
+            pred_sub = self.predictions[self.predictions["Annotation"] == label]
+            
+            for i, row in annot_sub.iterrows():
+                start_sample = int(row['Begin Time (s)'] * eval_sr)
+                end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
+                seg_annotations[start_sample:end_sample] = 1
+
+            for i, row in pred_sub.iterrows():
+                start_sample = int(row['Begin Time (s)'] * eval_sr)
+                end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
+                seg_predictions[start_sample:end_sample] = 1
+
+            TP_seg = int((seg_predictions * seg_annotations).sum())
+            FP_seg = int((seg_predictions * (1-seg_annotations)).sum())
+            FN_seg = int(((1-seg_predictions) * seg_annotations).sum())
+            out[label]['TP_seg'] = TP_seg
+            out[label]['FP_seg'] = FP_seg
+            out[label]['FN_seg'] = FN_seg
             
           return out
               
