@@ -82,7 +82,7 @@ For example, say you annotate your audio with the labels Red-eyed Vireo `REVI`, 
 Here are some additional options that can be applied during training:
 
 - Flag `--stereo` accepts stereo audio. Order of channels matters; used for e.g. speaker diarization.
-- Flag `--multichannel` accepts audio with >1 channel. Order of channels does not matter.
+- Flag `--bidirectional` predicts the ends of events in addition to the beginning, matches starts and ends based on IoU. May improve box regression.
 - Flag `--segmentation-based` switches to a frame-based approach. If used, we recommend putting `--rho=1`.
 - Flag `--mixup` applies mixup augmentation.
 
