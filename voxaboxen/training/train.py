@@ -120,7 +120,7 @@ def train(model, args):
 def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, det_loss_fn, reg_loss_fn, class_loss_fn):
     # We mask out loss from each end of the clip, so the model isn't forced to learn to detect events that are partially cut off.
     # This does not affect inference, because during inference we overlap clips at 50%
-    
+
     end_mask_perc = args.end_mask_perc
     end_mask_dur = int(det_preds.size(1)*end_mask_perc)
 
@@ -134,7 +134,7 @@ def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, det_loss_fn, reg_loss
 
     detection_loss = det_loss_fn(det_preds_clipped, dets_clipped, pos_loss_weight=args.pos_loss_weight)
     reg_loss = reg_loss_fn(reg_preds_clipped, regs_clipped, dets_clipped, y_clipped)
-    if len(args.label_set)==1:
+    if len(args.label_set)==1 and not args.segmentation_based:
         class_loss = torch.tensor(0)
     else:
         y_preds_clipped = y_preds[:,end_mask_dur:-end_mask_dur,:]
@@ -158,7 +158,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
     for i, batch in enumerate(data_iterator):
       num_batches_seen = i
       batch = [item.to(device, dtype=torch.float) for item in batch]
-      X, d, r, y = batch[:4]      
+      X, d, r, y = batch[:4]
       X, d, r, y = rms_and_mixup(X, d, r, y, True, args)
       probs, regression, class_logits, rev_probs, rev_regression, rev_class_logits = model(X)
       #model_outputs = model(X)
@@ -213,7 +213,7 @@ def val_epoch(model, t, dataloader, args):
     model.eval()
 
     manifest = predict_and_generate_manifest(model, dataloader, args, verbose = False)
-    e, _ = evaluate_based_on_manifest(manifest, args, output_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_threshold)
+    e, _ = evaluate_based_on_manifest(manifest, args, output_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh)
 
     print(f"Epoch {t} | val@{args.model_selection_iou}IoU:")
     evals = {}
@@ -325,7 +325,7 @@ def segmentation_loss(class_logits, y, d, class_weights=None):
   # y (Tensor): [batch, time,n_classes]
   # d (Tensor) : [batch, time,], float tensor
   # class_weight : [n_classes,], float tensor
-  
+
   default_focal_loss = torchvision.ops.sigmoid_focal_loss(class_logits, y, reduction='mean')
   return default_focal_loss
 
@@ -337,9 +337,9 @@ def get_class_loss_fn(args):
     class_proportions = dataloader_temp.dataset.get_class_proportions()
     class_weights = 1. / (class_proportions + 1e-6)
     class_weights = class_weights * (class_proportions>0) # ignore weights for unrepresented classes
-    
+
     class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
-    print(f"Using class weights {class_weights}") 
+    print(f"Using class weights {class_weights}")
 
     class_weights = torch.Tensor(class_weights).to(device)
     return partial(masked_classification_loss, class_weights = class_weights)
@@ -354,12 +354,12 @@ def get_reg_loss_fn(args):
     class_proportions = dataloader_temp.dataset.get_class_proportions()
     class_weights = 1. / (class_proportions + 1e-6)
     class_weights = class_weights * (class_proportions>0) # ignore weights for unrepresented classes
-    
+
     class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
 
     class_weights = torch.Tensor(class_weights).to(device)
     return partial(masked_reg_loss, class_weights = class_weights)
-                               
+
 def get_detection_loss_fn(args):
   if hasattr(args,"segmentation_based") and args.segmentation_based:
     def zdl(pred, gt, pos_loss_weight = 1):
