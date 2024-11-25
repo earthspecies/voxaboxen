@@ -149,7 +149,7 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
           all_rev_classifs.append(model_outputs[5].softmax(-1)) # segmentation-based is not used when bidirectional
       else:
           assert all(x is None for x in model_outputs[3:])
-          
+
       # if args.is_test and i==15:
       #   break
 
@@ -196,7 +196,7 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
         assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs = assemble(all_rev_detections, all_rev_regressions, all_rev_classifs)
     else:
         assembled_rev_dets = assembled_rev_regs = assembled_rev_classifs = None
-        
+
     return assembled_dets, assembled_regs, assembled_classifs, assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs
 
 def generate_features(model, single_clip_dataloader, args, verbose = True):
@@ -235,13 +235,13 @@ def generate_features(model, single_clip_dataloader, args, verbose = True):
 def fill_holes(m, max_hole):
     stops = m[:-1] * ~m[1:]
     stops = np.where(stops)[0]
-    
+
     for stop in stops:
         look_forward = m[stop+1:stop+1+max_hole]
         if np.any(look_forward):
             next_start = np.amin(np.where(look_forward)[0]) + stop + 1
             m[stop : next_start] = True
-            
+
     return m
 
 def delete_short(m, min_pos):
@@ -258,25 +258,25 @@ def delete_short(m, min_pos):
             clips.append((start, start+np.amin(ends)))
         else:
             clips.append((start, len(m)-1))
-            
+
     m = np.zeros_like(m).astype(bool)
     for clip in clips:
         if clip[1] - clip[0] >= min_pos:
             m[clip[0]:clip[1]] = True
-        
+
     return m
-  
+
 def export_to_selection_table(detections, regressions, classifications, fn, args, is_bck, verbose=True, target_dir=None, detection_threshold = 0.5, classification_threshold = 0):
-  
+
   if hasattr(args, "bidirectional") and args.bidirectional:
     if is_bck:
       fn += '-bck'
     else:
       fn += '-fwd'
-  
+
   if target_dir is None:
-    target_dir = args.experiment_output_dir  
-  
+    target_dir = args.experiment_output_dir
+
   if hasattr(args, "segmentation_based") and args.segmentation_based:
     pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
     bboxes = []
@@ -288,10 +288,10 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
       classifications_sub_binary=(classifications_sub>=detection_threshold)
       classifications_sub_binary=fill_holes(classifications_sub_binary,int(args.fill_holes_dur_sec*pred_sr))
       classifications_sub_binary=delete_short(classifications_sub_binary,int(args.delete_short_dur_sec*pred_sr))
-      
+
       starts = classifications_sub_binary[1:] * ~classifications_sub_binary[:-1]
       starts = np.where(starts)[0] + 1
-      
+
       for start in starts:
           look_forward = classifications_sub_binary[start:]
           ends = np.where(~look_forward)[0]
@@ -299,20 +299,20 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
               end = start+np.amin(ends)
           else:
               end = len(classifications_sub_binary)-1
-              
+
           bbox = [start/pred_sr,end/pred_sr]
           bboxes.append(bbox)
           det_probs.append(classifications_sub[start:end].mean())
           class_idxs.append(c)
           class_probs.append(classifications_sub[start:end].mean())
-          
+
     bboxes=np.array(bboxes)
     det_probs=np.array(det_probs)
     class_idxs=np.array(class_idxs)
     class_probs=np.array(class_probs)
-      
+
   else:
-    ## peaks  
+    ## peaks
     detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
     det_probs = properties['peak_heights']
 
@@ -325,7 +325,7 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
       dur = regressions[i]
       durations.append(dur)
 
-      c = np.argmax(classifications[i,:])    
+      c = np.argmax(classifications[i,:])
       p = classifications[i,c]
 
       if p < classification_threshold:
@@ -357,7 +357,7 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
 
   return target_fp
 
-  
+
 def get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold, duration):
   c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
   c.duration = duration
@@ -390,10 +390,10 @@ def summarize_metrics(metrics):
   # metrics (dict) : {fp : fp_metrics}
   # where
   # fp_metrics (dict) : {class_label: {'TP': int, 'FP' : int, 'FN' : int, 'TP_seg' : int, 'FP_seg' : int, 'FN_seg' : int}}
-  
+
   fps = sorted(metrics.keys())
   class_labels = sorted(metrics[fps[0]].keys())
-  
+
   overall = { l: {'TP' : 0, 'FP' : 0, 'FN' : 0, 'TP_seg' : 0, 'FP_seg' : 0, 'FN_seg' : 0} for l in class_labels}
 
   for fp in fps:
@@ -405,7 +405,7 @@ def summarize_metrics(metrics):
       overall[l]['TP_seg'] += counts['TP_seg']
       overall[l]['FP_seg'] += counts['FP_seg']
       overall[l]['FN_seg'] += counts['FN_seg']
-      
+
   for l in class_labels:
     tp = overall[l]['TP']
     fp = overall[l]['FP']
@@ -419,7 +419,7 @@ def summarize_metrics(metrics):
     else:
       prec = tp / (tp + fp)
     overall[l]['precision'] = prec
-    
+
     if tp_seg + fp_seg == 0:
       prec_seg = 1
     else:
@@ -431,7 +431,7 @@ def summarize_metrics(metrics):
     else:
       rec = tp / (tp + fn)
     overall[l]['recall'] = rec
-    
+
     if tp_seg + fn_seg == 0:
       rec_seg = 1
     else:
@@ -443,30 +443,48 @@ def summarize_metrics(metrics):
     else:
       f1 = 2*prec*rec / (prec + rec)
     overall[l]['f1'] = f1
-    
+
     if prec_seg + rec_seg == 0:
       f1_seg = 0
     else:
       f1_seg = 2*prec_seg*rec_seg / (prec_seg + rec_seg)
     overall[l]['f1_seg'] = f1_seg
-  
+
   return overall
 
-def macro_metrics(summary):
-  # summary (dict) : {class_label: {'f1' : float, 'precision' : float, 'recall' : float, 'f1_seg' : float, 'precision_seg' : float, 'recall_seg' : float, 'TP': int, 'FP' : int, 'FN' : int, TP_seg': int, 'FP_seg' : int, 'FN_seg' : int}}
-  
-  metrics = ['f1', 'precision', 'recall', 'f1_seg', 'precision_seg', 'recall_seg']
-  macro = {}
+def f1_from_counts(tp, fp, fn):
+    prec = tp/(tp+fp)
+    rec = tp/(tp+fn)
+    f1 = 2*prec*rec / (prec+rec)
+    return {'prec': prec, 'rec':rec, 'f1':f1}
 
-  for metric in metrics:
 
-    e = []
-    for l in summary:
-        m = summary[l][metric]
-        e.append(m)
-    macro[metric] = float(np.mean(e))
+def macro_micro_metrics(summary):
+    # summary (dict) : {class_label: {'f1' : float, 'precision' : float, 'recall' : float, 'f1_seg' : float, 'precision_seg' : float, 'recall_seg' : float, 'TP': int, 'FP' : int, 'FN' : int, TP_seg': int, 'FP_seg' : int, 'FN_seg' : int}}
 
-  return macro
+    metrics = ['f1', 'precision', 'recall', 'f1_seg', 'precision_seg', 'recall_seg']
+    macro = {}
+
+    for metric in metrics:
+
+      e = []
+      for l in summary:
+          m = summary[l][metric]
+          e.append(m)
+      macro[metric] = float(np.mean(e))
+
+    tp = sum(v['TP'] for v in summary.values())
+    fp = sum(v['FP'] for v in summary.values())
+    fn = sum(v['FN'] for v in summary.values())
+    micro = f1_from_counts(tp, fp, fn)
+    tp = sum(v['TP_seg'] for v in summary.values())
+    fp = sum(v['FP_seg'] for v in summary.values())
+    fn = sum(v['FN_seg'] for v in summary.values())
+    seg_micro = f1_from_counts(tp, fp, fn)
+    seg_micro = {f'{k}_seg': v for k,v in seg_micro.items()}
+    micro.update(seg_micro)
+
+    return macro, micro
 
 def plot_confusion_matrix(data, label_names, target_dir, name=""):
 
@@ -509,7 +527,7 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   bck_predictions_fps = []
   annotations_fps = []
   durations = []
-                               
+
   for fn in dataloader_dict:
     fwd_detections, fwd_regressions, fwd_classifications, bck_detections, bck_regressions, bck_classifications  = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
 
@@ -532,41 +550,44 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   return manifest
 
 def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold, comb_discard_threshold):
-  pred_types = ('fwd', 'bck', 'comb', 'match') if args.bidirectional else ('fwd',)
-  metrics = {p:{} for p in pred_types}
-  conf_mats = {p:{} for p in pred_types}
-  conf_mat_labels = {}
+    pred_types = ('fwd', 'bck', 'comb', 'match') if args.bidirectional else ('fwd',)
+    metrics = {p:{} for p in pred_types}
+    conf_mats = {p:{} for p in pred_types}
+    conf_mat_labels = {}
 
-  for i, row in manifest.iterrows():
-      fn = row['filename']
-      annots_fp = row['annotations_fp']
-      duration = row['duration_sec']
-      if args.bidirectional:
-        row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_threshold, comb_discard_threshold=comb_discard_threshold)
+    for i, row in manifest.iterrows():
+        fn = row['filename']
+        annots_fp = row['annotations_fp']
+        duration = row['duration_sec']
+        if args.bidirectional:
+            assert comb_discard_threshold != -1
+            row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_threshold, comb_discard_threshold=comb_discard_threshold)
+        else:
+            assert comb_discard_threshold == -1
 
-      for pred_type in pred_types:
-          preds_fp = row[f'{pred_type}_predictions_fp']
-          metrics[pred_type][fn] = get_metrics(preds_fp, annots_fp, args, iou, class_threshold, duration)
-          conf_mats[pred_type][fn], conf_mat_labels[pred_type] = get_confusion_matrix(preds_fp, annots_fp, args, iou, class_threshold)
+        for pred_type in pred_types:
+            preds_fp = row[f'{pred_type}_predictions_fp']
+            metrics[pred_type][fn] = get_metrics(preds_fp, annots_fp, args, iou, class_threshold, duration)
+            conf_mats[pred_type][fn], conf_mat_labels[pred_type] = get_confusion_matrix(preds_fp, annots_fp, args, iou, class_threshold)
 
-  if output_dir is not None:
-    if not os.path.exists(output_dir):
-      os.makedirs(output_dir)
+    if output_dir is not None and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-  # summarize and save metrics
-  conf_mat_summaries = {}
-  for pred_type in pred_types:
-      summary = summarize_metrics(metrics[pred_type])
-      metrics[pred_type]['summary'] = summary
-      metrics[pred_type]['macro'] = macro_metrics(summary)
-      conf_mat_summaries[pred_type], confusion_matrix_labels = summarize_confusion_matrix(conf_mats[pred_type], conf_mat_labels[pred_type])
-      plot_confusion_matrix(conf_mat_summaries[pred_type].astype(int), confusion_matrix_labels, output_dir, name=f"cm_iou_{iou}_class_threshold_{class_threshold}_{pred_type}")
-  if output_dir is not None:
-    metrics_fp = os.path.join(output_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
-    with open(metrics_fp, 'w') as f:
-      yaml.dump(metrics, f)
-  
-  return metrics, conf_mat_summaries
+    # summarize and save metrics
+    conf_mat_summaries = {}
+    for pred_type in pred_types:
+        summary = summarize_metrics(metrics[pred_type])
+        metrics[pred_type]['summary'] = summary
+        macro, micro = macro_micro_metrics(summary)
+        metrics[pred_type]['macro'], metrics[pred_type]['micro'] = macro, micro
+        conf_mat_summaries[pred_type], confusion_matrix_labels = summarize_confusion_matrix(conf_mats[pred_type], conf_mat_labels[pred_type])
+        plot_confusion_matrix(conf_mat_summaries[pred_type].astype(int), confusion_matrix_labels, output_dir, name=f"cm_iou_{iou}_class_threshold_{class_threshold}_{pred_type}")
+    if output_dir is not None:
+      metrics_fp = os.path.join(output_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
+      with open(metrics_fp, 'w') as f:
+        yaml.dump(metrics, f)
+
+    return metrics, conf_mat_summaries
 
 def combine_fwd_bck_preds(target_dir, fn, comb_iou_threshold, comb_discard_threshold):
     fwd_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-fwd.txt')

@@ -1,18 +1,16 @@
-from detectron2.utils.logger import setup_logger
-setup_logger()
-
-# import some common libraries
 import os
 import sys
+import io
 from glob import glob
+import logging
 
-#Import custom code
 from voxaboxen.comparisons.dataloaders import SoundEventTrainer
 from voxaboxen.comparisons.params import get_full_cfg, parse_args
 from voxaboxen.comparisons.evaluate import run_evaluation
-from voxaboxen.training.train import train
 import voxaboxen.training.params as aves_params
 
+
+logging.getLogger("detectron2").setLevel(logging.ERROR)
 def train(args):
 
     # Standard args
@@ -31,16 +29,15 @@ def train(args):
         os.makedirs(sound_event_args.experiment_output_dir)
     aves_params.save_params(sound_event_args)
 
-    # Detectron config
     cfg = get_full_cfg(sound_event_args, detectron_args)
-    
-    # ~~~~ Train
-    print("Existing model checkpoints:", glob(cfg.OUTPUT_DIR + "/*.pth"))
+
     n_ckpts = len(glob(cfg.OUTPUT_DIR + "/*.pth"))
-    resume = True if n_ckpts > 0 else False
+    #resume = True if n_ckpts > 0 else False
+    resume = False
+    old_stdout = sys.stdout; sys.stdout = io.StringIO()
     trainer = SoundEventTrainer(cfg)
-    trainer.resume_or_load(resume=resume) 
-    print("Let's train~", flush=True)
+    trainer.resume_or_load(resume=resume)
+    sys.stdout = old_stdout
     try:
         trainer.train()
     except StopIteration:

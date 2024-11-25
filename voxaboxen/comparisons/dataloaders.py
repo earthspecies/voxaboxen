@@ -37,7 +37,7 @@ class DetectronDataset(DetectionDataset):
             n_mels = self.spectrogram_args.N_MELS,
             )
         self.spectrogram_t = lambda n_frames: (np.arange(n_frames)*self.spectrogram_args.HOP_LENGTH)/self.sr
-        self.spectrogram_f = get_torch_mel_frequencies(f_max=f_max, f_min=self.spectrogram_args.F_MIN, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults 
+        self.spectrogram_f = get_torch_mel_frequencies(f_max=f_max, f_min=self.spectrogram_args.F_MIN, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults
         self.collect_statistics = collect_statistics
         self.mixup = args.mixup and train
 
@@ -51,15 +51,15 @@ class DetectronDataset(DetectionDataset):
             bottom = row['Low Freq (Hz)']
             top = row['High Freq (Hz)']
             label = row['Annotation']
-            
+
             if end<=start:
               continue
-            
+
             if label in self.label_mapping:
               label = self.label_mapping[label]
             else:
               continue
-            
+
             if label == self.unknown_label:
               label_idx = -1
             else:
@@ -72,9 +72,9 @@ class DetectronDataset(DetectionDataset):
     def get_pos_intervals(self, fn, start, end):
         tree = self.selection_table_dict[fn]
         intervals = tree[start:end]
-        
+
         intervals = [(max(iv.begin, start)-start, min(iv.end, end)-start, iv.data[0], iv.data[1], iv.data[2]) for iv in intervals]
-        return intervals          
+        return intervals
 
     def convert_intervals_to_boxes(self, intervals, n_time_frames):
         """ Convert intervals to [tstart, fstart, tstop, fstop] format, where the elements are indexes"""
@@ -125,9 +125,9 @@ class DetectronDataset(DetectionDataset):
             audio = self.augment_amplitude(audio)
         audio = torch.from_numpy(audio)
         if file_sr != self.sr:
-          audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
+          audio = torchaudio.functional.resample(audio, file_sr, self.sr)
           audio = crop_and_pad(audio, self.sr, self.clip_duration)
-        
+
         pos_intervals = self.get_pos_intervals(fn, start, end)
         record = {"sound_name": fn}
         mel_spectrogram = self.make_mel_spectrogram(audio) # size: (channel if any, n_mels, time)
@@ -147,36 +147,36 @@ class DetectronDataset(DetectionDataset):
         #record["instances"].gt_ibm = BitMasks(masks.permute(0,2,1).contiguous())
         boxes = self.convert_intervals_to_boxes(pos_intervals, mel_spectrogram.shape[1])
         record["instances"].gt_boxes = Boxes(boxes)
-        
+
         return record
 
 class DetectronSingleClipDataset(SingleClipDataset):
     def __init__(self, detectron_cfg, audio_fp, clip_hop, args, annot_fp=None):
         super().__init__(audio_fp, clip_hop, args, annot_fp)
         self.spectrogram_args = detectron_cfg.SPECTROGRAM
-        f_max = float(self.sr // 2)
         self.make_mel_spectrogram = torchaudio.transforms.MelSpectrogram(
             sample_rate = self.sr,
             f_min = self.spectrogram_args.F_MIN,
-            f_max = f_max,
+            f_max = self.spectrogram_args.F_MAX,
             n_fft = self.spectrogram_args.N_FFT,
             win_length = self.spectrogram_args.WIN_LENGTH,
             hop_length = self.spectrogram_args.HOP_LENGTH,
             n_mels = self.spectrogram_args.N_MELS,
+            window_fn = torch.hamming_window,
             )
         self.spectrogram_t = lambda n_frames: (np.arange(n_frames)*self.spectrogram_args.HOP_LENGTH)/self.sr
-        self.spectrogram_f = get_torch_mel_frequencies(f_max=f_max, f_min=self.spectrogram_args.F_MIN, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults 
+        self.spectrogram_f = get_torch_mel_frequencies(f_max=f_max, f_min=self.spectrogram_args.F_MIN, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults
 
     def __getitem__(self, idx):
         """ Map int idx to dict of torch tensors """
         start = idx * self.clip_hop
-        
+
         audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
         audio = torch.from_numpy(audio)
-                
+
         audio = audio-torch.mean(audio)
         if file_sr != self.sr:
-          audio = torchaudio.functional.resample(audio, file_sr, self.sr) 
+          audio = torchaudio.functional.resample(audio, file_sr, self.sr)
           audio = crop_and_pad(audio, self.sr, self.clip_duration)
 
         record = {"sound_name": self.audio_fp, "start_time": start}
@@ -185,7 +185,7 @@ class DetectronSingleClipDataset(SingleClipDataset):
         record["image"] = DetectronDataset.spectrogram_to_image(self, mel_spectrogram_dB)
         record["height"] = mel_spectrogram.shape[0] #f
         record["width"] = mel_spectrogram.shape[1] #t
-        
+
         return record
 
 class SoundEventTrainer(DefaultTrainer):
@@ -210,14 +210,14 @@ class SoundEventTrainer(DefaultTrainer):
         val_info_df = pd.read_csv(dataset_name) #Could also use cfg.SOUND_EVENT.val_info_fp directly
         dataset = DetectronDataset(cfg, val_info_df, False, cfg.SOUND_EVENT)
         return DataLoader(dataset, batch_size=None, collate_fn=list_collate)
-    
+
     # @classmethod
     # def build_evaluator(cls, cfg, dataset_name):
     # TODO (high priority): create this
 
 def list_collate(list_of_datapoints):
     """ Without this, Dataloader will attempt to batch the record dict
-        However, detectron accepts list[dict] 
+        However, detectron accepts list[dict]
         See: https://detectron2.readthedocs.io/en/latest/tutorials/models.html#model-input-format
         therefore instead of attempting to collate into dict[Tensor], this simply returns the list[dict]
     """
@@ -228,7 +228,7 @@ def create_collate_fn(cfg, dataset):
     def collate_fn(D):
         """ Maintain the list[dict] format of the output of Dataset
         Without this collate function, Dataloader will attempt to batch the list of record dicts from Dataset
-        However, detectron accepts list[dict] 
+        However, detectron accepts list[dict]
         See: https://detectron2.readthedocs.io/en/latest/tutorials/models.html#model-input-format
         Therefore instead of attempting to collate into dict[Tensor], this function simply returns the list[dict]
         """
@@ -243,12 +243,12 @@ def create_collate_fn(cfg, dataset):
                     mel_spectrogram_dB = dataset.power_to_dB(mel_spectrogram)
                     image = dataset.spectrogram_to_image(mel_spectrogram_dB)
                     instances = Instances(mel_spectrogram.shape)
-                    instances.gt_boxes = Boxes.cat([rD[idx]["instances"].gt_boxes, D[idx]["instances"].gt_boxes]) 
+                    instances.gt_boxes = Boxes.cat([rD[idx]["instances"].gt_boxes, D[idx]["instances"].gt_boxes])
                     instances.gt_classes = torch.cat([rD[idx]["instances"].gt_classes,D[idx]["instances"].gt_classes])
                     new_records.append({
                         "image": image,
                         "height": D[idx]["height"],
-                        "width": D[idx]["width"], 
+                        "width": D[idx]["width"],
                         "instances": instances
                     })
                 D = new_records
@@ -257,7 +257,7 @@ def create_collate_fn(cfg, dataset):
 
 def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=3, use_box_statistics=False):
     """Determine data-related config params (regarding spectrogram and boxes), adapted to training set """
-    
+
     #Get the minimum of the power spectrogram to determine the spectrogram reference value
     train_info_df = pd.read_csv(cfg.SOUND_EVENT.train_info_fp)
     dataset = DetectronDataset(cfg, train_info_df, True, cfg.SOUND_EVENT, collect_statistics=True)
@@ -320,7 +320,7 @@ def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=
         # Set config to box stats
         cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = [[float(l) for l in list(np.unique(aspect_ratio_quantiles))]]
         # import pdb; pdb.set_trace()
-        if len(cfg.MODEL.RPN.IN_FEATURES) == 1: 
+        if len(cfg.MODEL.RPN.IN_FEATURES) == 1:
             box_size_quantiles = np.unique(box_size_quantiles)
             cfg.MODEL.ANCHOR_GENERATOR.SIZES = [[int(l) for l in list(box_size_quantiles)]]
         else:
@@ -331,7 +331,7 @@ def collect_dataset_statistics(cfg, n_train_samples=2000, box_search_multiplier=
         plt.savefig(cfg.SOUND_EVENT.experiment_dir + "/box_stats.png")
         plt.close()
         print(f"Using Box Sizes: {cfg.MODEL.ANCHOR_GENERATOR.SIZES}, Aspect Ratios: {cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS}")
-    else: 
+    else:
         print(f"No boxes, using cfg instead. Sizes: {cfg.MODEL.ANCHOR_GENERATOR.SIZES}, Aspect Ratios: {cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS}")
 
     print("~~~~")
