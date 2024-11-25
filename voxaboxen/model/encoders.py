@@ -4,6 +4,8 @@ import json
 from einops import rearrange
 
 def get_encoder(args):
+    if not hasattr(args, "encoder_type"):
+        args.encoder_type = "aves"
     if args.encoder_type == "aves":
         return AvesEmbedding(args)
     elif args.encoder_type == "hubert_base":
