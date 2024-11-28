@@ -59,7 +59,7 @@ def inference(inference_args):
     fwd_target_fp = export_to_selection_table(detections, regressions, classifs, fn, args, is_bck=False, verbose=True, target_dir=output_dir, detection_threshold=inference_args.detection_threshold, classification_threshold=inference_args.classification_threshold)
     if model.is_bidirectional and not inference_args.disable_bidirectional:
         rev_target_fp = export_to_selection_table(rev_detections, rev_regressions, rev_classifs, fn, args, is_bck=True, verbose=True, target_dir=output_dir, detection_threshold=inference_args.detection_threshold, classification_threshold=inference_args.classification_threshold)
-        comb_target_fp, match_target_fp = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_threshold, comb_discard_threshold=model.comb_discard_thresh.item())
+        comb_target_fp, match_target_fp = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_threshold, comb_discard_threshold=args.comb_discard_thresh)
         print(f"Saving predictions for {fn} to {comb_target_fp}")
 
     else:
