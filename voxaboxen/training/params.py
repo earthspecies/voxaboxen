@@ -21,6 +21,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--clip-hop', type=float, default=None, help = "clip hop, in seconds. If None, automatically set to be half clip duration. Used only during training; clip hop is automatically set to be 1/2 clip duration for inference")
   parser.add_argument('--train-info-fp', type=str, required=False, help = "train info, to override project train info")
   parser.add_argument('--num-workers', type=int, default=8)
+  #parser.add_argument('--recompute-params', action='store_true')
 
   # Model
   parser.add_argument('--bidirectional', action='store_true', help="train and inference in both directions and combine results")
@@ -31,14 +32,14 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--detection-threshold', type=float, default = 0.5, help = "output probability to count as positive detection")
   parser.add_argument('--rms-norm', action="store_true", help = "If true, apply rms normalization to each clip")
   parser.add_argument('--previous-checkpoint-fp', type=str, default=None, help="path to checkpoint of previously trained detection model")
-  
+
   parser.add_argument('--stereo', action='store_true', help="If passed, will process stereo data as stereo. order of channels matters")
   parser.add_argument('--multichannel', action='store_true', help="If passed, will encode each audio channel seperately, then add together the encoded audio before final layer")
   parser.add_argument('--segmentation-based', action='store_true', help="If passed, will make predictions based on frame-wise segmentations rather than box starts")
   parser.add_argument('--comb-discard-thresh', type=float, default=0.75, help="If bidirectional, sets threshold for combining forward and backward predictions")
   parser.add_argument('--comb-iou-threshold', type=float, default=0.5, help="minimum iou to match a forward and backward prediction")
   # parser.add_argument('--reload-from', type=str)
-  
+
   # Encoder-specific
   ## AVES
   parser.add_argument('--aves-config-fp', type=str, default = "weights/birdaves-biox-base.torchaudio.model_config.json")
@@ -47,7 +48,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--frame-atst-weight-fp', type=str, default = "weights/atstframe_base.ckpt")
   ## BEATs
   parser.add_argument('--beats-checkpoint-fp', type=str, default = "weights/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt")
-  
+
   # Training
   parser.add_argument('--batch-size', type=int, default=32)
   parser.add_argument('--lr', type=float, default=.00005)
@@ -78,12 +79,12 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--nms-thresh', type = float, default = 0.5)
   parser.add_argument('--delete-short-dur-sec', type=float, default=0.1, help="if using segmentation based model, delete vox shorter than this as a post-processing step")
   parser.add_argument('--fill-holes-dur-sec', type=float, default=0.1, help="if using segmentation based model, fill holes shorter than this as a post-processing step")
-  
+
   if allow_unknown:
     args, remaining = parser.parse_known_args(args)
   else:
     args = parser.parse_args(args)
-  
+
   args = read_config(args)
   check_config(args)
 

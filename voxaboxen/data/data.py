@@ -66,7 +66,7 @@ class DetectionDataset(Dataset):
         else:
           self.omit_empty_clip_prob = 0
           self.clip_start_offset = 0
-        
+
         self.args=args
         # make metadata
         self.make_metadata()
@@ -179,25 +179,25 @@ class DetectionDataset(Dataset):
 
             start_idx = int(math.floor(start*anno_sr))
             start_idx = max(min(start_idx, seq_len-1), 0)
-            
+
             end_idx = int(math.ceil(end*anno_sr))
             end_idx = max(min(end_idx, seq_len-1), 0)
-            dur_samples = int(np.ceil(dur * anno_sr)) 
-            
+            dur_samples = int(np.ceil(dur * anno_sr))
+
             anchor_anno = get_anchor_anno(start_idx, dur_samples, seq_len)
             anchor_annos.append(anchor_anno)
             regression_annos[start_idx] = dur
-            
+
             rev_anchor_anno = get_anchor_anno(end_idx, dur_samples, seq_len)
             rev_anchor_annos.append(rev_anchor_anno)
             rev_regression_annos[end_idx] = dur
-            
+
             if hasattr(self.args,"segmentation_based") and self.args.segmentation_based:
               if class_idx == -1:
                 pass
               else:
                 class_annos[start_idx:start_idx+dur_samples,class_idx]=1.
-            
+
             else:
               if class_idx != -1:
                 class_annos[start_idx, class_idx] = 1.
@@ -205,8 +205,8 @@ class DetectionDataset(Dataset):
               else:
                 class_annos[start_idx, :] = 1./self.n_classes # if unknown, enforce uncertainty
                 rev_class_annos[end_idx, :] = 1./self.n_classes # if unknown, enforce uncertainty
-            
-            
+
+
         anchor_annos = np.stack(anchor_annos)
         anchor_annos = np.amax(anchor_annos, axis = 0)
         rev_anchor_annos = np.stack(rev_anchor_annos)
