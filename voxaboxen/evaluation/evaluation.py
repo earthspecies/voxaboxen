@@ -453,9 +453,9 @@ def summarize_metrics(metrics):
   return overall
 
 def f1_from_counts(tp, fp, fn):
-    prec = tp/(tp+fp)
-    rec = tp/(tp+fn)
-    f1 = 2*prec*rec / (prec+rec)
+    prec = tp/(tp+fp+1e-8)
+    rec = tp/(tp+fn+1e-8)
+    f1 = 2*prec*rec / (prec+rec+1e-8)
     return {'prec': prec, 'rec':rec, 'f1':f1}
 
 

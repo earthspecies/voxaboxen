@@ -17,7 +17,7 @@ def get_full_cfg(sound_event_args, detectron_args):
 
     # Create a CfgNode that fits the sound_event_detection and custom parameters
     cache_fp = os.path.join(sound_event_args.experiment_dir, 'cfg.pkl')
-    if os.path.exists(cache_fp) and not sound_event_args.recompute_params:
+    if os.path.exists(cache_fp) and not detectron_args.recompute_spec_params:
         print('loading cached params from', cache_fp)
         with open(cache_fp, 'rb') as f:
             cfg = pickle.load(f)
@@ -121,10 +121,13 @@ def parse_args(args):
 
     # General
     # To see available: https://github.com/facebookresearch/detectron2/tree/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/configs
-    parser.add_argument('--detectron-base-config', type = str, default="./COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml", help="Base config that will be merged in early.")
+    parser.add_argument('--detectron-base-config', type = str, default="COCO-Detection/faster_rcnn_X_101_32x8d_FPN_3x.yaml", help="Base config that will be merged in early.")
+    # prev default was "COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"
     parser.add_argument('--detectron-use-box-statistics', action="store_true", help="Whether to decide anchor sizes and aspect ratio based on statistics of boxes in training set.")
     # If you want to change cfg.MODEL.ANCHOR_GENERATOR.SIZES or cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS, recommend to use --detectron-config-fp instead of --ops (hard to specify list of lists as PATH.KEY value pairs in command line.)
     parser.add_argument('--detectron-config-fp', type = str, required=False, help="If you prefer to indicate a config file for your custom detectron args, use this to point to the custom file.")
+    parser.add_argument('--recompute-spec-params', action='store_true')
+    parser.add_argument('--test', action='store_true')
     # From https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/detectron2/engine/defaults.py#L134
     # For how to use opts, see https://github.com/facebookresearch/detectron2/blob/57bdb21249d5418c130d54e2ebdc94dda7a4c01a/docs/tutorials/configs.md
     parser.add_argument(
