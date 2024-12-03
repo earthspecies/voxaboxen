@@ -6,12 +6,21 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--test-louisraven', action='store_true')
+ARGS = parser.parse_args()
 
 
 c = Clip(label_set=[1])
 c.duration = 60.
-annot_names = ['Benj', 'Logan', 'Louis']
-labels_nums = [39, 137, 150, 174, 211]
+if ARGS.test_louisraven:
+    annot_names = ['Benj', 'Logan', 'Louis', 'Louisraven']
+    labels_nums = [39]
+else:
+    annot_names = ['Benj', 'Logan', 'Louis']
+    labels_nums = [39, 137, 150, 174, 211]
 
 def load_raven(fp):
     df = pd.read_csv(fp, sep='\t', index_col=0)
@@ -37,7 +46,6 @@ def load(lable_num, annot_name):
     df.to_csv(out_fp, sep='\t')
     return out_fp
 
-
 def overlaps_from_fp(df_fp):
     df = pd.read_csv(df_fp, sep='\t', index_col=0)
     overlap_nexts = df['End Time (s)'][:-1].array > df['Begin Time (s)'][1:].array
@@ -55,10 +63,12 @@ def display_dfs_from_ar(scores, scores_name):
     # Reshape the data and create DataFrame
     # Reshape to (5, 9) to match the MultiIndex columns
     full_df = pd.DataFrame(
-        scores.transpose(1, 0, 2).reshape(3, -1),
+        scores.transpose(1, 0, 2).reshape(len(annot_names), -1),
         columns=column_index,
         index=annot_names
     )
+    if ARGS.test_louisraven:
+        scores_name += '-test-louisraven'
     full_df.to_csv(f'overlapping_annots/inter-annot-scores-{scores_name}.csv')
     print(full_df)
     mean_df = full_df.groupby(level=1, axis=1).mean()
@@ -105,7 +115,6 @@ def return_dense_chunks(ref_df, est_df):
 
     ns_in_chunk = np.array(ns_in_chunk)
     assert ( ns_in_chunk.sum() >= ref.shape[1] + est.shape[1]) # some in >1 chunk
-    print(ns_in_chunk)
     k = len(ns_in_chunk)//10
     assert k > 0
     thresh = ns_in_chunk[np.argsort(ns_in_chunk)[-k:]].min()
@@ -132,13 +141,11 @@ for i, ln in enumerate(labels_nums):
             raw_counts = c.evaluate()[1]
             f1dict = f1_from_counts(raw_counts['TP'], raw_counts['FP'], raw_counts['FN'])
             fullscores[i, j, j+k+1] = f1dict['f1']
-            print(annot1_name, annot2_name, f1dict)
 
             overlap_ref, overlaps1 = overlaps_from_fp(annot1_fp)
             overlap_est, overlaps2 = overlaps_from_fp(annot2_fp)
             prec = scores_from_ref_est(full_ref, overlap_est)[1]
             rec = scores_from_ref_est(full_est, overlap_ref)[1]
-            print(prec, rec)
             oscores[i, j, j+k+1] = 2*prec*rec / (prec+rec)
 
             dense_ref, dense_est = return_dense_chunks(full_ref, full_est)
