@@ -150,8 +150,8 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
       else:
           assert all(x is None for x in model_outputs[3:])
 
-      # if args.is_test and i==15:
-      #   break
+      if args.is_test and i==15:
+          break
 
     all_detections = torch.cat(all_detections)
     all_regressions = torch.cat(all_regressions)
@@ -528,7 +528,9 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   annotations_fps = []
   durations = []
 
-  for fn in dataloader_dict:
+  for i, fn in enumerate(dataloader_dict.keys()):
+    if args.is_test and i==3:
+        break
     fwd_detections, fwd_regressions, fwd_classifications, bck_detections, bck_regressions, bck_classifications  = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
 
     fwd_predictions_fp = export_to_selection_table(fwd_detections, fwd_regressions, fwd_classifications, fn, args, is_bck=False, verbose=verbose, detection_threshold=args.detection_threshold)
@@ -560,10 +562,7 @@ def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold,
         annots_fp = row['annotations_fp']
         duration = row['duration_sec']
         if args.bidirectional:
-            assert comb_discard_threshold != -1
-            row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_threshold, comb_discard_threshold=comb_discard_threshold)
-        else:
-            assert comb_discard_threshold == -1
+            row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_thresh, comb_discard_threshold=comb_discard_threshold)
 
         for pred_type in pred_types:
             preds_fp = row[f'{pred_type}_predictions_fp']

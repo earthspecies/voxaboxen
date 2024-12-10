@@ -147,6 +147,7 @@ for i, ln in enumerate(labels_nums):
             prec = scores_from_ref_est(full_ref, overlap_est)[1]
             rec = scores_from_ref_est(full_est, overlap_ref)[1]
             oscores[i, j, j+k+1] = 2*prec*rec / (prec+rec)
+            print('GT:', annot1_name, 'preds:', annot2_name, 'prec:', prec, 'rec:', rec)
 
             dense_ref, dense_est = return_dense_chunks(full_ref, full_est)
             f1, prec, rec = scores_from_ref_est(dense_ref, dense_est)

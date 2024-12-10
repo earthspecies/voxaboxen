@@ -37,7 +37,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--multichannel', action='store_true', help="If passed, will encode each audio channel seperately, then add together the encoded audio before final layer")
   parser.add_argument('--segmentation-based', action='store_true', help="If passed, will make predictions based on frame-wise segmentations rather than box starts")
   parser.add_argument('--comb-discard-thresh', type=float, default=0.75, help="If bidirectional, sets threshold for combining forward and backward predictions")
-  parser.add_argument('--comb-iou-threshold', type=float, default=0.5, help="minimum iou to match a forward and backward prediction")
+  parser.add_argument('--comb-iou-thresh', type=float, default=0.5, help="minimum iou to match a forward and backward prediction")
   # parser.add_argument('--reload-from', type=str)
 
   # Encoder-specific
