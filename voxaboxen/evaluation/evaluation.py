@@ -363,6 +363,7 @@ def get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold, dura
   c.duration = duration
   c.load_predictions(predictions_fp)
   c.threshold_class_predictions(class_threshold)
+  assert not any(c.predictions['Annotation']=='Unknown')
   c.load_annotations(annotations_fp, label_mapping = args.label_mapping)
 
   metrics = {}
@@ -521,35 +522,41 @@ def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
 
   return overall, confusion_matrix_labels
 
-def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
-  fns = []
-  fwd_predictions_fps = []
-  bck_predictions_fps = []
-  annotations_fps = []
-  durations = []
+def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresholds=None, verbose = True):
 
-  for i, fn in enumerate(dataloader_dict.keys()):
-    if args.is_test and i==3:
-        break
-    fwd_detections, fwd_regressions, fwd_classifications, bck_detections, bck_regressions, bck_classifications  = generate_predictions(model, dataloader_dict[fn], args, verbose=verbose)
+    if detection_thresholds is None:
+        detection_thresholds = [args.detection_threshold]
+    manifests_by_thresh = {}
+    for i, (fn_base, dloader) in enumerate(dataloader_dict.items()):
+        if args.is_test and i==3:
+            break
+        fwd_detections, fwd_regressions, fwd_classifications, bck_detections, bck_regressions, bck_classifications = generate_predictions(model, dloader, args, verbose=verbose)
 
-    fwd_predictions_fp = export_to_selection_table(fwd_detections, fwd_regressions, fwd_classifications, fn, args, is_bck=False, verbose=verbose, detection_threshold=args.detection_threshold)
-    if model.is_bidirectional:
-        assert all(x is not None for x in [bck_detections, bck_classifications, bck_regressions])
-        bck_predictions_fp = export_to_selection_table(bck_detections, bck_regressions, bck_classifications, fn, args, is_bck=True, verbose=verbose, detection_threshold=args.detection_threshold)
-    else:
-        assert all(x is None for x in [bck_detections, bck_classifications, bck_regressions])
-        bck_predictions_fp = None
-    annotations_fp = dataloader_dict[fn].dataset.annot_fp
+        for det_thresh in detection_thresholds:
+            fns = []
+            fwd_predictions_fps = []
+            bck_predictions_fps = []
+            annotations_fps = []
+            durations = []
+            fn = f'{fn_base}-detthresh{det_thresh}'
+            fwd_predictions_fp = export_to_selection_table(fwd_detections, fwd_regressions, fwd_classifications, fn, args, is_bck=False, verbose=verbose, detection_threshold=det_thresh)
+            if model.is_bidirectional:
+                assert all(x is not None for x in [bck_detections, bck_classifications, bck_regressions])
+                bck_predictions_fp = export_to_selection_table(bck_detections, bck_regressions, bck_classifications, fn, args, is_bck=True, verbose=verbose, detection_threshold=args.detection_threshold)
+            else:
+                assert all(x is None for x in [bck_detections, bck_classifications, bck_regressions])
+                bck_predictions_fp = None
+            annotations_fp = dataloader_dict[fn_base].dataset.annot_fp
 
-    fns.append(fn)
-    fwd_predictions_fps.append(fwd_predictions_fp)
-    bck_predictions_fps.append(bck_predictions_fp)
-    annotations_fps.append(annotations_fp)
-    durations.append(np.shape(fwd_detections)[0]*args.scale_factor/args.sr)
+            fns.append(fn)
+            fwd_predictions_fps.append(fwd_predictions_fp)
+            bck_predictions_fps.append(bck_predictions_fp)
+            annotations_fps.append(annotations_fp)
+            durations.append(np.shape(fwd_detections)[0]*args.scale_factor/args.sr)
 
-  manifest = pd.DataFrame({'filename' : fns, 'fwd_predictions_fp' : fwd_predictions_fps, 'bck_predictions_fp' : bck_predictions_fps, 'annotations_fp' : annotations_fps, 'duration_sec' : durations})
-  return manifest
+            manifest = pd.DataFrame({'filename' : fns, 'fwd_predictions_fp' : fwd_predictions_fps, 'bck_predictions_fp' : bck_predictions_fps, 'annotations_fp' : annotations_fps, 'duration_sec' : durations})
+            manifests_by_thresh[det_thresh] = manifest
+    return manifests_by_thresh
 
 def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold, comb_discard_threshold):
     pred_types = ('fwd', 'bck', 'comb', 'match') if args.bidirectional else ('fwd',)

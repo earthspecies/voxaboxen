@@ -212,7 +212,8 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
 def val_epoch(model, t, dataloader, args):
     model.eval()
 
-    manifest = predict_and_generate_manifest(model, dataloader, args, verbose = False)
+    manifests = predict_and_generate_manifest(model, dataloader, args, verbose = False)
+    manifest = manifests[args.detection_threshold]
     e, _ = evaluate_based_on_manifest(manifest, args, output_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh)
 
     print(f"Epoch {t} | val@{args.model_selection_iou}IoU:")
