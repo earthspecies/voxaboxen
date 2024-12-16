@@ -13,8 +13,6 @@ parser.add_argument('--test-louisraven', action='store_true')
 ARGS = parser.parse_args()
 
 
-c = Clip(label_set=[1])
-c.duration = 60.
 if ARGS.test_louisraven:
     annot_names = ['Benj', 'Logan', 'Louis', 'Louisraven']
     labels_nums = [39]
@@ -37,8 +35,8 @@ def load_audacity(fp):
     return df
 
 def load(lable_num, annot_name):
-    in_fp = f'overlapping_annots/ZF-common-labels{ln}-{annot_name}.txt'
-    out_fp = f'overlapping_annots/ZF-common-labels{ln}-{annot_name}.csv'
+    in_fp = f'ZFdset/overlapping_annots/ZF-common-labels{ln}-{annot_name}.txt'
+    out_fp = f'ZFdset/overlapping_annots/ZF-common-labels{ln}-{annot_name}.csv'
     if annot_name=='Louis':
         df = load_audacity(in_fp)
     else:
@@ -48,6 +46,9 @@ def load(lable_num, annot_name):
 
 def overlaps_from_fp(df_fp):
     df = pd.read_csv(df_fp, sep='\t', index_col=0)
+    return get_overlaps(df)
+
+def get_overlaps(df):
     overlap_nexts = df['End Time (s)'][:-1].array > df['Begin Time (s)'][1:].array
     overlaps = np.logical_or([False] + list(overlap_nexts), list(overlap_nexts) + [False])
     return df.loc[overlaps], np.argwhere(overlaps)
@@ -69,14 +70,14 @@ def display_dfs_from_ar(scores, scores_name):
     )
     if ARGS.test_louisraven:
         scores_name += '-test-louisraven'
-    full_df.to_csv(f'overlapping_annots/inter-annot-scores-{scores_name}.csv')
+    full_df.to_csv(f'ZFdset/overlapping_annots/inter-annot-scores-{scores_name}.csv')
     print(full_df)
     mean_df = full_df.groupby(level=1, axis=1).mean()
 
     sns.heatmap(mean_df, annot=True, cmap='viridis', fmt='.4f', vmin=0.5, vmax=1.0)
     plt.gca().xaxis.tick_top()
     plt.title(scores_name + 'Scores')
-    plt.savefig(heatmap_fp:=f'overlapping_annots/heatmap-means--{scores_name}.png')
+    plt.savefig(heatmap_fp:=f'ZFdset/overlapping_annots/heatmap-means--{scores_name}.png')
     os.system(f'/usr/bin/xdg-open {heatmap_fp}')
     plt.clf()
 
@@ -124,36 +125,39 @@ def return_dense_chunks(ref_df, est_df):
     return ref_df.loc[ref_idxs], est_df.loc[est_idxs]
 
 
-fullscores = np.zeros([len(labels_nums), len(annot_names), len(annot_names)])
-oscores = np.zeros([len(labels_nums), len(annot_names), len(annot_names)])
-dscores = np.zeros([len(labels_nums), len(annot_names), len(annot_names)])
-for i, ln in enumerate(labels_nums):
-    for j, annot1_name in enumerate(annot_names):
-        annot1_fp = load(ln, annot1_name)
-        full_ref = pd.read_csv(annot1_fp, sep='\t', index_col=0)
-        c.load_annotations(annot1_fp)
-        for k, annot2_name in enumerate(annot_names[j+1:]):
-        #for k, annot2_name in enumerate(annot_names):
-            annot2_fp = load(ln, annot2_name)
-            full_est = pd.read_csv(annot2_fp, sep='\t', index_col=0)
-            c.load_predictions(annot2_fp)
-            c.compute_matching(IoU_minimum=0.5)
-            raw_counts = c.evaluate()[1]
-            f1dict = f1_from_counts(raw_counts['TP'], raw_counts['FP'], raw_counts['FN'])
-            fullscores[i, j, j+k+1] = f1dict['f1']
+if __name__ == '__main__':
+    c = Clip(label_set=[1])
+    c.duration = 60.
+    fullscores = np.zeros([len(labels_nums), len(annot_names), len(annot_names)])
+    oscores = np.zeros([len(labels_nums), len(annot_names), len(annot_names)])
+    dscores = np.zeros([len(labels_nums), len(annot_names), len(annot_names)])
+    for i, ln in enumerate(labels_nums):
+        for j, annot1_name in enumerate(annot_names):
+            annot1_fp = load(ln, annot1_name)
+            full_ref = pd.read_csv(annot1_fp, sep='\t', index_col=0)
+            c.load_annotations(annot1_fp)
+            for k, annot2_name in enumerate(annot_names[j+1:]):
+            #for k, annot2_name in enumerate(annot_names):
+                annot2_fp = load(ln, annot2_name)
+                full_est = pd.read_csv(annot2_fp, sep='\t', index_col=0)
+                c.load_predictions(annot2_fp)
+                c.compute_matching(IoU_minimum=0.5)
+                raw_counts = c.evaluate()[1]
+                f1dict = f1_from_counts(raw_counts['TP'], raw_counts['FP'], raw_counts['FN'])
+                fullscores[i, j, j+k+1] = f1dict['f1']
 
-            overlap_ref, overlaps1 = overlaps_from_fp(annot1_fp)
-            overlap_est, overlaps2 = overlaps_from_fp(annot2_fp)
-            prec = scores_from_ref_est(full_ref, overlap_est)[1]
-            rec = scores_from_ref_est(full_est, overlap_ref)[1]
-            oscores[i, j, j+k+1] = 2*prec*rec / (prec+rec)
-            print('GT:', annot1_name, 'preds:', annot2_name, 'prec:', prec, 'rec:', rec)
+                overlap_ref, overlaps1 = overlaps_from_fp(annot1_fp)
+                overlap_est, overlaps2 = overlaps_from_fp(annot2_fp)
+                prec = scores_from_ref_est(full_ref, overlap_est)[1]
+                rec = scores_from_ref_est(full_est, overlap_ref)[1]
+                oscores[i, j, j+k+1] = 2*prec*rec / (prec+rec)
+                print('GT:', annot1_name, 'preds:', annot2_name, 'prec:', prec, 'rec:', rec)
 
-            dense_ref, dense_est = return_dense_chunks(full_ref, full_est)
-            f1, prec, rec = scores_from_ref_est(dense_ref, dense_est)
-            dscores[i, j, j+k+1] = f1
-            #scores[i, j, k] = f1dict['f1']
+                dense_ref, dense_est = return_dense_chunks(full_ref, full_est)
+                f1, prec, rec = scores_from_ref_est(dense_ref, dense_est)
+                dscores[i, j, j+k+1] = f1
+                #scores[i, j, k] = f1dict['f1']
 
-display_dfs_from_ar(fullscores, 'full')
-display_dfs_from_ar(oscores, 'overlapping')
-display_dfs_from_ar(dscores, 'dense_sections')
+    display_dfs_from_ar(fullscores, 'full')
+    display_dfs_from_ar(oscores, 'overlapping')
+    display_dfs_from_ar(dscores, 'dense_sections')
