@@ -55,7 +55,7 @@ class DetectionModel(nn.Module):
           rev_detection_probs = torch.sigmoid(rev_detection_logits)
       else:
           rev_detection_probs = rev_regression = rev_class_logits = None
-          
+
       return detection_probs, regression, class_logits, rev_detection_probs, rev_regression, rev_class_logits
 
   def generate_features(self, x):
@@ -119,8 +119,6 @@ def rms_and_mixup(X, d, r, y, train, args):
   if args.mixup and train:
     # TODO: For mixup, add in a check that there aren't extremely overlapping vocs
 
-    batch_size = X.size(0)
-
     mask = torch.full((X.size(0),1,1), 0.5, device=X.device)
     mask = torch.bernoulli(mask)
 
@@ -137,7 +135,7 @@ def rms_and_mixup(X, d, r, y, train, args):
     d = torch.maximum(d, d_aug)
     r = torch.maximum(r, r_aug)
     y = torch.maximum(y, y_aug)
-    if args.rms_norm:
+    if rms_norm:
       X = X * (1/2)
 
   return X, d, r, y

@@ -214,7 +214,7 @@ def val_epoch(model, t, dataloader, args):
 
     manifests = predict_and_generate_manifest(model, dataloader, args, verbose = False)
     manifest = manifests[args.detection_threshold]
-    e, _ = evaluate_based_on_manifest(manifest, args, output_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh)
+    e, _ = evaluate_based_on_manifest(manifest, output_dir=args.experiment_output_dir, results_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label)
 
     print(f"Epoch {t} | val@{args.model_selection_iou}IoU:")
     evals = {}

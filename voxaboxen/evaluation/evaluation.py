@@ -110,7 +110,7 @@ def write_tsv(out_fp, data):
             tsv_output.writerow(row)
 
 
-def generate_predictions(model, single_clip_dataloader, args, verbose = True):
+def generate_predictions(model, single_clip_dataloader, args, verbose=True):
   assert single_clip_dataloader.dataset.clip_hop == args.clip_duration/2, "For inference, clip hop is assumed to be equal to half clip duration"
 
   model = model.to(device)
@@ -137,10 +137,10 @@ def generate_predictions(model, single_clip_dataloader, args, verbose = True):
       assert isinstance(model_outputs, tuple)
       all_detections.append(model_outputs[0])
       all_regressions.append(model_outputs[1])
-      if hasattr(args, "segmentation_based") and args.segmentation_based:
-        classification=torch.nn.functional.sigmoid(model_outputs[2])
+      if args.segmentation_based:
+          classification=torch.nn.functional.sigmoid(model_outputs[2])
       else:
-        classification=torch.nn.functional.softmax(model_outputs[2], dim=-1)
+          classification=torch.nn.functional.softmax(model_outputs[2], dim=-1)
       all_classifs.append(classification)
       if model.is_bidirectional:
           assert all(x is not None for x in model_outputs)
@@ -358,20 +358,21 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
   return target_fp
 
 
-def get_metrics(predictions_fp, annotations_fp, args, iou, class_threshold, duration):
-  c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
-  c.duration = duration
-  c.load_predictions(predictions_fp)
-  c.threshold_class_predictions(class_threshold)
-  assert not any(c.predictions['Annotation']=='Unknown')
-  c.load_annotations(annotations_fp, label_mapping = args.label_mapping)
+def get_metrics(predictions_fp, annotations_fp, iou, class_threshold, duration, label_mapping, unknown_label):
+    label_set = list(label_mapping.keys())
+    c = Clip(label_set=label_set, unknown_label=unknown_label)
+    c.duration = duration
+    c.load_predictions(predictions_fp)
+    c.threshold_class_predictions(class_threshold)
+    assert not any(c.predictions['Annotation']=='Unknown')
+    c.load_annotations(annotations_fp, label_mapping = label_mapping)
 
-  metrics = {}
+    metrics = {}
 
-  c.compute_matching(IoU_minimum = iou)
-  metrics = c.evaluate()
+    c.compute_matching(IoU_minimum = iou)
+    metrics = c.evaluate()
 
-  return metrics
+    return metrics
 
 def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold):
   c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
@@ -468,11 +469,11 @@ def macro_micro_metrics(summary):
 
     for metric in metrics:
 
-      e = []
-      for l in summary:
-          m = summary[l][metric]
-          e.append(m)
-      macro[metric] = float(np.mean(e))
+        e = []
+        for l in summary:
+            m = summary[l][metric]
+            e.append(m)
+        macro[metric] = float(np.mean(e))
 
     tp = sum(v['TP'] for v in summary.values())
     fp = sum(v['FP'] for v in summary.values())
@@ -508,36 +509,40 @@ def plot_confusion_matrix(data, label_names, target_dir, name=""):
 
 
 def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
-  # confusion_matrix (dict) : {fp : fp_cm}
-  # where
-  # fp_cm  : numpy array
+    # confusion_matrix (dict) : {fp : fp_cm}
+    # where
+    # fp_cm  : numpy array
 
-  fps = sorted(confusion_matrix.keys())
-  l = len(confusion_matrix_labels)
+    fps = sorted(confusion_matrix.keys())
+    l = len(confusion_matrix_labels)
 
-  overall = np.zeros((l, l))
+    overall = np.zeros((l, l))
 
-  for fp in fps:
-    overall += confusion_matrix[fp]
+    for fp in fps:
+      overall += confusion_matrix[fp]
 
-  return overall, confusion_matrix_labels
+    return overall, confusion_matrix_labels
 
 def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresholds=None, verbose = True):
-
     if detection_thresholds is None:
         detection_thresholds = [args.detection_threshold]
-    manifests_by_thresh = {}
+    fns = []
+    annotations_fps = []
+    fwd_predictions_fps = []
+    bck_predictions_fps = []
+    durations = []
     for i, (fn_base, dloader) in enumerate(dataloader_dict.items()):
         if args.is_test and i==3:
             break
+        annotations_fp = dataloader_dict[fn_base].dataset.annot_fp
+        fns.append(fn_base)
+        annotations_fps.append(annotations_fp)
         fwd_detections, fwd_regressions, fwd_classifications, bck_detections, bck_regressions, bck_classifications = generate_predictions(model, dloader, args, verbose=verbose)
+        durations.append(np.shape(fwd_detections)[0]*args.scale_factor/args.sr)
 
+        fwd_predictions_fps_by_thresh = {}
+        bck_predictions_fps_by_thresh = {}
         for det_thresh in detection_thresholds:
-            fns = []
-            fwd_predictions_fps = []
-            bck_predictions_fps = []
-            annotations_fps = []
-            durations = []
             fn = f'{fn_base}-detthresh{det_thresh}'
             fwd_predictions_fp = export_to_selection_table(fwd_detections, fwd_regressions, fwd_classifications, fn, args, is_bck=False, verbose=verbose, detection_threshold=det_thresh)
             if model.is_bidirectional:
@@ -546,20 +551,23 @@ def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresh
             else:
                 assert all(x is None for x in [bck_detections, bck_classifications, bck_regressions])
                 bck_predictions_fp = None
-            annotations_fp = dataloader_dict[fn_base].dataset.annot_fp
 
-            fns.append(fn)
-            fwd_predictions_fps.append(fwd_predictions_fp)
-            bck_predictions_fps.append(bck_predictions_fp)
-            annotations_fps.append(annotations_fp)
-            durations.append(np.shape(fwd_detections)[0]*args.scale_factor/args.sr)
+            fwd_predictions_fps_by_thresh[det_thresh] = fwd_predictions_fp
+            bck_predictions_fps_by_thresh[det_thresh] = bck_predictions_fp
 
-            manifest = pd.DataFrame({'filename' : fns, 'fwd_predictions_fp' : fwd_predictions_fps, 'bck_predictions_fp' : bck_predictions_fps, 'annotations_fp' : annotations_fps, 'duration_sec' : durations})
-            manifests_by_thresh[det_thresh] = manifest
+        fwd_predictions_fps.append(fwd_predictions_fps_by_thresh)
+        bck_predictions_fps.append(bck_predictions_fps_by_thresh)
+
+    manifests_by_thresh = {}
+    for dt in detection_thresholds:
+        fpfps = [x[dt] for x in fwd_predictions_fps]
+        bpfps = [x[dt] for x in bck_predictions_fps]
+        manifest = pd.DataFrame({'filename' : fns, 'fwd_predictions_fp' : fpfps, 'bck_predictions_fp' : bpfps, 'annotations_fp' : annotations_fps, 'duration_sec' : durations})
+        manifests_by_thresh[dt] = manifest
     return manifests_by_thresh
 
-def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold, comb_discard_threshold):
-    pred_types = ('fwd', 'bck', 'comb', 'match') if args.bidirectional else ('fwd',)
+def evaluate_based_on_manifest(manifest, output_dir, results_dir, iou, class_threshold, label_mapping, unknown_label, comb_discard_threshold=0, comb_iou_thresh=0, bidirectional=False):
+    pred_types = ('fwd', 'bck', 'comb', 'match') if bidirectional else ('fwd',)
     metrics = {p:{} for p in pred_types}
     conf_mats = {p:{} for p in pred_types}
     conf_mat_labels = {}
@@ -568,13 +576,13 @@ def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold,
         fn = row['filename']
         annots_fp = row['annotations_fp']
         duration = row['duration_sec']
-        if args.bidirectional:
-            row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_thresh, comb_discard_threshold=comb_discard_threshold)
+        if bidirectional:
+            row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(output_dir, fn, comb_iou_threshold=comb_iou_thresh, comb_discard_threshold=comb_discard_threshold)
 
         for pred_type in pred_types:
             preds_fp = row[f'{pred_type}_predictions_fp']
-            metrics[pred_type][fn] = get_metrics(preds_fp, annots_fp, args, iou, class_threshold, duration)
-            conf_mats[pred_type][fn], conf_mat_labels[pred_type] = get_confusion_matrix(preds_fp, annots_fp, args, iou, class_threshold)
+            metrics[pred_type][fn] = get_metrics(preds_fp, annots_fp, iou, class_threshold, duration, label_mapping, unknown_label)
+            #conf_mats[pred_type][fn], conf_mat_labels[pred_type] = get_confusion_matrix(preds_fp, annots_fp, iou, class_threshold)
 
     if output_dir is not None and not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -586,12 +594,13 @@ def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold,
         metrics[pred_type]['summary'] = summary
         macro, micro = macro_micro_metrics(summary)
         metrics[pred_type]['macro'], metrics[pred_type]['micro'] = macro, micro
-        conf_mat_summaries[pred_type], confusion_matrix_labels = summarize_confusion_matrix(conf_mats[pred_type], conf_mat_labels[pred_type])
-        plot_confusion_matrix(conf_mat_summaries[pred_type].astype(int), confusion_matrix_labels, output_dir, name=f"cm_iou_{iou}_class_threshold_{class_threshold}_{pred_type}")
-    if output_dir is not None:
-      metrics_fp = os.path.join(output_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
-      with open(metrics_fp, 'w') as f:
-        yaml.dump(metrics, f)
+        #conf_mat_summaries[pred_type], confusion_matrix_labels = summarize_confusion_matrix(conf_mats[pred_type], conf_mat_labels[pred_type])
+        #plot_confusion_matrix(conf_mat_summaries[pred_type].astype(int), confusion_matrix_labels, output_dir, name=f"cm_iou_{iou}_class_threshold_{class_threshold}_{pred_type}")
+    if results_dir is not None:
+        os.makedirs(results_dir, exist_ok=True)
+        metrics_fp = os.path.join(results_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
+        with open(metrics_fp, 'w') as f:
+            yaml.dump(metrics, f)
 
     return metrics, conf_mat_summaries
 
@@ -640,3 +649,48 @@ def combine_fwd_bck_preds(target_dir, fn, comb_iou_threshold, comb_discard_thres
 def select_from_neg_idxs(df, neg_idxs):
     bool_mask = [i not in neg_idxs for i in range(len(df))]
     return df.loc[bool_mask]
+
+def mean_average_precision(ious, manifests_by_thresh, label_mapping, exp_dir, pred_type='fwd', comb_discard_thresh=0):
+    # first loop through thresholds to gather all results
+    scores_by_class = {c:[] for c in label_mapping.keys()}
+    for det_thresh, test_manifest in manifests_by_thresh.items():
+        results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
+        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, results_dir=results_dir, output_dir=exp_dir, iou=0.5, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown')
+        for c, s in test_metrics[pred_type]['summary'].items():
+            scores_by_class[c].append(dict(s, det_thresh=det_thresh))
+
+    # now loop through classes to calculate APs
+    ap_by_class = {}
+    map_results = {c:{} for c in label_mapping.keys()}
+    for c, sweep_ in scores_by_class.items():
+        sweep = pd.DataFrame(sweep_)#.sort_values('recall')
+        # exclude cases where all TNs because they give weird f-scores
+        sweep = sweep.loc[sweep['TP'] + sweep['FP'] + sweep['FN'] != 0]
+        precs, recs = list(sweep['precision']), list(sweep['recall'])
+        precs = [0.] + precs + [1.]
+        recs = [1.] + recs + [0.]
+        prec_by_rec = {}
+        for r,p in zip(recs, precs):
+            if r in prec_by_rec.keys():
+                prec_by_rec[r] = max(p, prec_by_rec[r])
+            else:
+                prec_by_rec[r] = p
+        recs, precs = list(prec_by_rec.keys()), list(prec_by_rec.values())
+        auc = 0
+        if recs!=sorted(recs, reverse=True):
+            print(f'non-monotonic recall when computing mAP:')
+            print(sweep)
+        for i in range( len(recs)-1):
+            width = recs[i] - recs[i+1]
+            height = precs[i]
+            auc += width*height
+        if auc==1:
+            breakpoint()
+        ap_by_class[c] = auc
+        map_results[c]['sweep'] = sweep_
+        map_results[c]['precs'] = precs
+        map_results[c]['recs'] = recs
+
+    map_score = float(np.array(list(ap_by_class.values())).mean())
+    return map_score, scores_by_class, ap_by_class
+
