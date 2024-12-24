@@ -38,7 +38,7 @@ def train(model, args):
     assert args.val_info_fp is not None
     best_f1 = 0
 
-  if args.val_info_fp is not None:
+  if (args.val_info_fp is not None) and args.val_during_training:
     val_dataloader = get_val_dataloader(args)
     use_val = True
   else:

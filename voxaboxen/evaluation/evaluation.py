@@ -650,12 +650,12 @@ def select_from_neg_idxs(df, neg_idxs):
     bool_mask = [i not in neg_idxs for i in range(len(df))]
     return df.loc[bool_mask]
 
-def mean_average_precision(ious, manifests_by_thresh, label_mapping, exp_dir, pred_type='fwd', comb_discard_thresh=0):
+def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', comb_discard_thresh=0, unknown_label='Unknown'):
     # first loop through thresholds to gather all results
     scores_by_class = {c:[] for c in label_mapping.keys()}
     for det_thresh, test_manifest in manifests_by_thresh.items():
         results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
-        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, results_dir=results_dir, output_dir=exp_dir, iou=0.5, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown')
+        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, results_dir=results_dir, output_dir=exp_dir, iou=iou, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown')
         for c, s in test_metrics[pred_type]['summary'].items():
             scores_by_class[c].append(dict(s, det_thresh=det_thresh))
 
@@ -690,7 +690,12 @@ def mean_average_precision(ious, manifests_by_thresh, label_mapping, exp_dir, pr
         map_results[c]['sweep'] = sweep_
         map_results[c]['precs'] = precs
         map_results[c]['recs'] = recs
-
-    map_score = float(np.array(list(ap_by_class.values())).mean())
+    
+    # map_score = float(np.array(list(ap_by_class.values())).mean())
+    map_score = []
+    for c in ap_by_class:
+        if c!= unknown_label:
+            map_score.append(ap_by_class[c])
+    map_score = float(np.array(map_score).mean())
+    
     return map_score, scores_by_class, ap_by_class
-

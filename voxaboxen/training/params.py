@@ -64,6 +64,7 @@ def parse_args(args,allow_unknown=False):
 
   parser.add_argument('--early-stopping', action ="store_true", help="Whether to use early stopping based on val performance")
   parser.add_argument('--pos-loss-weight', type=float, default=1, help="Weights positive component of loss")
+  parser.add_argument('--val-during-training', action="store_true", help="Whether to do val epochs during training")
 
   # Augmentations
   parser.add_argument('--amp-aug', action ="store_true", help="Whether to use amplitude augmentation")
@@ -77,8 +78,8 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--soft-nms-sigma', type = float, default = 0.5)
   parser.add_argument('--soft-nms-thresh', type = float, default = 0.001)
   parser.add_argument('--nms-thresh', type = float, default = 0.5)
-  parser.add_argument('--delete-short-dur-sec', type=float, default=0.1, help="if using segmentation based model, delete vox shorter than this as a post-processing step")
-  parser.add_argument('--fill-holes-dur-sec', type=float, default=0.1, help="if using segmentation based model, fill holes shorter than this as a post-processing step")
+  parser.add_argument('--delete-short-dur-sec', type=float, default=0, help="if using segmentation based model, delete vox shorter than this as a post-processing step")
+  parser.add_argument('--fill-holes-dur-sec', type=float, default=0, help="if using segmentation based model, fill holes shorter than this as a post-processing step")
 
   if allow_unknown:
     args, remaining = parser.parse_known_args(args)
