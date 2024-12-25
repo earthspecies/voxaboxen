@@ -291,6 +291,8 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
 
       starts = classifications_sub_binary[1:] * ~classifications_sub_binary[:-1]
       starts = np.where(starts)[0] + 1
+      if classifications_sub_binary[0]:
+          starts = np.append(starts, 0)
 
       for start in starts:
           look_forward = classifications_sub_binary[start:]
