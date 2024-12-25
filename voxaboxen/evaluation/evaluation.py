@@ -461,7 +461,7 @@ def f1_from_counts(tp, fp, fn):
     return {'prec': prec, 'rec':rec, 'f1':f1}
 
 
-def macro_micro_metrics(summary):
+def macro_micro_metrics(summary, unknown_label="Unknown"):
     # summary (dict) : {class_label: {'f1' : float, 'precision' : float, 'recall' : float, 'f1_seg' : float, 'precision_seg' : float, 'recall_seg' : float, 'TP': int, 'FP' : int, 'FN' : int, TP_seg': int, 'FP_seg' : int, 'FN_seg' : int}}
 
     metrics = ['f1', 'precision', 'recall', 'f1_seg', 'precision_seg', 'recall_seg']
@@ -471,6 +471,8 @@ def macro_micro_metrics(summary):
 
         e = []
         for l in summary:
+            if l == unknown_label:
+                continue
             m = summary[l][metric]
             e.append(m)
         macro[metric] = float(np.mean(e))
@@ -676,16 +678,26 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
             else:
                 prec_by_rec[r] = p
         recs, precs = list(prec_by_rec.keys()), list(prec_by_rec.values())
+        
+        # 11-point AP computation: https://homepages.inf.ed.ac.uk/ckiw/postscript/ijcv_voc09.pdf
+        recs_np = np.array(recs)
+        precs_np = np.array(precs)
         auc = 0
-        if recs!=sorted(recs, reverse=True):
-            print(f'non-monotonic recall when computing mAP:')
-            print(sweep)
-        for i in range( len(recs)-1):
-            width = recs[i] - recs[i+1]
-            height = precs[i]
-            auc += width*height
+        recall_levels = np.arange(0,11)/10
+        for recall_level in recall_levels:
+            p_interp_at_recall_level = np.amax(precs_np[recs_np>=recall_level])
+            auc += p_interp_at_recall_level/11
+        
+        # if recs!=sorted(recs, reverse=True):
+        #     print(f'non-monotonic recall when computing mAP:')
+        #     print(sweep)
+        # for i in range( len(recs)-1):
+        #     width = recs[i] - recs[i+1]
+        #     height = precs[i]
+        #     auc += width*height
         if auc==1:
             breakpoint()
+        
         ap_by_class[c] = auc
         map_results[c]['sweep'] = sweep_
         map_results[c]['precs'] = precs

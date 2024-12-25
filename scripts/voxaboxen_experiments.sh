@@ -2,7 +2,7 @@ cd ..
 
 MODEL=frame_atst;
 
-for DATASET in Anuraset hawaii humpback MT powdermill;
+for DATASET in MT Anuraset hawaii humpback powdermill;
 do
 python main.py project-setup --train-info-fp=/home/jupyter/data/voxaboxen_data/${DATASET}/formatted/train_info.csv --val-info-fp=/home/jupyter/data/voxaboxen_data/${DATASET}/formatted/val_info.csv --test-info-fp=/home/jupyter/data/voxaboxen_data/${DATASET}/formatted/test_info.csv --project-dir=projects/${DATASET}_${MODEL}_experiment
 for lr in .00001 .00003 .0001 .0003 .001;
