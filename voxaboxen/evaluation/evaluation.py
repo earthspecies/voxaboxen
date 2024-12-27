@@ -685,10 +685,10 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
         recs_np = np.array(recs)
         precs_np = np.array(precs)
         auc = 0
-        recall_levels = np.arange(0,11)/10
+        recall_levels = np.linspace(0,1,1001) #np.arange(0,11)/10
         for recall_level in recall_levels:
             p_interp_at_recall_level = np.amax(precs_np[recs_np>=recall_level])
-            auc += p_interp_at_recall_level/11
+            auc += p_interp_at_recall_level/len(recall_levels)
         
         # if recs!=sorted(recs, reverse=True):
         #     print(f'non-monotonic recall when computing mAP:')
