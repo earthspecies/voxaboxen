@@ -51,19 +51,32 @@ def train_model(args):
     if args.n_epochs>0:
       model = train(model, args)
 
+    best_pred_type = 'comb' if args.bidirectional else 'fwd'
+    val_manifests_by_thresh = predict_and_generate_manifest(model, get_val_dataloader(args), args, detection_thresholds=np.linspace(0.05, 0.95, 5 if args.is_test else 90), verbose=False)
+    best_f1 = 0
+    best_thresh = -1
+    for det_thresh, manifest in val_manifests_by_thresh.items():
+        metrics, _ = evaluate_based_on_manifest(manifest, output_dir=args.experiment_output_dir, results_dir=os.path.join(args.experiment_dir, 'test_results') , iou=0.5, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
+        new_f1 = metrics[best_pred_type]['micro']['f1']
+        if new_f1 > best_f1:
+            best_f1 = new_f1
+            best_thresh = det_thresh
+
+    print(f'Best thresh on val set: {best_thresh:.3f}')
+
     ## Evaluation
     for split in ['val', 'test']:
+        print(f'Evaluating on {split} set')
         if split == 'test':
             test_dataloader = get_test_dataloader(args)
         else:
             test_dataloader = get_val_dataloader(args)
-        manifests_by_thresh = predict_and_generate_manifest(model, test_dataloader, args)
-        test_manifest = manifests_by_thresh[args.detection_threshold]
-        best_pred_type = 'comb' if args.bidirectional else 'fwd'
+        manifests_by_thresh = predict_and_generate_manifest(model, test_dataloader, args, detection_thresholds=[best_thresh], verbose=False)
+        test_manifest = manifests_by_thresh[best_thresh]
         summary_results = {}
         full_results = {}
         for iou in [0.2, 0.5, 0.8]:
-            test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=args.experiment_output_dir, results_dir=os.path.join(args.experiment_dir, 'test_results') , iou=iou, class_threshold=0.0, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label)
+            test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=args.experiment_output_dir, results_dir=os.path.join(args.experiment_dir, 'test_results') , iou=iou, det_thresh=best_thresh, class_threshold=0.0, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
             full_results[f'f1@{iou}'] = test_metrics
             summary_results[f'micro-f1@{iou}'] = test_metrics[best_pred_type]['micro']['f1']
             summary_results[f'macro-f1@{iou}'] = test_metrics[best_pred_type]['macro']['f1']
@@ -72,7 +85,7 @@ def train_model(args):
         manifests_by_thresh = predict_and_generate_manifest(model, test_dataloader, args, det_thresh_range, verbose=False)
 
         for iou in [0.5,0.8]:
-            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=args.experiment_dir, iou=iou, pred_type=best_pred_type, comb_discard_thresh=0)
+            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=args.experiment_dir, iou=iou, pred_type=best_pred_type, comb_discard_thresh=0, bidirectional=args.bidirectional)
 
         with open(os.path.join(args.experiment_dir, f'{split}_full_results.json'), 'w') as f:
             json.dump(full_results, f)
@@ -80,7 +93,7 @@ def train_model(args):
         with open(os.path.join(args.experiment_dir, f'{split}_results.yaml'), 'w') as f:
             yaml.dump(summary_results, f)
 
-        print(summary_results)
+        print(' '.join(f'{k}: {v:.5f}' for k,v in summary_results.items()))
     torch.save(model.state_dict(), os.path.join(args.experiment_dir, 'final-model.pt'))
 
 if __name__ == "__main__":

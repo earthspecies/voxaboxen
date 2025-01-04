@@ -72,7 +72,7 @@ def train(model, args):
 
       if use_val and args.early_stopping:
         current_f1 = eval_scores['comb']['f1'] if model.is_bidirectional else eval_scores['fwd']['f1']
-        if current_f1 > best_f1:
+        if args.is_test or (current_f1 > best_f1):
           print('found new best model')
           best_f1 = current_f1
 
@@ -206,7 +206,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
     train_loss = train_loss / num_batches_seen
     evals['loss'] = float(train_loss)
 
-    print(f"Epoch {t} | Train loss: {train_loss:1.3f}")
+    print(f"Epoch {t} | Train loss: {train_loss:1.5f}")
     return model, evals
 
 def val_epoch(model, t, dataloader, args):
@@ -214,20 +214,25 @@ def val_epoch(model, t, dataloader, args):
 
     manifests = predict_and_generate_manifest(model, dataloader, args, verbose = False)
     manifest = manifests[args.detection_threshold]
-    e, _ = evaluate_based_on_manifest(manifest, output_dir=args.experiment_output_dir, results_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label)
+    e, _ = evaluate_based_on_manifest(manifest, output_dir=args.experiment_output_dir, results_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, det_thresh=args.detection_threshold, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
 
+    #metrics_to_print = ['precision','recall','f1', 'precision_seg', 'recall_seg', 'f1_seg']
+    metrics_to_print = ['precision','recall','f1']
     print(f"Epoch {t} | val@{args.model_selection_iou}IoU:")
     evals = {}
     for pt in e.keys():
-        evals[pt] = {k:[] for k in ['precision','recall','f1', 'precision_seg', 'recall_seg', 'f1_seg']}
-        for k in ['precision','recall','f1', 'precision_seg', 'recall_seg', 'f1_seg']:
+        evals[pt] = {k:[] for k in metrics_to_print}
+        for k in metrics_to_print:
           for l in args.label_set:
             m = e[pt]['summary'][l][k]
             evals[pt][k].append(m)
           evals[pt][k] = float(np.mean(evals[pt][k]))
 
-        print(f"{pt}prec: {evals[pt]['precision']:1.3f} {pt}rec: {evals[pt]['recall']:1.3f} {pt}F1: {evals[pt]['f1']:1.3f} {pt}prec_seg: {evals[pt]['precision_seg']:1.3f} {pt}rec_seg: {evals[pt]['recall_seg']:1.3f} {pt}F1_seg: {evals[pt]['f1_seg']:1.3f}", end=' ')
-    print()
+        #print(f"{pt}prec: {evals[pt]['precision']:1.3f} {pt}rec: {evals[pt]['recall']:1.3f} {pt}F1: {evals[pt]['f1']:1.3f} {pt}prec_seg: {evals[pt]['precision_seg']:1.3f} {pt}rec_seg: {evals[pt]['recall_seg']:1.3f} {pt}F1_seg: {evals[pt]['f1_seg']:1.3f}", end=' ')
+        for m in metrics_to_print:
+            score = evals[pt][m]
+            print(f"{pt}-{m}: {score:1.4f}", end=' ')
+        print()
     return evals
 
 def modified_focal_loss(pred, gt, pos_loss_weight = 1):
