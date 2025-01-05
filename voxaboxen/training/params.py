@@ -56,6 +56,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--lr', type=float, default=.00005)
   parser.add_argument('--n-epochs', type=int, default=50)
   parser.add_argument('--min-epochs', type=int, default=8)
+  parser.add_argument('--display-pbar', type=int, default=15, help='higher displays info less frequently but is faster, set to -1 for no display and max speed')
   parser.add_argument('--unfreeze-encoder-epoch', type=int, default=3)
   parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the frames on each end of the clip")
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0, help="if a clip has no annotations, do not use for training with this probability")
@@ -94,6 +95,8 @@ def parse_args(args,allow_unknown=False):
   if args.is_test:
     args.n_map = 5
     args.n_val_fit = 5
+  if args.display_pbar == -1:
+    args.display_pbar = np.inf
   args = read_config(args)
   check_config(args)
 
