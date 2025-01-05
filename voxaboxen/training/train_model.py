@@ -14,7 +14,6 @@ from fn_profiling import profile_lines
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-@profile_lines
 def train_model(args):
     ## Setup
     args = parse_args(args)

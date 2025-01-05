@@ -53,8 +53,6 @@ def parse_args(args,allow_unknown=False):
 
   # Training
   parser.add_argument('--batch-size', type=int, default=32)
-  parser.add_argument('--n-val-fit', type=int, default=19)
-  parser.add_argument('--n-map', type=int, default=15)
   parser.add_argument('--lr', type=float, default=.00005)
   parser.add_argument('--n-epochs', type=int, default=50)
   parser.add_argument('--min-epochs', type=int, default=8)
@@ -85,6 +83,8 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--nms-thresh', type = float, default = 0.5)
   parser.add_argument('--delete-short-dur-sec', type=float, default=0, help="if using segmentation based model, delete vox shorter than this as a post-processing step")
   parser.add_argument('--fill-holes-dur-sec', type=float, default=0, help="if using segmentation based model, fill holes shorter than this as a post-processing step")
+  parser.add_argument('--n-val-fit', type=int, default=19)
+  parser.add_argument('--n-map', type=int, default=30)
 
   if allow_unknown:
     args, remaining = parser.parse_known_args(args)
