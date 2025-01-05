@@ -93,7 +93,7 @@ def nms(bbox_preds, bbox_scores, iou_thresh=0.5):
 
         bbox_scores: numpy array
             shape=(num_bboxes,)
-        
+
         thresh:      score thresh
 
     # Return

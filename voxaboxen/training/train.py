@@ -13,22 +13,9 @@ from voxaboxen.evaluation.plotters import plot_eval
 from voxaboxen.evaluation.evaluation import predict_and_generate_manifest, evaluate_based_on_manifest
 from voxaboxen.data.data import get_train_dataloader, get_val_dataloader
 from voxaboxen.model.model import rms_and_mixup
-from line_profiler import LineProfiler
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
-
-def profile_lines(func):
-    def wrapper(*args, **kwargs):
-        profiler = LineProfiler()
-        profiler_wrapper = profiler(func)
-        result = profiler_wrapper(*args, **kwargs)
-
-        print("\n=== Line-by-line profiling ===")
-        profiler.print_stats()
-
-        return result
-    return wrapper
 
 if device == "cpu":
   import warnings
@@ -217,7 +204,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
         if (i+1)%15 == 0:
           data_iterator.set_description(pbar_str)
 
-        if (args.is_test or args.cut_train_short) and i == 15: break
+        if (args.is_test or args.cut_train_short) and i == 5: break
 
     train_loss = train_loss / num_batches_seen
     evals['loss'] = float(train_loss)
@@ -228,13 +215,9 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
 def val_epoch(model, t, dataloader, args):
     model.eval()
 
-    starttime = time()
     manifests = predict_and_generate_manifest(model, dataloader, args, verbose = False)
-    print(f'Creating val manifest time: {time()-starttime}')
     manifest = manifests[args.detection_threshold]
-    starttime = time()
-    e, _ = evaluate_based_on_manifest(manifest, output_dir=args.experiment_output_dir, results_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, det_thresh=args.detection_threshold, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
-    print(f'Evaling val manifest time: {time()-starttime}')
+    e, _ = evaluate_based_on_manifest(manifest, output_dir=args.experiment_output_dir, iou=args.model_selection_iou, det_thresh=args.detection_threshold, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
 
     #metrics_to_print = ['precision','recall','f1', 'precision_seg', 'recall_seg', 'f1_seg']
     metrics_to_print = ['precision','recall','f1']

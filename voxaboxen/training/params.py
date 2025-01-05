@@ -53,6 +53,8 @@ def parse_args(args,allow_unknown=False):
 
   # Training
   parser.add_argument('--batch-size', type=int, default=32)
+  parser.add_argument('--n-val-fit', type=int, default=19)
+  parser.add_argument('--n-map', type=int, default=15)
   parser.add_argument('--lr', type=float, default=.00005)
   parser.add_argument('--n-epochs', type=int, default=50)
   parser.add_argument('--min-epochs', type=int, default=8)
@@ -89,6 +91,9 @@ def parse_args(args,allow_unknown=False):
   else:
     args = parser.parse_args(args)
 
+  if args.is_test:
+    args.n_map = 5
+    args.n_val_fit = 5
   args = read_config(args)
   check_config(args)
 

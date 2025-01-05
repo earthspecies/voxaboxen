@@ -13,6 +13,7 @@ from voxaboxen.evaluation.raven_utils import Clip
 from voxaboxen.model.model import rms_and_mixup
 from voxaboxen.evaluation.nms import nms, soft_nms
 from voxaboxen.evaluation.conf_mats import get_confusion_matrix, summarize_confusion_matrix, plot_confusion_matrix
+from fn_profiling import profile_lines
 plt.switch_backend('agg')
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -383,8 +384,11 @@ def write_tsv(out_fp, data):
             tsv_output.writerow(row)
 
 def select_from_neg_idxs(df, neg_idxs):
-    bool_mask = [i not in neg_idxs for i in range(len(df))]
-    return df.loc[bool_mask]
+    masked = df.loc[~df.index.isin(neg_idxs)]
+    #bool_mask = [i not in neg_idxs for i in range(len(df))]
+    #masked2 = df.loc[bool_mask]
+    #assert (masked==masked2).all().all()
+    return masked
 
 def combine_fwd_bck_preds(target_dir, fn, comb_iou_threshold, comb_discard_threshold, det_thresh):
     fwd_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-detthresh{det_thresh}-fwd.txt')
@@ -563,7 +567,8 @@ def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresh
         manifests_by_thresh[dt] = manifest
     return manifests_by_thresh
 
-def evaluate_based_on_manifest(manifest, output_dir, results_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, comb_iou_thresh=0, bidirectional=False):
+#def evaluate_based_on_manifest(manifest, output_dir, results_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, comb_iou_thresh=0, bidirectional=False):
+def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, comb_iou_thresh=0, bidirectional=False):
     pred_types = ('fwd', 'bck', 'comb', 'match') if bidirectional else ('fwd',)
     metrics = {p:{} for p in pred_types}
 
@@ -585,11 +590,11 @@ def evaluate_based_on_manifest(manifest, output_dir, results_dir, iou, class_thr
         metrics[pred_type]['summary'] = summary
         macro, micro = macro_micro_metrics(summary)
         metrics[pred_type]['macro'], metrics[pred_type]['micro'] = macro, micro
-    if results_dir is not None:
-        os.makedirs(results_dir, exist_ok=True)
-        metrics_fp = os.path.join(results_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
-        with open(metrics_fp, 'w') as f:
-            yaml.dump(metrics, f)
+    #if results_dir is not None:
+        #os.makedirs(results_dir, exist_ok=True)
+        #metrics_fp = os.path.join(results_dir, f'metrics_iou_{iou}_class_threshold_{class_threshold}.yaml')
+        #with open(metrics_fp, 'w') as f:
+            #yaml.dump(metrics, f)
 
     return metrics, conf_mat_summaries
 
@@ -598,8 +603,8 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
     scores_by_class = {c:[] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, 'outputs')
     for det_thresh, test_manifest in manifests_by_thresh.items():
-        results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
-        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, results_dir=results_dir, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional)
+        #results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
+        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional)
         for c, s in test_metrics[pred_type]['summary'].items():
             scores_by_class[c].append(dict(s, det_thresh=det_thresh))
 
