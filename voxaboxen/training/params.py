@@ -13,6 +13,8 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--name', type = str, required=True)
   parser.add_argument('--seed', type=int, default=0)
   parser.add_argument('--is-test', '-t', action='store_true', help='run a quick version for testing')
+  parser.add_argument('--cut-train-short', action='store_true')
+  parser.add_argument('--recompute-class-weights', action='store_true')
   parser.add_argument('--overwrite', action='store_true', help='overwrite an experiment of the same name, if it exists')
 
   # Data
@@ -53,6 +55,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--batch-size', type=int, default=32)
   parser.add_argument('--lr', type=float, default=.00005)
   parser.add_argument('--n-epochs', type=int, default=50)
+  parser.add_argument('--min-epochs', type=int, default=8)
   parser.add_argument('--unfreeze-encoder-epoch', type=int, default=3)
   parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the frames on each end of the clip")
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0, help="if a clip has no annotations, do not use for training with this probability")

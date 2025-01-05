@@ -1,3 +1,4 @@
+from time import time
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -12,9 +13,22 @@ from voxaboxen.evaluation.plotters import plot_eval
 from voxaboxen.evaluation.evaluation import predict_and_generate_manifest, evaluate_based_on_manifest
 from voxaboxen.data.data import get_train_dataloader, get_val_dataloader
 from voxaboxen.model.model import rms_and_mixup
+from line_profiler import LineProfiler
 
 # Get cpu or gpu device for training.
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+def profile_lines(func):
+    def wrapper(*args, **kwargs):
+        profiler = LineProfiler()
+        profiler_wrapper = profiler(func)
+        result = profiler_wrapper(*args, **kwargs)
+
+        print("\n=== Line-by-line profiling ===")
+        profiler.print_stats()
+
+        return result
+    return wrapper
 
 if device == "cpu":
   import warnings
@@ -22,60 +36,75 @@ if device == "cpu":
 
 def train(model, args):
 
-  detection_loss_fn = get_detection_loss_fn(args)
-  reg_loss_fn = get_reg_loss_fn(args)
-  class_loss_fn = get_class_loss_fn(args)
+    detection_loss_fn = get_detection_loss_fn(args)
+    reg_loss_fn = get_reg_loss_fn(args)
+    class_loss_fn = get_class_loss_fn(args)
 
-  optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
-  # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.step_size, gamma=0.1, last_epoch=- 1, verbose=False)
-  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
 
-  train_evals = []
-  learning_rates = []
-  val_evals = []
+    train_evals = []
+    learning_rates = []
+    val_evals = []
 
-  if args.early_stopping:
-    assert args.val_info_fp is not None
-    best_f1 = 0
+    if args.early_stopping:
+      assert args.val_info_fp is not None
+      best_f1 = 0
 
-  if (args.val_info_fp is not None) and args.val_during_training:
-    val_dataloader = get_val_dataloader(args)
-    use_val = True
-  else:
-    use_val = False
+    if (args.val_info_fp is not None) and args.val_during_training:
+      val_dataloader = get_val_dataloader(args)
+      use_val_ = True
+    else:
+      use_val_ = False
 
-  for t in range(args.n_epochs):
-      print(f"Epoch {t}\n-------------------------------")
-      train_dataloader = get_train_dataloader(args, random_seed_shift = t) # reinitialize dataloader with different negatives each epoch
-      model, train_eval = train_epoch(model, t, train_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args)
-      train_evals.append(train_eval.copy())
-      learning_rates.append(optimizer.param_groups[0]["lr"])
+    for t in range(args.n_epochs):
+        print(f"Epoch {t}\n-------------------------------")
+        train_dataloader = get_train_dataloader(args, random_seed_shift = t) # reinitialize dataloader with different negatives each epoch
+        model, train_eval = train_epoch(model, t, train_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args)
+        train_evals.append(train_eval.copy())
+        learning_rates.append(optimizer.param_groups[0]["lr"])
 
-      train_evals_by_epoch = {i : e for i, e in enumerate(train_evals)}
-      train_evals_fp = os.path.join(args.experiment_dir, "train_history.yaml")
-      with open(train_evals_fp, 'w') as f:
-        yaml.dump(train_evals_by_epoch, f)
+        train_evals_by_epoch = {i : e for i, e in enumerate(train_evals)}
+        train_evals_fp = os.path.join(args.experiment_dir, "train_history.yaml")
+        with open(train_evals_fp, 'w') as f:
+          yaml.dump(train_evals_by_epoch, f)
 
-      if use_val:
-        eval_scores = val_epoch(model, t, val_dataloader, args)
-        # TODO: maybe plot evals for other pred_types
-        val_evals.append(eval_scores['fwd'].copy())
-        plot_eval(train_evals, learning_rates, args, val_evals=val_evals)
+        use_val = use_val_ and t>=args.min_epochs
+        if use_val:
+          eval_scores = val_epoch(model, t, val_dataloader, args)
+          # TODO: maybe plot evals for other pred_types
+          val_evals.append(eval_scores['fwd'].copy())
+          #plot_eval(train_evals, learning_rates, args, val_evals=val_evals)
 
-        val_evals_by_epoch = {i : e for i, e in enumerate(val_evals)}
-        val_evals_fp = os.path.join(args.experiment_dir, "val_history.yaml")
-        with open(val_evals_fp, 'w') as f:
-          yaml.dump(val_evals_by_epoch, f)
-      else:
-        plot_eval(train_evals, learning_rates, args)
-      scheduler.step()
+          val_evals_by_epoch = {i : e for i, e in enumerate(val_evals)}
+          val_evals_fp = os.path.join(args.experiment_dir, "val_history.yaml")
+          with open(val_evals_fp, 'w') as f:
+            yaml.dump(val_evals_by_epoch, f)
+        else:
+          plot_eval(train_evals, learning_rates, args)
+        scheduler.step()
 
-      if use_val and args.early_stopping:
-        current_f1 = eval_scores['comb']['f1'] if model.is_bidirectional else eval_scores['fwd']['f1']
-        if args.is_test or (current_f1 > best_f1):
-          print('found new best model')
-          best_f1 = current_f1
+        if use_val and args.early_stopping:
+          current_f1 = eval_scores['comb']['f1'] if model.is_bidirectional else eval_scores['fwd']['f1']
+          if args.is_test or (current_f1 > best_f1):
+            print('found new best model')
+            best_f1 = current_f1
 
+            checkpoint_dict = {
+            "epoch": t,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "train_evals": train_evals,
+            "val_evals" : val_evals
+            }
+
+            torch.save(
+                checkpoint_dict,
+                os.path.join(args.experiment_dir, "model.pt"),
+            )
+
+        else:
           checkpoint_dict = {
           "epoch": t,
           "model_state_dict": model.state_dict(),
@@ -86,36 +115,22 @@ def train(model, args):
           }
 
           torch.save(
-              checkpoint_dict,
-              os.path.join(args.experiment_dir, "model.pt"),
-          )
-
-      else:
-        checkpoint_dict = {
-        "epoch": t,
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "scheduler_state_dict": scheduler.state_dict(),
-        "train_evals": train_evals,
-        "val_evals" : val_evals
-        }
-
-        torch.save(
-              checkpoint_dict,
-              os.path.join(args.experiment_dir, "model.pt"),
-          )
+                checkpoint_dict,
+                os.path.join(args.experiment_dir, "model.pt"),
+            )
 
 
-  print("Done!")
+    print("Done!")
 
-  cp = torch.load(os.path.join(args.experiment_dir, "model.pt"))
-  model.load_state_dict(cp["model_state_dict"])
+    if best_f1 > 0:
+        cp = torch.load(os.path.join(args.experiment_dir, "model.pt"))
+        model.load_state_dict(cp["model_state_dict"])
 
-  # resave validation with best model
-  if use_val:
-    val_epoch(model, args.n_epochs, val_dataloader, args)
+    # resave validation with best model
+    if use_val:
+      val_epoch(model, args.n_epochs, val_dataloader, args)
 
-  return model
+    return model
 
 def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, det_loss_fn, reg_loss_fn, class_loss_fn):
     # We mask out loss from each end of the clip, so the model isn't forced to learn to detect events that are partially cut off.
@@ -154,54 +169,55 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
     rev_train_loss = 0; rev_losses = []; rev_detection_losses = []; rev_regression_losses = []; rev_class_losses = []
 
     data_iterator = tqdm.tqdm(dataloader)
-    #for i, (X, d, r, y, rev_d, rev_r, rev_y) in enumerate(data_iterator):
     for i, batch in enumerate(data_iterator):
-      num_batches_seen = i
-      batch = [item.to(device, dtype=torch.float) for item in batch]
-      X, d, r, y = batch[:4]
-      X, d, r, y = rms_and_mixup(X, d, r, y, True, args)
-      probs, regression, class_logits, rev_probs, rev_regression, rev_class_logits = model(X)
-      #model_outputs = model(X)
-      #probs, regression, class_logits = model_outputs[:3]
-      detection_loss, reg_loss, class_loss = lf(d, probs, r, regression, y, class_logits, args=args, det_loss_fn=detection_loss_fn, reg_loss_fn=reg_loss_fn, class_loss_fn=class_loss_fn)
+        num_batches_seen = i
+        batch = [item.to(device, dtype=torch.float) for item in batch]
+        X, d, r, y = batch[:4]
+        X, d, r, y = rms_and_mixup(X, d, r, y, True, args)
+        probs, regression, class_logits, rev_probs, rev_regression, rev_class_logits = model(X)
+        detection_loss, reg_loss, class_loss = lf(d, probs, r, regression, y, class_logits, args=args, det_loss_fn=detection_loss_fn, reg_loss_fn=reg_loss_fn, class_loss_fn=class_loss_fn)
 
-      loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
-      train_loss += loss.item()
-      losses.append(loss.item())
-      detection_losses.append(detection_loss.item())
-      regression_losses.append(args.lamb * reg_loss.item())
-      class_losses.append(args.rho * class_loss.item())
-
-      pbar_str = f"loss {np.mean(losses[-10:]):.5f}, det {np.mean(detection_losses[-10:]):.5f}, reg {np.mean(regression_losses[-10:]):.5f}, class {np.mean(class_losses[-10:]):.5f}"
-
-      if model.is_bidirectional:
-          assert all(x is not None for x in [rev_probs, rev_regression, rev_class_logits])
-          rev_d, rev_r, rev_y = batch[4:]
-          #rev_probs, rev_regression, rev_class_logits = model_outputs[3:]
-          _, rev_d, rev_r, rev_y = rms_and_mixup(X, rev_d, rev_r, rev_y, True, args)
-
-          rev_detection_loss, rev_reg_loss, rev_class_loss = lf(rev_d, rev_probs, rev_r, rev_regression, rev_y, rev_class_logits, args=args, det_loss_fn=detection_loss_fn, reg_loss_fn=reg_loss_fn, class_loss_fn=class_loss_fn)
-          rev_loss = args.rho * rev_class_loss + rev_detection_loss + args.lamb * rev_reg_loss
-          rev_train_loss += rev_loss.item()
-          rev_losses.append(rev_loss.item())
-          rev_detection_losses.append(rev_detection_loss.item())
-          rev_regression_losses.append(args.lamb * rev_reg_loss.item())
-          rev_class_losses.append(args.rho * rev_class_loss.item())
-          loss = (loss + rev_loss)/2
-
-          pbar_str += f" revloss {np.mean(rev_losses[-10:]):.5f}, revdet {np.mean(rev_detection_losses[-10:]):.5f}, revreg {np.mean(rev_regression_losses[-10:]):.5f}, revclass {np.mean(rev_class_losses[-10:]):.5f}"
-      else:
-          assert all(x is None for x in [rev_probs, rev_regression, rev_class_logits])
+        loss = args.rho * class_loss + detection_loss + args.lamb * reg_loss
+        train_loss += loss
+        losses.append(loss)
+        detection_losses.append(detection_loss)
+        regression_losses.append(args.lamb * reg_loss)
+        class_losses.append(args.rho * class_loss)
 
 
-      optimizer.zero_grad()
-      loss.backward()
+        if (i+1)%15 == 0:
+            pbar_str = f"loss {torch.tensor(losses).mean():.5f}, det {torch.tensor(detection_losses).mean():.5f}, reg {torch.tensor(regression_losses).mean():.5f}, class {torch.tensor(class_losses).mean():.5f}"
+            losses = []; detection_losses = []; regression_losses = []; class_losses = []
 
-      optimizer.step()
-      if i > 10:
-        data_iterator.set_description(pbar_str)
+        if model.is_bidirectional:
+            assert all(x is not None for x in [rev_probs, rev_regression, rev_class_logits])
+            rev_d, rev_r, rev_y = batch[4:]
+            _, rev_d, rev_r, rev_y = rms_and_mixup(X, rev_d, rev_r, rev_y, True, args)
 
-      if args.is_test and i == 15: break
+            rev_detection_loss, rev_reg_loss, rev_class_loss = lf(rev_d, rev_probs, rev_r, rev_regression, rev_y, rev_class_logits, args=args, det_loss_fn=detection_loss_fn, reg_loss_fn=reg_loss_fn, class_loss_fn=class_loss_fn)
+            rev_loss = args.rho * rev_class_loss + rev_detection_loss + args.lamb * rev_reg_loss
+            rev_train_loss += rev_loss
+            rev_losses.append(rev_loss)
+            rev_detection_losses.append(rev_detection_loss)
+            rev_regression_losses.append(args.lamb * rev_reg_loss)
+            rev_class_losses.append(args.rho * rev_class_loss)
+            loss = (loss + rev_loss)/2
+
+            if (i+1)%15 == 0:
+                pbar_str += f" revloss {torch.tensor(rev_losses).mean():.5f}, revdet {torch.tensor(rev_detection_losses).mean():.5f}, revreg {torch.tensor(rev_regression_losses).mean():.5f}, revclass {torch.tensor(rev_class_losses).mean():.5f}"
+                rev_train_loss = 0; rev_losses = []; rev_detection_losses = []; rev_regression_losses = []; rev_class_losses = []
+        else:
+            assert all(x is None for x in [rev_probs, rev_regression, rev_class_logits])
+
+
+        optimizer.zero_grad()
+        loss.backward()
+
+        optimizer.step()
+        if (i+1)%15 == 0:
+          data_iterator.set_description(pbar_str)
+
+        if (args.is_test or args.cut_train_short) and i == 15: break
 
     train_loss = train_loss / num_batches_seen
     evals['loss'] = float(train_loss)
@@ -212,9 +228,13 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
 def val_epoch(model, t, dataloader, args):
     model.eval()
 
+    starttime = time()
     manifests = predict_and_generate_manifest(model, dataloader, args, verbose = False)
+    print(f'Creating val manifest time: {time()-starttime}')
     manifest = manifests[args.detection_threshold]
+    starttime = time()
     e, _ = evaluate_based_on_manifest(manifest, output_dir=args.experiment_output_dir, results_dir=os.path.join(args.experiment_dir, 'val_results'), iou=args.model_selection_iou, det_thresh=args.detection_threshold, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
+    print(f'Evaling val manifest time: {time()-starttime}')
 
     #metrics_to_print = ['precision','recall','f1', 'precision_seg', 'recall_seg', 'f1_seg']
     metrics_to_print = ['precision','recall','f1']
@@ -228,7 +248,6 @@ def val_epoch(model, t, dataloader, args):
             evals[pt][k].append(m)
           evals[pt][k] = float(np.mean(evals[pt][k]))
 
-        #print(f"{pt}prec: {evals[pt]['precision']:1.3f} {pt}rec: {evals[pt]['recall']:1.3f} {pt}F1: {evals[pt]['f1']:1.3f} {pt}prec_seg: {evals[pt]['precision_seg']:1.3f} {pt}rec_seg: {evals[pt]['recall_seg']:1.3f} {pt}F1_seg: {evals[pt]['f1_seg']:1.3f}", end=' ')
         for m in metrics_to_print:
             score = evals[pt][m]
             print(f"{pt}-{m}: {score:1.4f}", end=' ')
@@ -290,8 +309,11 @@ def masked_reg_loss(regression, r, d, y, class_weights = None):
   reg_loss = torch.sum(reg_loss)
   n_pos = mask.sum()
 
-  if n_pos>0:
-    reg_loss = reg_loss / n_pos
+  reg_loss = reg_loss / torch.clip(n_pos,min=1)
+  #reg_loss2 = reg_loss.clone()
+  #if n_pos>0:
+    #reg_loss2 = reg_loss2 / n_pos
+  #assert reg_loss == reg_loss2
 
   return reg_loss
 
@@ -321,8 +343,11 @@ def masked_classification_loss(class_logits, y, d, class_weights = None):
   class_loss = known_class_loss + unknown_class_loss
   n_pos = mask.sum()
 
-  if n_pos>0:
-    class_loss = class_loss / n_pos
+  #class_loss2 = class_loss.clone()
+  class_loss = class_loss / torch.clip(n_pos,min=1)
+  #if n_pos>0:
+    #class_loss2 = class_loss2 / n_pos
+  #assert class_loss==class_loss
 
   return class_loss
 
@@ -336,34 +361,40 @@ def segmentation_loss(class_logits, y, d, class_weights=None):
   return default_focal_loss
 
 def get_class_loss_fn(args):
-  if hasattr(args,"segmentation_based") and args.segmentation_based:
-    return segmentation_loss
-  else:
-    dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
-    class_proportions = dataloader_temp.dataset.get_class_proportions()
-    class_weights = 1. / (class_proportions + 1e-6)
-    class_weights = class_weights * (class_proportions>0) # ignore weights for unrepresented classes
+    if hasattr(args,"segmentation_based") and args.segmentation_based:
+      return segmentation_loss
+    elif os.path.exists(cache_fp:=f'{args.experiment_dir}/cached_class_weights.pt') and not args.recompute_class_weights:
+        class_weights = torch.load(cache_fp).to(device)
+    else:
+      dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
+      class_proportions = dataloader_temp.dataset.get_class_proportions()
+      class_weights = 1. / (class_proportions + 1e-6)
+      class_weights = class_weights * (class_proportions>0) # ignore weights for unrepresented classes
 
-    class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
-    print(f"Using class weights {class_weights}")
+      class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
+      print(f"Using class weights {class_weights}")
 
-    class_weights = torch.Tensor(class_weights).to(device)
+      class_weights = torch.Tensor(class_weights).to(device)
     return partial(masked_classification_loss, class_weights = class_weights)
 
 def get_reg_loss_fn(args):
-  if hasattr(args,"segmentation_based") and args.segmentation_based:
-    def zrl(regression, r, d, y, class_weights = None):
-      return torch.tensor(0.)
-    return zrl
-  else:
-    dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
-    class_proportions = dataloader_temp.dataset.get_class_proportions()
-    class_weights = 1. / (class_proportions + 1e-6)
-    class_weights = class_weights * (class_proportions>0) # ignore weights for unrepresented classes
+    if hasattr(args,"segmentation_based") and args.segmentation_based:
+      def zrl(regression, r, d, y, class_weights = None):
+        return torch.tensor(0.)
+      return zrl
+    elif os.path.exists(cache_fp:=f'{args.experiment_dir}/cached_class_weights.pt') and not args.recompute_class_weights:
+        class_weights = torch.load(cache_fp).to(device)
+    else:
+        dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
+        class_proportions = dataloader_temp.dataset.get_class_proportions()
+        class_weights = 1. / (class_proportions + 1e-6)
+        class_weights = class_weights * (class_proportions>0) # ignore weights for unrepresented classes
 
-    class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
+        class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
 
-    class_weights = torch.Tensor(class_weights).to(device)
+        class_weights = torch.Tensor(class_weights).to(device)
+        torch.save(class_weights, cache_fp)
+
     return partial(masked_reg_loss, class_weights = class_weights)
 
 def get_detection_loss_fn(args):
