@@ -9,21 +9,20 @@ from tqdm import tqdm
 vox_fps = pd.read_csv('/home/jupyter/data/voxaboxen_data/zebra_finch_synthetic/filtered_zf_vox.csv')
 vox_fps_sorted = sorted(vox_fps[vox_fps['include']]['audio_fp'])
 print(len(vox_fps_sorted))
-# vox_fps_sorted = sorted(glob('/home/jupyter//data/voxaboxen_data/zebra_finch_synthetic/raw/events/Pair34_bl37or47_bl52gr32/*.wav'))
 background_fps_sorted = sorted(pd.read_csv('/home/jupyter/data/voxaboxen_data/zebra_finch_synthetic/raw/background/audio_fps_filtered.csv')['audio_fp'])
-output_parent_dir = '/home/jupyter/data/voxaboxen_data/zebra_finch_synthetic'
+output_parent_dir = '/home/jupyter/data/voxaboxen_data/OZF_synthetic'
 
-target_overlap_percs = [0, 0.2, 0.4, 0.6, 0.8, 1]#[0.5]
+target_overlap_percs = [0, 0.2, 0.4, 0.6, 0.8, 1]
 dur_clip = 60
 
-orig_sts = sorted(glob('/home/jupyter/data/voxaboxen_data/zebra_finch_live/selection_tables/*.txt'))
+orig_sts = sorted(glob('/home/jupyter/data/voxaboxen_data/OZF/formatted/selection_tables/*.txt'))
 
 clipnames_to_n_events = {}
 
 for orig_st in orig_sts:
     st = pd.read_csv(orig_st,sep='\t')
     n_vox = len(set(st['Selection']))
-    clipname = os.path.basename(orig_st).replace(".Table.1.selections.txt", "")
+    clipname = os.path.basename(orig_st).replace(".txt", "")
     clipnames_to_n_events[clipname] = n_vox
     print(f"{clipname} has {n_vox} vox")
     
@@ -34,20 +33,26 @@ def compute_overlap_perc(st):
     n_vox = len(st)
     if n_vox == 0:
         return 0
-    n_vox_with_overlap = 0
+    # n_vox_with_overlap = 0
+    n_overlaps = 0
     for i, row in st.iterrows():
         b = row["Begin Time (s)"]
         e = row["End Time (s)"]
-        if len(st[(st["Begin Time (s)"] < b) & (st["End Time (s)"] > b)])>0:
-            n_vox_with_overlap += 1
-            continue
-        if len(st[(st["Begin Time (s)"] < e) & (st["End Time (s)"] > e)])>0:
-            n_vox_with_overlap += 1
-            continue
-        if len(st[(st["Begin Time (s)"] > b) & (st["End Time (s)"] < e)])>0:
-            n_vox_with_overlap += 1
-            continue
-    return n_vox_with_overlap/n_vox
+        n_overlaps += len(st[(st["Begin Time (s)"] >= b) & (st["Begin Time (s)"] < e) & (st["End Time (s)"] > e)])
+        n_overlaps += len(st[(st["Begin Time (s)"] > b) & (st["End Time (s)"] <= e)])
+        
+        
+        # if len(st[(st["Begin Time (s)"] < b) & (st["End Time (s)"] > b)])>0:
+        #     n_vox_with_overlap += 1
+        #     continue
+        # if len(st[(st["Begin Time (s)"] < e) & (st["End Time (s)"] > e)])>0:
+        #     n_vox_with_overlap += 1
+        #     continue
+        # if len(st[(st["Begin Time (s)"] > b) & (st["End Time (s)"] < e)])>0:
+        #     n_vox_with_overlap += 1
+        #     continue
+    # return n_vox_with_overlap/n_vox
+    return n_overlaps/n_vox
 
 def generate_scene(events, background_audio, overlap_perc, sr, rng, init_percent=0.25, pad_dur=0.05):
     pad_samples = int(sr*pad_dur)

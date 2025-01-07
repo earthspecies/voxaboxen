@@ -27,7 +27,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--bidirectional', action='store_true', help="train and inference in both directions and combine results")
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by encoder")
-  parser.add_argument('--encoder-type', type=str, default = "aves", choices = ["aves", "hubert_base", "frame_atst", "beats"])
+  parser.add_argument('--encoder-type', type=str, default = "aves", choices = ["aves", "hubert_base", "frame_atst", "beats", "crnn"])
   parser.add_argument('--prediction-scale-factor', type=int, default = 1, help = "downsampling rate from encoder sr to prediction sr. Deprecated.")
   parser.add_argument('--detection-threshold', type=float, default = 0.5, help = "output probability to count as positive detection")
   parser.add_argument('--rms-norm', action="store_true", help = "If true, apply rms normalization to each clip")
@@ -48,6 +48,9 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--frame-atst-weight-fp', type=str, default = "weights/atstframe_base.ckpt")
   ## BEATs
   parser.add_argument('--beats-checkpoint-fp', type=str, default = "weights/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt")
+  ## CRNN
+  parser.add_argument('--rnn-hidden-size', type=int, default = 2048)
+  
 
   # Training
   parser.add_argument('--batch-size', type=int, default=32)
@@ -150,9 +153,13 @@ def check_config(args):
       assert args.scale_factor == 320, "hubert_base requires scale-factor == 320"
   elif args.encoder_type == "frame_atst":
       assert args.scale_factor == 640, "frame_atst requires scale-factor == 640"
-      assert args.clip_duration == 10, "frame_atst expects clip duration of 10 seconds"
+      if args.clip_duration != 10:
+          import warnings
+          warnings.warn("frame_atst expects clip duration of 10 seconds")
   elif args.encoder_type == "beats":
       assert args.scale_factor == 320, "beats requires scale-factor == 320"
+  elif args.encoder_type == "crnn":
+      pass
   else:
       import warnings
       warnings.warn("Did not confirm correct scale factor for chosen encoder type")

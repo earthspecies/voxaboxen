@@ -9,9 +9,12 @@ import shutil
 import pandas as pd
 from tqdm import tqdm
 
+n_required = 18000
 vox_fps_sorted = sorted(glob('/home/jupyter/data/voxaboxen_data/zebra_finch_synthetic/raw/events/**/*.wav'))
 output = {"audio_fp" : [], "include" : []}
 analyzer = Analyzer()
+
+n_accepted = 0
 
 for fp in tqdm(vox_fps_sorted):
     output["audio_fp"].append(fp)
@@ -41,8 +44,11 @@ for fp in tqdm(vox_fps_sorted):
         for x in recording.detections:
             if "Finch" in x['common_name']:
                 iszf = True
+                n_accepted += 1
         output["include"].append(iszf)
-        
+    
+    if n_accepted >= n_required:
+       break
     
 output = pd.DataFrame(output)
 output.to_csv("/home/jupyter/data/voxaboxen_data/zebra_finch_synthetic/filtered_zf_vox.csv")

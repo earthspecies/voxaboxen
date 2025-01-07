@@ -14,6 +14,8 @@ def get_encoder(args):
         return ATSTEncoder(args)
     elif args.encoder_type == "beats":
         return BEATsEncoder(args)
+    elif args.encoder_type == "crnn":
+        return CRNNEncoder(args)
     else:
         raise ValueError
 
@@ -129,3 +131,21 @@ class BEATsEncoder(EncoderBase):
         for name, param in self.beats.named_parameters():
             param.requires_grad = True
         self.beats.train()
+        
+class CRNNEncoder(EncoderBase):
+    def __init__(self, args):
+        super().__init__(args)
+        from voxaboxen.model.crnn import CRNN
+        self.encoder = CRNN(args)
+        self.embedding_dim = self.encoder.output_dim
+        
+    def forward(self, x):
+        encoding = self.encoder(x)
+        return encoding
+    
+    def freeze(self):
+        print("Freeze not implemented for randomly initialized CRNN")
+
+
+        
+        
