@@ -47,17 +47,17 @@ def train_model(args):
 
     val_fit_starttime = time()
     best_pred_type = 'comb' if args.bidirectional else 'fwd'
-    val_manifests_by_thresh = predict_and_generate_manifest(model, get_val_dataloader(args), args, detection_thresholds=np.linspace(0.05, 0.95, args.n_val_fit), verbose=False)
+    val_manifest = predict_and_generate_manifest(model, get_val_dataloader(args), args, verbose=False)[0.5]
     best_f1 = 0
-    best_thresh = -1
-    for det_thresh, manifest in val_manifests_by_thresh.items():
-        metrics, _ = evaluate_based_on_manifest(manifest, output_dir=args.experiment_output_dir, iou=0.5, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
-        new_f1 = metrics[best_pred_type]['micro']['f1']
+    best_comb_discard = -1
+    for comb_discard in np.linspace(0.5, 0.95, 20):
+        metrics, _ = evaluate_based_on_manifest(val_manifest, output_dir=args.experiment_output_dir, iou=0.5, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=comb_discard, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional, pred_types=(best_pred_type,))
+        new_f1 = metrics[best_pred_type]['macro']['f1']
         if new_f1 > best_f1:
             best_f1 = new_f1
-            best_thresh = det_thresh
+            best_comb_discard = comb_discard
 
-    print(f'Found best thresh on val set: {best_thresh:.3f} in {time()-val_fit_starttime:.3f}s')
+    print(f'Found best thresh on val set: f1={best_f1:.4f}, comb_discard={best_comb_discard:.3f} in {time()-val_fit_starttime:.3f}s')
 
     ## Evaluation
     val_fit_starttime = time()
@@ -67,14 +67,14 @@ def train_model(args):
             test_dataloader = get_test_dataloader(args)
         else:
             test_dataloader = get_val_dataloader(args)
-        manifests_by_thresh = predict_and_generate_manifest(model, test_dataloader, args, detection_thresholds=[best_thresh], verbose=False)
+        manifests_by_thresh = predict_and_generate_manifest(model, test_dataloader, args, verbose=False)
         print(f'Time to compute manifests_by_thresh: {time()-val_fit_starttime:.3f}s')
-        test_manifest = manifests_by_thresh[best_thresh]
+        test_manifest = manifests_by_thresh[0.5]
         summary_results = {}
         full_results = {}
         eval_starttime = time()
         for iou in [0.2, 0.5, 0.8]:
-            test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=best_thresh, class_threshold=0.0, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
+            test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=best_comb_discard, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
             full_results[f'f1@{iou}'] = test_metrics
             summary_results[f'micro-f1@{iou}'] = test_metrics[best_pred_type]['micro']['f1']
             summary_results[f'macro-f1@{iou}'] = test_metrics[best_pred_type]['macro']['f1']
@@ -85,7 +85,7 @@ def train_model(args):
 
         map_starttime = time()
         for iou in [0.5,0.8]:
-            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=experiment_dir, iou=iou, pred_type=best_pred_type, comb_discard_thresh=0, bidirectional=args.bidirectional)
+            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=experiment_dir, iou=iou, pred_type=best_pred_type, comb_discard_thresh=best_comb_discard, bidirectional=args.bidirectional, best_pred_type=best_pred_type)
 
         with open(os.path.join(args.experiment_dir, f'{split}_full_results.json'), 'w') as f:
             json.dump(full_results, f)

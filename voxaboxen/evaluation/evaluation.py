@@ -390,7 +390,7 @@ def select_from_neg_idxs(df, neg_idxs):
     #assert (masked==masked2).all().all()
     return masked
 
-def combine_fwd_bck_preds(target_dir, fn, comb_iou_threshold, comb_discard_threshold, det_thresh):
+def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, det_thresh):
     fwd_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-detthresh{det_thresh}-fwd.txt')
     bck_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-detthresh{det_thresh}-bck.txt')
     comb_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-detthresh{det_thresh}-comb.txt')
@@ -401,7 +401,7 @@ def combine_fwd_bck_preds(target_dir, fn, comb_iou_threshold, comb_discard_thres
     c = Clip()
     c.load_annotations(fwd_preds_fp)
     c.load_predictions(bck_preds_fp)
-    c.compute_matching(IoU_minimum=comb_iou_threshold)
+    c.compute_matching(IoU_minimum=0)
     match_preds_list = []
     for fp, bp in c.matching:
         match_pred = fwd_preds.loc[fp].copy()
@@ -567,9 +567,10 @@ def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresh
         manifests_by_thresh[dt] = manifest
     return manifests_by_thresh
 
-#def evaluate_based_on_manifest(manifest, output_dir, results_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, comb_iou_thresh=0, bidirectional=False):
-def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, comb_iou_thresh=0, bidirectional=False):
-    pred_types = ('fwd', 'bck', 'comb', 'match') if bidirectional else ('fwd',)
+#def evaluate_based_on_manifest(manifest, output_dir, results_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, bidirectional=False):
+def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, bidirectional=False, pred_types=None):
+    if pred_types is None:
+        pred_types = ('fwd', 'bck', 'comb', 'match') if bidirectional else ('fwd',)
     metrics = {p:{} for p in pred_types}
 
     for i, row in manifest.iterrows():
@@ -577,7 +578,7 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
         annots_fp = row['annotations_fp']
         duration = row['duration_sec']
         if bidirectional:
-            row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(output_dir, fn, comb_iou_threshold=comb_iou_thresh, comb_discard_threshold=comb_discard_threshold, det_thresh=det_thresh)
+            row['comb_predictions_fp'], row['match_predictions_fp'] = combine_fwd_bck_preds(output_dir, fn, comb_discard_threshold=comb_discard_threshold, det_thresh=det_thresh)
 
         for pred_type in pred_types:
             preds_fp = row[f'{pred_type}_predictions_fp']
@@ -598,13 +599,13 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
 
     return metrics, conf_mat_summaries
 
-def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', comb_discard_thresh=0, unknown_label='Unknown', bidirectional=False):
+def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', comb_discard_thresh=0, unknown_label='Unknown', bidirectional=False, best_pred_type='fwd'):
     # first loop through thresholds to gather all results
     scores_by_class = {c:[] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, 'outputs')
     for det_thresh, test_manifest in manifests_by_thresh.items():
         #results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
-        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional)
+        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(best_pred_type,))
         for c, s in test_metrics[pred_type]['summary'].items():
             scores_by_class[c].append(dict(s, det_thresh=det_thresh))
 

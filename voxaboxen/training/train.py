@@ -36,7 +36,6 @@ def train(model, args):
 
     if args.early_stopping:
       assert args.val_info_fp is not None
-      best_f1 = 0
 
     if (args.val_info_fp is not None) and args.val_during_training:
       val_dataloader = get_val_dataloader(args)
@@ -44,10 +43,20 @@ def train(model, args):
     else:
       use_val_ = False
 
+    best_f1 = 0
+    patience = 0
+    best_loss = torch.inf
     for t in range(args.n_epochs):
         print(f"Epoch {t}\n-------------------------------")
         train_dataloader = get_train_dataloader(args, random_seed_shift = t) # reinitialize dataloader with different negatives each epoch
         model, train_eval = train_epoch(model, t, train_dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args)
+        if train_eval['loss'] < best_loss:
+            best_loss = train_eval['loss']
+            patience = 0
+        else:
+            patience += 1
+        if patience == args.patience:
+            break
         train_evals.append(train_eval.copy())
         learning_rates.append(optimizer.param_groups[0]["lr"])
 
@@ -172,7 +181,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
         class_losses.append(args.rho * class_loss)
 
 
-        if (i+1)%15 == 0:
+        if (i+1)%args.display_pbar == 0:
             pbar_str = f"loss {torch.tensor(losses).mean():.5f}, det {torch.tensor(detection_losses).mean():.5f}, reg {torch.tensor(regression_losses).mean():.5f}, class {torch.tensor(class_losses).mean():.5f}"
             losses = []; detection_losses = []; regression_losses = []; class_losses = []
 
@@ -190,7 +199,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
             rev_class_losses.append(args.rho * rev_class_loss)
             loss = (loss + rev_loss)/2
 
-            if (i+1)%15 == 0:
+            if (i+1)%args.display_pbar == 0:
                 pbar_str += f" revloss {torch.tensor(rev_losses).mean():.5f}, revdet {torch.tensor(rev_detection_losses).mean():.5f}, revreg {torch.tensor(rev_regression_losses).mean():.5f}, revclass {torch.tensor(rev_class_losses).mean():.5f}"
                 rev_train_loss = 0; rev_losses = []; rev_detection_losses = []; rev_regression_losses = []; rev_class_losses = []
         else:
@@ -201,7 +210,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
         loss.backward()
 
         optimizer.step()
-        if (i+1)%15 == 0:
+        if (i+1)%args.display_pbar == 0:
           data_iterator.set_description(pbar_str)
 
         if (args.is_test or args.cut_train_short) and i == 5: break
