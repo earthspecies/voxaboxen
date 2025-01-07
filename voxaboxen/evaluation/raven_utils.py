@@ -44,7 +44,7 @@ class Clip():
     def load_audio(self, fp):
         self.samples, self.sr = librosa.load(fp, sr = None)
         self.duration = len(self.samples) / self.sr
-        
+
     def play_audio(self, start_sec, end_sec):
         start_sample = int(self.sr * start_sec)
         end_sample = int(self.sr *end_sec)
@@ -58,9 +58,13 @@ class Clip():
         # If class probability is below a threshold, switch label to unknown
 
         assert self.unknown_label is not None
-        for i in self.predictions.index:
-          if self.predictions.loc[i, 'Class Prob'] < class_threshold:
-            self.predictions.at[i, 'Annotation'] = self.unknown_label
+        tmp = self.predictions.copy()
+        mask = tmp['Class Prob'] < class_threshold
+        self.predictions.loc[mask, 'Annotation'] = self.unknown_label
+        #for i in self.predictions.index:
+          #if tmp.loc[i, 'Class Prob'] < class_threshold:
+            #tmp.at[i, 'Annotation'] = self.unknown_label
+        #assert (tmp==self.predictions).all().all()
 
     def refine_annotations(self):
         print("Not implemented! Could implement refining annotations by SNR to remove quiet vocs")
@@ -90,25 +94,25 @@ class Clip():
           TP = len(self.matching)
           FP = len(self.predictions) - TP
           FN = len(self.annotations) - TP
-          
+
           # segmentation-based metrics
           seg_annotations = np.zeros((dur_samples,))
           seg_predictions = np.zeros((dur_samples,))
-          
+
           for i, row in self.annotations.iterrows():
               start_sample = int(row['Begin Time (s)'] * eval_sr)
               end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
               seg_annotations[start_sample:end_sample] = 1
-              
+
           for i, row in self.predictions.iterrows():
               start_sample = int(row['Begin Time (s)'] * eval_sr)
               end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
               seg_predictions[start_sample:end_sample] = 1
-          
+
           TP_seg = int((seg_predictions * seg_annotations).sum())
           FP_seg = int((seg_predictions * (1-seg_annotations)).sum())
           FN_seg = int(((1-seg_predictions) * seg_annotations).sum())
-          
+
           return {'all' : {'TP' : TP, 'FP' : FP, 'FN' : FN, 'TP_seg' : TP_seg, 'FP_seg' : FP_seg, 'FN_seg' : FN_seg}}
 
         else:
@@ -131,23 +135,34 @@ class Clip():
             n_pred = int((pred_label == label).sum())
             out[label]['FP'] = out[label]['FP'] + n_pred - out[label]['TP']
             out[label]['FN'] = out[label]['FN'] + n_annot - out[label]['TP']
-            
+
             # segmentation-based metrics
             seg_annotations = np.zeros((dur_samples,))
             seg_predictions = np.zeros((dur_samples,))
-            
+
             annot_sub = self.annotations[self.annotations["Annotation"] == label]
             pred_sub = self.predictions[self.predictions["Annotation"] == label]
-            
-            for i, row in annot_sub.iterrows():
-                start_sample = int(row['Begin Time (s)'] * eval_sr)
-                end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
-                seg_annotations[start_sample:end_sample] = 1
 
-            for i, row in pred_sub.iterrows():
-                start_sample = int(row['Begin Time (s)'] * eval_sr)
-                end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
-                seg_predictions[start_sample:end_sample] = 1
+            begins = (annot_sub['Begin Time (s)']*eval_sr).astype(int)
+            ends = (annot_sub['End Time (s)']*eval_sr).astype(int)
+            for b,e in zip(begins, ends):
+                seg_annotations[b:e]=1
+            #seg2 = np.copy(seg_annotations)
+            #for i, row in annot_sub.iterrows():
+                #start_sample = int(row['Begin Time (s)'] * eval_sr)
+                #end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
+                #seg_annotations[start_sample:end_sample] = 1
+
+            #assert (seg_annotations==seg2).all()
+            begins = (pred_sub['Begin Time (s)']*eval_sr).astype(int)
+            ends = (pred_sub['End Time (s)']*eval_sr).astype(int)
+            #for i, row in pred_sub.iterrows():
+                #start_sample = int(row['Begin Time (s)'] * eval_sr)
+                #end_sample = min(int(row['End Time (s)'] * eval_sr), dur_samples)
+                #seg_predictions[start_sample:end_sample] = 1
+            for b,e in zip(begins, ends):
+                seg_predictions[b:e]=1
+            #assert (seg_predictions==seg2).all()
 
             TP_seg = int((seg_predictions * seg_annotations).sum())
             FP_seg = int((seg_predictions * (1-seg_annotations)).sum())
@@ -155,7 +170,7 @@ class Clip():
             out[label]['TP_seg'] = TP_seg
             out[label]['FP_seg'] = FP_seg
             out[label]['FN_seg'] = FN_seg
-            
+
           return out
 
     def confusion_matrix(self):

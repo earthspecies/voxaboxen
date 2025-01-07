@@ -3,11 +3,13 @@ datasets/MT/formatted/
 datasets/MT/formatted.zip 
 datasets/MT/original_readme_and_license.md
 datasets/**
-projects/MT_experiment/
+dev/**
+projects/**
 **/*mp4
 **/*flac
 **/*swp
 **/*tar.gz
+*.pt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

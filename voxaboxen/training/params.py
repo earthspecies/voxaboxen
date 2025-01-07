@@ -13,6 +13,8 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--name', type = str, required=True)
   parser.add_argument('--seed', type=int, default=0)
   parser.add_argument('--is-test', '-t', action='store_true', help='run a quick version for testing')
+  parser.add_argument('--cut-train-short', action='store_true')
+  parser.add_argument('--recompute-class-weights', action='store_true')
   parser.add_argument('--overwrite', action='store_true', help='overwrite an experiment of the same name, if it exists')
 
   # Data
@@ -37,7 +39,6 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--multichannel', action='store_true', help="If passed, will encode each audio channel seperately, then add together the encoded audio before final layer")
   parser.add_argument('--segmentation-based', action='store_true', help="If passed, will make predictions based on frame-wise segmentations rather than box starts")
   parser.add_argument('--comb-discard-thresh', type=float, default=0.75, help="If bidirectional, sets threshold for combining forward and backward predictions")
-  parser.add_argument('--comb-iou-thresh', type=float, default=0.5, help="minimum iou to match a forward and backward prediction")
   # parser.add_argument('--reload-from', type=str)
 
   # Encoder-specific
@@ -56,6 +57,9 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--batch-size', type=int, default=32)
   parser.add_argument('--lr', type=float, default=.00005)
   parser.add_argument('--n-epochs', type=int, default=50)
+  parser.add_argument('--min-epochs', type=int, default=8)
+  parser.add_argument('--patience', type=int, default=4, help='stop training if loss doesnt decrease for this number of epochs')
+  parser.add_argument('--display-pbar', type=int, default=15, help='higher displays info less frequently but is faster, set to -1 for no display and max speed')
   parser.add_argument('--unfreeze-encoder-epoch', type=int, default=3)
   parser.add_argument('--end-mask-perc', type=float, default = 0.1, help="During training, mask loss from a percentage of the frames on each end of the clip")
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0, help="if a clip has no annotations, do not use for training with this probability")
@@ -83,12 +87,19 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--nms-thresh', type = float, default = 0.5)
   parser.add_argument('--delete-short-dur-sec', type=float, default=0, help="if using segmentation based model, delete vox shorter than this as a post-processing step")
   parser.add_argument('--fill-holes-dur-sec', type=float, default=0, help="if using segmentation based model, fill holes shorter than this as a post-processing step")
+  parser.add_argument('--n-val-fit', type=int, default=19)
+  parser.add_argument('--n-map', type=int, default=30)
 
   if allow_unknown:
     args, remaining = parser.parse_known_args(args)
   else:
     args = parser.parse_args(args)
 
+  if args.is_test:
+    args.n_map = 5
+    args.n_val_fit = 5
+  if args.display_pbar == -1:
+    args.display_pbar = np.inf
   args = read_config(args)
   check_config(args)
 
