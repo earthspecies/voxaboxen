@@ -351,6 +351,8 @@ def delete_short(m, min_pos):
     starts = m[1:] * ~m[:-1]
 
     starts = np.where(starts)[0] + 1
+    if m[0]:
+        starts = np.append(starts, 0)
 
     clips = []
 
