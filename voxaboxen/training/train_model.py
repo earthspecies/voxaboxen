@@ -50,7 +50,7 @@ def train_model(args):
     val_manifest = predict_and_generate_manifest(model, get_val_dataloader(args), args, verbose=False)[0.5]
     best_f1 = 0
     best_comb_discard = -1
-    for comb_discard in np.linspace(0.5, 0.95, 20):
+    for comb_discard in np.linspace(0.5, 0.95, args.n_val_fit):
         metrics, _ = evaluate_based_on_manifest(val_manifest, output_dir=args.experiment_output_dir, iou=0.5, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=comb_discard, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional, pred_types=(best_pred_type,))
         new_f1 = metrics[best_pred_type]['macro']['f1']
         if new_f1 > best_f1:
@@ -85,6 +85,8 @@ def train_model(args):
 
         map_starttime = time()
         for iou in [0.5,0.8]:
+            if split=='val' and iou==0.8:
+                continue
             summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=experiment_dir, iou=iou, pred_type=best_pred_type, comb_discard_thresh=best_comb_discard, bidirectional=args.bidirectional, best_pred_type=best_pred_type)
 
         with open(os.path.join(args.experiment_dir, f'{split}_full_results.json'), 'w') as f:
