@@ -43,7 +43,7 @@ for dataset_name, dataset in sorted(zip(dataset_names, datasets)):
     splits = ["train", "val", "test"]
     manifest = []
     for split in splits:
-        manifest.append(pd.read_csv(os.path.join(data_dir, "train_info.csv")))
+        manifest.append(pd.read_csv(os.path.join(data_dir, f"{split}_info.csv")))
     manifest = pd.concat(manifest)
     
     total_dur = 0
