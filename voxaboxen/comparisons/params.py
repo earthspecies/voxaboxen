@@ -21,6 +21,7 @@ def get_full_cfg(sound_event_args, detectron_args):
         print('loading cached params from', cache_fp)
         with open(cache_fp, 'rb') as f:
             cfg = pickle.load(f)
+        cfg.SOUND_EVENT = CN(vars(sound_event_args))
         return cfg
 
     cfg = get_cfg()

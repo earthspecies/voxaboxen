@@ -434,7 +434,7 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, det_thresh):
     match_preds.to_csv(match_preds_fp, sep='\t', index=False)
     return comb_preds_fp, match_preds_fp
 
-def export_to_selection_table(detections, regressions, classifications, fn, args, is_bck, verbose=True, target_dir=None, detection_threshold = 0.5, classification_threshold = 0):
+def export_to_selection_table(detections, regressions, classifications, fn, args, is_bck, verbose=True, target_dir=None, detection_threshold=0.5, classification_threshold=0):
     if hasattr(args, "bidirectional") and args.bidirectional:
       if is_bck:
         fn += '-bck'
@@ -601,13 +601,13 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
 
     return metrics, conf_mat_summaries
 
-def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', comb_discard_thresh=0, unknown_label='Unknown', bidirectional=False, best_pred_type='fwd'):
+def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', comb_discard_thresh=0, unknown_label='Unknown', bidirectional=False):
     # first loop through thresholds to gather all results
     scores_by_class = {c:[] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, 'outputs')
     for det_thresh, test_manifest in manifests_by_thresh.items():
         #results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
-        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(best_pred_type,))
+        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(pred_type,))
         for c, s in test_metrics[pred_type]['summary'].items():
             scores_by_class[c].append(dict(s, det_thresh=det_thresh))
 

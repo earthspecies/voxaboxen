@@ -165,7 +165,7 @@ class DetectronSingleClipDataset(SingleClipDataset):
             window_fn = torch.hamming_window,
             )
         self.spectrogram_t = lambda n_frames: (np.arange(n_frames)*self.spectrogram_args.HOP_LENGTH)/self.sr
-        self.spectrogram_f = get_torch_mel_frequencies(f_max=f_max, f_min=self.spectrogram_args.F_MIN, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults
+        self.spectrogram_f = get_torch_mel_frequencies(f_max=self.spectrogram_args.F_MAX, f_min=self.spectrogram_args.F_MIN, n_mels=self.spectrogram_args.N_MELS).numpy()[1:-1] # Using defaults
 
     def __getitem__(self, idx):
         """ Map int idx to dict of torch tensors """
@@ -189,7 +189,6 @@ class DetectronSingleClipDataset(SingleClipDataset):
         return record
 
 class SoundEventTrainer(DefaultTrainer):
-
     def __init__(self, cfg):
         super().__init__(cfg)
 

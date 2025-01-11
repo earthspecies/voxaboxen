@@ -36,6 +36,7 @@ def train_model(args):
     if args.previous_checkpoint_fp is not None:
       print(f"loading model weights from {args.previous_checkpoint_fp}")
       cp = torch.load(args.previous_checkpoint_fp)
+      breakpoint()
       if "model_state_dict" in cp.keys():
         model.load_state_dict(cp["model_state_dict"])
       else:
