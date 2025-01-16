@@ -28,7 +28,6 @@ def train_model(args):
             with open(os.path.join(experiment_dir, 'train_history.yaml')) as f:
                 x = yaml.load(f, Loader=yaml.SafeLoader)
             n_epochs_ran_for = len(x)
-            breakpoint()
             args.n_epochs -= n_epochs_ran_for
             print(f'resuming previous run which ran for {n_epochs_ran_for} epochs, now training for the remaining {args.n_epochs}')
             assert max(x.keys()) == n_epochs_ran_for-1

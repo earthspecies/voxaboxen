@@ -15,7 +15,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--is-test', '-t', action='store_true', help='run a quick version for testing')
   parser.add_argument('--cut-train-short', action='store_true')
   parser.add_argument('--recompute-class-weights', action='store_true')
-  parser.add_argument('--overwrite', action='store_true', help='overwrite an experiment of the same name, if it exists')
+  parser.add_argument('--exists-strategy', type=str, default='none', choices=['none', 'overwrite', 'resume'])
 
   # Data
   parser.add_argument('--project-config-fp', type = str, required=True)
@@ -39,7 +39,6 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--multichannel', action='store_true', help="If passed, will encode each audio channel seperately, then add together the encoded audio before final layer")
   parser.add_argument('--segmentation-based', action='store_true', help="If passed, will make predictions based on frame-wise segmentations rather than box starts")
   parser.add_argument('--comb-discard-thresh', type=float, default=0.75, help="If bidirectional, sets threshold for combining forward and backward predictions")
-  # parser.add_argument('--reload-from', type=str)
 
   # Encoder-specific
   ## AVES
@@ -51,7 +50,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--beats-checkpoint-fp', type=str, default = "weights/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt")
   ## CRNN
   parser.add_argument('--rnn-hidden-size', type=int, default = 2048)
-  
+
 
   # Training
   parser.add_argument('--batch-size', type=int, default=32)
