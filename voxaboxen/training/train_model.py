@@ -21,8 +21,21 @@ def train_model(args):
     set_seed(args.seed)
 
     experiment_dir = os.path.join(args.project_dir, args.name)
-    if os.path.exists(experiment_dir) and (not args.overwrite) and args.name!='demo':
-      sys.exit('experiment already exists with this name')
+
+    if os.path.exists(os.path.join(experiment_dir, 'model.pt')):
+        if args.exists_strategy=='resume':
+            args.previous_checkpoint_fp = os.path.join(experiment_dir, 'model.pt')
+            with open(os.path.join(experiment_dir, 'train_history.yaml')) as f:
+                x = yaml.load(f, Loader=yaml.SafeLoader)
+            n_epochs_ran_for = len(x)
+            breakpoint()
+            args.n_epochs -= n_epochs_ran_for
+            print(f'resuming previous run which ran for {n_epochs_ran_for} epochs, now training for the remaining {args.n_epochs}')
+            assert max(x.keys()) == n_epochs_ran_for-1
+            args.unfreeze_encoder_epoch = max(0, args.unfreeze_encoder_epoch-n_epochs_ran_for)
+
+        elif args.exists_strategy == 'none' and args.name!='demo':
+            sys.exit('experiment already exists with this name')
 
     experiment_output_dir = os.path.join(experiment_dir, "outputs")
     if not os.path.exists(experiment_output_dir):
@@ -36,7 +49,6 @@ def train_model(args):
     if args.previous_checkpoint_fp is not None:
       print(f"loading model weights from {args.previous_checkpoint_fp}")
       cp = torch.load(args.previous_checkpoint_fp)
-      breakpoint()
       if "model_state_dict" in cp.keys():
         model.load_state_dict(cp["model_state_dict"])
       else:
@@ -88,7 +100,7 @@ def train_model(args):
         for iou in [0.5,0.8]:
             if split=='val' and iou==0.8:
                 continue
-            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=experiment_dir, iou=iou, pred_type=best_pred_type, comb_discard_thresh=best_comb_discard, bidirectional=args.bidirectional, best_pred_type=best_pred_type)
+            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=experiment_dir, iou=iou, pred_type=best_pred_type, comb_discard_thresh=best_comb_discard, bidirectional=args.bidirectional)
 
         with open(os.path.join(args.experiment_dir, f'{split}_full_results.json'), 'w') as f:
             json.dump(full_results, f)
