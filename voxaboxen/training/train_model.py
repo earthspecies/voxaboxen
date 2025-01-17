@@ -99,7 +99,7 @@ def train_model(args):
         for iou in [0.5,0.8]:
             if split=='val' and iou==0.8:
                 continue
-            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=experiment_dir, iou=iou, pred_type=best_pred_type, comb_discard_thresh=best_comb_discard, bidirectional=args.bidirectional)
+            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=experiment_dir, iou=iou, pred_type=best_pred_type, bidirectional=args.bidirectional)
 
         with open(os.path.join(args.experiment_dir, f'{split}_full_results.json'), 'w') as f:
             json.dump(full_results, f)
