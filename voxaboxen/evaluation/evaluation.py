@@ -351,8 +351,6 @@ def delete_short(m, min_pos):
     starts = m[1:] * ~m[:-1]
 
     starts = np.where(starts)[0] + 1
-    if m[0]:
-        starts = np.append(starts, 0)
 
     clips = []
 
@@ -601,15 +599,17 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
 
     return metrics, conf_mat_summaries
 
-def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', comb_discard_thresh=0, unknown_label='Unknown', bidirectional=False):
+def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', unknown_label='Unknown', bidirectional=False):
     # first loop through thresholds to gather all results
     scores_by_class = {c:[] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, 'outputs')
-    for det_thresh, test_manifest in manifests_by_thresh.items():
-        #results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
-        test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=comb_discard_thresh, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(pred_type,))
-        for c, s in test_metrics[pred_type]['summary'].items():
-            scores_by_class[c].append(dict(s, det_thresh=det_thresh))
+    comb_discard_threshes_to_sweep = np.linspace(0, 0.99, 10) if bidirectional else [0]
+    for cdt in comb_discard_threshes_to_sweep:
+        for det_thresh, test_manifest in manifests_by_thresh.items():
+            #results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
+            test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=cdt, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(pred_type,))
+            for c, s in test_metrics[pred_type]['summary'].items():
+                scores_by_class[c].append(dict(s, det_thresh=det_thresh))
 
     # now loop through classes to calculate APs
     ap_by_class = {}
