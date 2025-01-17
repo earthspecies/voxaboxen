@@ -39,7 +39,6 @@ def train(args):
     trainer = SoundEventTrainer(cfg)
     trainer.resume_or_load(resume=resume)
     sys.stdout = old_stdout
-    breakpoint()
     if not sound_event_args.name.endswith('-frcnn'):
         sound_event_args.name += '-frcnn'
     if sound_event_args.previous_checkpoint_fp is not None:
