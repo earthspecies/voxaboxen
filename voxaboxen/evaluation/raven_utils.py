@@ -7,6 +7,7 @@ from tqdm import tqdm
 import warnings
 
 import voxaboxen.evaluation.metrics as metrics
+from fn_profiling import profile_lines
 
 class Clip():
     def __init__(self, label_set = None, unknown_label = None):
@@ -58,9 +59,9 @@ class Clip():
         # If class probability is below a threshold, switch label to unknown
 
         assert self.unknown_label is not None
-        tmp = self.predictions.copy()
-        mask = tmp['Class Prob'] < class_threshold
-        self.predictions.loc[mask, 'Annotation'] = self.unknown_label
+        #tmp = self.predictions.copy()
+        #mask = self.predictions['Class Prob'] < class_threshold
+        self.predictions.loc[self.predictions['Class Prob'] < class_threshold, 'Annotation'] = self.unknown_label
         #for i in self.predictions.index:
           #if tmp.loc[i, 'Class Prob'] < class_threshold:
             #tmp.at[i, 'Annotation'] = self.unknown_label
