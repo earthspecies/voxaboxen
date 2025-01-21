@@ -63,7 +63,7 @@ def train_model(args):
     val_manifest = predict_and_generate_manifest(model, get_val_dataloader(args), args, verbose=False)[0.5]
     best_f1 = 0
     best_comb_discard = -1
-    os.makedirs('tmp-cache', exist_ok=True)
+    os.makedirs(match_cache_dir:=os.path.join(experiment_output_dir, 'tmp-cache'), exist_ok=True)
     for comb_discard in np.linspace(0.0, 0.95, args.n_val_fit):
         #for comb_iou in np.linspace(0.4, 0.8, 8):
         for comb_iou in [0.5]:
@@ -122,7 +122,7 @@ def train_model(args):
 
         print(f'time to compute mAP: {time()-map_starttime:.3f}')
         print(' '.join(f'{k}: {v:.5f}' for k,v in summary_results.items()))
-    shutil.rmtree('tmp-cache')
+    shutil.rmtree(match_cache_dir)
     torch.save(model.state_dict(), os.path.join(args.experiment_dir, 'final-model.pt'))
 
 if __name__ == "__main__":

@@ -405,11 +405,9 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thres
     c = Clip()
     c.load_annotations(fwd_preds_fp)
     c.load_predictions(bck_preds_fp)
-    if os.path.exists(match_cache_fp:=f'tmp-cache/match_cache_{fn}-detthresh{det_thresh}-cit{comb_iou_thresh}.npy'):
-        print('loading from', match_cache_fp)
+    if os.path.exists(match_cache_fp:=f'{target_dir}/tmp-cache/match_cache_{fn}-detthresh{det_thresh}-cit{comb_iou_thresh}.npy'):
         matching = np.load(match_cache_fp)
     else:
-        print(match_cache_fp, 'doesnt exist')
         c.compute_matching(IoU_minimum=comb_iou_thresh)
         matching = np.array(c.matching)
         np.save(match_cache_fp, matching)
