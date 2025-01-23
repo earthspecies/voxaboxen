@@ -103,7 +103,7 @@ def train_model(args):
 
         print(f'Time to compute f1s: {time()-eval_starttime:.3f}s')
         if args.bidirectional:
-            det_thresh_range = np.linspace(0.001, 0.2, 8)
+            det_thresh_range = np.concatenate([np.linspace(0.001, 0.2, args.n_map//3), np.linspace(0.21, 0.7, args.n_map//3)]) # to make sure the lower range is covered, sweep fewer overall cus sweep other threshes too
         else:
             det_thresh_range = np.linspace(0.01, 0.99, args.n_map)
         manifests_by_thresh = predict_and_generate_manifest(model, test_dataloader, args, det_thresh_range, verbose=False)

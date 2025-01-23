@@ -53,25 +53,19 @@ def macro_micro_metrics(summary, unknown_label="Unknown"):
 
     return macro, micro
 
-class MetricGetter():
-    def __init__(self, label_set, unknown_label):
-        self.c = Clip(label_set=label_set, unknown_label=unknown_label)
-        self.annotations_fp = ''
+def get_metrics(predictions_fp, annotations_fp, iou, class_threshold, duration, label_mapping, unknown_label):
+    label_set = list(label_mapping.keys())
+    c = Clip(label_set=label_set, unknown_label=unknown_label)
+    c.duration = duration
+    c.load_predictions(predictions_fp)
+    c.threshold_class_predictions(class_threshold)
+    assert not any(c.predictions['Annotation']=='Unknown')
+    c.load_annotations(annotations_fp, label_mapping = label_mapping)
 
-    def get_metrics(self, predictions_fp, annotations_fp, iou, class_threshold, duration, label_mapping, unknown_label):
-        #c = Clip(label_set=label_set, unknown_label=unknown_label)
-        self.c.duration = duration
-        self.c.load_predictions(predictions_fp)
-        self.c.threshold_class_predictions(class_threshold)
-        assert not any(self.c.predictions['Annotation']=='Unknown')
-        if annotations_fp != self.annotations_fp:
-            self.c.load_annotations(annotations_fp, label_mapping = label_mapping)
-            self.annotations_fp = annotations_fp
+    c.compute_matching(IoU_minimum = iou)
+    metrics = c.evaluate()
 
-        self.c.compute_matching(IoU_minimum = iou)
-        metrics = self.c.evaluate()
-
-        return metrics
+    return metrics
 
 def summarize_metrics(metrics):
     """ metrics (dict) : {fp : fp_metrics},  where
@@ -437,8 +431,10 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thres
         fen = fwd_matches['End Time (s)'].to_numpy()
         bbn = bck_matches['Begin Time (s)'].to_numpy()
         ben = bck_matches['End Time (s)'].to_numpy()
-        starts = (fbn + bbn) / 2
-        ends = (fen + ben) / 2
+        #starts = (fbn + bbn) / 2
+        starts = fbn
+        #ends = (fen + ben) / 2
+        ends = ben
         ious = ((fen + ben) - (fbn + bbn)) / (2*(np.maximum(fen, ben) - np.minimum(fbn, bbn)))
         probs = (1 - (1-fwd_matches['Detection Prob'].to_numpy())*(1-bck_matches['Detection Prob'].to_numpy())) * ious
         match_preds = pd.DataFrame({'Begin Time (s)': starts, 'End Time (s)': ends, 'Detection Prob': probs, 'Annotation':fwd_matches['Annotation'], 'Class Prob':1.})
@@ -603,8 +599,6 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
         pred_types = ('fwd', 'bck', 'comb', 'match') if bidirectional else ('fwd',)
     metrics = {p:{} for p in pred_types}
 
-    label_set = list(label_mapping.keys())
-    mg = MetricGetter(label_set, unknown_label)
     for i, row in manifest.iterrows():
         fn = row['filename']
         annots_fp = row['annotations_fp']
@@ -614,7 +608,7 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
 
         for pred_type in pred_types:
             preds_fp = row[f'{pred_type}_predictions_fp']
-            metrics[pred_type][fn] = mg.get_metrics(preds_fp, annots_fp, iou, class_threshold, duration, label_mapping, unknown_label)
+            metrics[pred_type][fn] = get_metrics(preds_fp, annots_fp, iou, class_threshold, duration, label_mapping, unknown_label)
 
     # summarize and save metrics
     conf_mat_summaries = {}
@@ -631,11 +625,10 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
     scores_by_class = {c:[] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, 'outputs')
     comb_discard_threshes_to_sweep = np.linspace(0, 0.99, 30) if bidirectional else [0]
-    comb_iou_threshes_to_sweep = np.linspace(0.4, 0.9, 9) if bidirectional else [0]
+    comb_iou_threshes_to_sweep = np.linspace(0.2, 0.9, 10) if bidirectional else [0]
     #comb_iou_threshes_to_sweep = [comb_iou_thresh]
-    for cdt in comb_discard_threshes_to_sweep:
+    for cdt in tqdm.tqdm(comb_discard_threshes_to_sweep):
         for cit in comb_iou_threshes_to_sweep:
-            print(cdt, cit)
             for det_thresh, test_manifest in manifests_by_thresh.items():
                 #results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
                 test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=cdt, comb_iou_thresh=cit, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(pred_type,))
