@@ -89,6 +89,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--fill-holes-dur-sec', type=float, default=0, help="if using segmentation based model, fill holes shorter than this as a post-processing step")
   parser.add_argument('--n-val-fit', type=int, default=19)
   parser.add_argument('--n-map', type=int, default=30)
+  parser.add_argument('--median-filter-width', type = int, default = 1)
 
   if allow_unknown:
     args, remaining = parser.parse_known_args(args)

@@ -50,12 +50,21 @@ def train_model(args):
     val_manifest = predict_and_generate_manifest(model, get_val_dataloader(args), args, verbose=False)[0.5]
     best_f1 = 0
     best_comb_discard = -1
-    for comb_discard in np.linspace(0.5, 0.95, args.n_val_fit):
-        metrics, _ = evaluate_based_on_manifest(val_manifest, output_dir=args.experiment_output_dir, iou=0.5, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=comb_discard, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional, pred_types=(best_pred_type,))
-        new_f1 = metrics[best_pred_type]['macro']['f1']
-        if new_f1 > best_f1:
-            best_f1 = new_f1
-            best_comb_discard = comb_discard
+    if args.bidirectional:
+        for comb_discard in np.linspace(0.5, 0.95, args.n_val_fit):
+            metrics, _ = evaluate_based_on_manifest(val_manifest, output_dir=args.experiment_output_dir, iou=0.5, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=comb_discard, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional, pred_types=(best_pred_type,))
+            new_f1 = metrics[best_pred_type]['macro']['f1']
+            if new_f1 > best_f1:
+                best_f1 = new_f1
+                best_comb_discard = comb_discard
+    else:
+        for comb_discard in [0.5]:
+            metrics, _ = evaluate_based_on_manifest(val_manifest, output_dir=args.experiment_output_dir, iou=0.5, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=comb_discard, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional, pred_types=(best_pred_type,))
+            new_f1 = metrics[best_pred_type]['macro']['f1']
+            if new_f1 > best_f1:
+                best_f1 = new_f1
+                best_comb_discard = comb_discard
+        
 
     print(f'Found best thresh on val set: f1={best_f1:.4f}, comb_discard={best_comb_discard:.3f} in {time()-val_fit_starttime:.3f}s')
 

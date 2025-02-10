@@ -3,7 +3,7 @@ import csv
 import torch
 import os
 import tqdm
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, medfilt
 import yaml
 from matplotlib import pyplot as plt
 import seaborn as sns
@@ -434,6 +434,7 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, det_thresh):
     match_preds.to_csv(match_preds_fp, sep='\t', index=False)
     return comb_preds_fp, match_preds_fp
 
+
 def export_to_selection_table(detections, regressions, classifications, fn, args, is_bck, verbose=True, target_dir=None, detection_threshold = 0.5, classification_threshold = 0):
     if hasattr(args, "bidirectional") and args.bidirectional:
       if is_bck:
@@ -452,6 +453,12 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
       class_probs = []
       for c in range(np.shape(classifications)[1]):
         classifications_sub=classifications[:,c]
+        
+        #
+        if hasattr(args, "median_filter_width") and args.median_filter_width > 1:
+            classifications_sub = medfilt(classifications_sub, args.median_filter_width)
+        #
+        
         classifications_sub_binary=(classifications_sub>=detection_threshold)
         classifications_sub_binary=fill_holes(classifications_sub_binary,int(args.fill_holes_dur_sec*pred_sr))
         classifications_sub_binary=delete_short(classifications_sub_binary,int(args.delete_short_dur_sec*pred_sr))
