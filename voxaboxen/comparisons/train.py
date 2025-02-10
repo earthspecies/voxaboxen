@@ -3,6 +3,7 @@ import sys
 import io
 from glob import glob
 import logging
+import torch
 
 from voxaboxen.comparisons.dataloaders import SoundEventTrainer
 from voxaboxen.comparisons.params import get_full_cfg, parse_args
@@ -38,6 +39,13 @@ def train(args):
     trainer = SoundEventTrainer(cfg)
     trainer.resume_or_load(resume=resume)
     sys.stdout = old_stdout
+    if not sound_event_args.name.endswith('-frcnn'):
+        sound_event_args.name += '-frcnn'
+    if sound_event_args.previous_checkpoint_fp is not None:
+        print(f"loading model weights from {sound_event_args.previous_checkpoint_fp}")
+        cp = torch.load(sound_event_args.previous_checkpoint_fp)
+        trainer.model.load_state_dict(cp)
+
     try:
         trainer.train()
     except StopIteration:
@@ -52,6 +60,7 @@ def train(args):
     if cfg.SOUND_EVENT.test_info_fp is not None:
         print("Running evaluation on test set",flush=True)
         run_evaluation(trainer.model, cfg.SOUND_EVENT.test_info_fp, cfg, "test_results")
+    torch.save(trainer.model.state_dict(), os.path.join(sound_event_args.experiment_dir, 'final-model.pt'))
 
 if __name__ == "__main__":
     train(sys.argv[1:])

@@ -17,9 +17,8 @@ from detectron2.modeling import build_model
 from torchvision.ops import boxes as box_ops
 
 from voxaboxen.comparisons.dataloaders import DetectronSingleClipDataset, SoundEventTrainer
-from voxaboxen.evaluation.evaluation import bbox2raven, write_tsv, evaluate_based_on_manifest
-from voxaboxen.comparisons.nms import nms
-from voxaboxen.training.train_model import print_metrics
+from voxaboxen.evaluation.evaluation import bbox2raven, write_tsv, evaluate_based_on_manifest, mean_average_precision
+from voxaboxen.comparisons.nms import nms, soft_nms
 
 def if_not_none(x, y):
     return x if x is not None else y
@@ -50,77 +49,111 @@ def run_evaluation(model, inference_fp, cfg, results_folder_name):
         model.cuda()
 
     target_fps = []
-    #files_to_infer = pd.read_csv(inference_fp)
-    files_to_infer = pd.read_csv('files_to_infer_val.csv', index_col=0)
+    files_to_infer = pd.read_csv(inference_fp)#.drop('Unnamed:0')
     #if len(files_to_infer) == 0:
         #print(f"No sound files specified in {inference_fp}")
         #return
-    #for row_idx, row in tqdm(files_to_infer.iterrows(),total=len(files_to_infer)):
-    #    audio_fp = row['audio_fp']
-    #    fn = row['fn']
+    pred_fps_by_thresh = {}
+    det_thresh_range = np.linspace(0.01, 0.99, 3)
+    assert 0.5 in det_thresh_range
+    duration_secs = [librosa.get_duration(filename=f) for f in files_to_infer['audio_fp']]
+    for row_idx, row in tqdm(files_to_infer.iterrows(),total=len(files_to_infer)):
+        audio_fp = row['audio_fp']
+        fn = row['fn']
 
-    #    dataset = DetectronSingleClipDataset(cfg, audio_fp, cfg.SOUND_EVENT.clip_duration/2, cfg.SOUND_EVENT)
-    #    dataloader = DataLoader(
-    #        dataset,
-    #        batch_size = 1, #TODO: cfg.SOUND_EVENT.batch_size,
-    #        shuffle=False,
-    #        num_workers=cfg.SOUND_EVENT.num_workers,
-    #        pin_memory=True,
-    #        drop_last=False,
-    #    )
+        dataset = DetectronSingleClipDataset(cfg, audio_fp, cfg.SOUND_EVENT.clip_duration/2, cfg.SOUND_EVENT)
+        dataloader = DataLoader(
+            dataset,
+            batch_size = 1, #TODO: cfg.SOUND_EVENT.batch_size,
+            shuffle=False,
+            num_workers=cfg.SOUND_EVENT.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
 
-    #    boxes, scores, classes, len_t = generate_predictions(model, dataloader)
-    #    #TODO (low priority) clean up by accounting for whether to keep arrays as numpy or torch?
-    #    events, boxes, scores, classes = remove_edge_boxes(boxes, scores, classes, len_t, dataloader)
-    #    if events is not None:
-    #        if cfg.SOUND_EVENT.EVAL.TIME_BASED_NMS:
-    #            #boxes shape: (n_boxes, 2=(onset,offset))
-    #            events, keep_indices = nms(events, scores, iou_thresh=cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
-    #            scores = scores[keep_indices]; classes = classes[keep_indices]
-    #        else:
-    #            if cfg.SOUND_EVENT.EVAL.IGNORE_INTERCLASS_IOU:
-    #                #boxes shape: (n_boxes, 4=(xmin,ymin,xmax,ymax))
-    #                keep_indices = box_ops.batched_nms(torch.Tensor(boxes), torch.Tensor(scores), torch.Tensor(classes), iou_threshold=cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
-    #            else:
-    #                keep_indices = box_ops.nms(torch.Tensor(boxes), torch.Tensor(scores), iou_threshold=cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
-    #            keep_indices = sorted(keep_indices.numpy()) #Will be sorted by score, now re-sort by time
-    #            events = events[keep_indices, :]; scores = scores[keep_indices]; classes = classes[keep_indices]
+        boxes, scores, classes, len_t = generate_predictions(model, dataloader)
+        #events, keep_indices = soft_nms(events, scores, classes, np.ones_like(classes))
+        #if events is not None:
+        #    if cfg.SOUND_EVENT.EVAL.TIME_BASED_NMS:
+        #        #boxes shape: (n_boxes, 2=(onset,offset))
+        #        events, keep_indices = nms(events, scores, iou_thresh=cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
+        #        scores = scores[keep_indices]; classes = classes[keep_indices]
+        #    else:
+        #        if cfg.SOUND_EVENT.EVAL.IGNORE_INTERCLASS_IOU:
+        #            #boxes shape: (n_boxes, 4=(xmin,ymin,xmax,ymax))
+        #            keep_indices = box_ops.batched_nms(torch.Tensor(boxes), torch.Tensor(scores), torch.Tensor(classes), iou_threshold=cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
+        #        else:
+        #            keep_indices = box_ops.nms(torch.Tensor(boxes), torch.Tensor(scores), iou_threshold=cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
+        #        keep_indices = sorted(keep_indices.numpy()) #Will be sorted by score, now re-sort by time
+        #        events = events[keep_indices, :]; scores = scores[keep_indices]; classes = classes[keep_indices]
 
-    #    #TODO Currently does not attempt to retrieve class probabilities, see https://github.com/facebookresearch/detectron2/issues/1754
-    #    target_fp = os.path.join(inference_dir, f"peaks_pred_{fn}.txt")
-    #    st = bbox2raven(events, classes, cfg.SOUND_EVENT.label_set, scores, np.full(classes.shape, 1) if classes is not None else None, "Unknown")
-    #    write_tsv(target_fp, st)
-    #    print(f"Saving predictions for {fn} to {target_fp}")
-    #    target_fps.append(target_fp)
+        #det_thresh_range = np.linspace(scores.min(), scores.max(), args.n_map)
+        events, boxes, scores, classes = remove_edge_boxes(boxes, scores, classes, len_t, dataloader)
+        for dt in det_thresh_range:
+            dt_fn = f'{fn}-detthresh{dt}'
+            target_fp = os.path.join(inference_dir, f"peaks_pred_{dt_fn}.txt")
+            #events_dt = events[scores>=dt]
+            #boxes_dt = boxes[scores>=dt]
+            #classes_dt = classes[scores>=dt]
+            #scores_dt = scores[scores>=dt]
+            events_dt, keep_indices = soft_nms(events, scores, thresh=dt)
+            keep_indices = sorted(keep_indices)
+            classes_dt = classes[keep_indices]
+            st = bbox2raven(events, classes_dt, cfg.SOUND_EVENT.label_set, scores, np.full(classes.shape, 1) if classes is not None else None, "Unknown")
+            write_tsv(target_fp, st)
+            print(f"Saving predictions for {dt_fn} to {target_fp}")
+            target_fps.append(target_fp)
+            if dt in pred_fps_by_thresh:
+                pred_fps_by_thresh[dt].append(target_fp)
+            else:
+                pred_fps_by_thresh[dt] = [target_fp]
 
+    manifests_by_thresh = {}
+    for dt in det_thresh_range:
+        manifest = files_to_infer.drop(['audio_fp'], axis=1)
+        manifest = manifest.rename({'fn':'filename', 'selection_table_fp':'annotations_fp'}, axis=1)
+        manifest['fwd_predictions_fp'] = pred_fps_by_thresh[dt]
+        manifest['duration_sec'] = duration_secs
+        manifests_by_thresh[dt] = manifest
+
+    full_results = {}
+    summary_results = {}
+    for iou in [0.5,0.8]:
+        summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] = mean_average_precision(manifests_by_thresh, cfg.SOUND_EVENT.label_mapping, exp_dir=cfg.SOUND_EVENT.experiment_dir, iou=iou)
     ## If we have a dataset with existing manual annotations, compute metrics against these annotations
-    if ("selection_table_fp" in files_to_infer.columns) or ("annotations_fp" in files_to_infer.columns):
+    #if ("selection_table_fp" in files_to_infer.columns) or ("annotations_fp" in files_to_infer.columns):
     #    #TODO why are these different than how it was originally set up?
     #    files_to_infer["filename"] = files_to_infer["fn"]
     #    files_to_infer['duration_sec'] = [librosa.get_duration(filename=f) for f in files_to_infer['audio_fp']]
     #    files_to_infer["fwd_predictions_fp"] = target_fps
     #    if "selection_table_fp" in files_to_infer.columns:
     #        files_to_infer["annotations_fp"] = files_to_infer["selection_table_fp"]
-        for iou in [0.2, 0.5, 0.8]:
-            # Currently do not have class probabilities < 1 for detectron output (see above), so these are redundant
-            #for class_threshold in [0.0, 0.5, 0.95]:
-            for class_threshold in [0.5]:
-                metrics, conf_mats = evaluate_based_on_manifest(
-                    files_to_infer,
-                    cfg.SOUND_EVENT,
-                    output_dir = os.path.join(cfg.SOUND_EVENT.experiment_dir, results_folder_name),
-                    iou = iou,
-                    class_threshold = class_threshold,
-                    comb_discard_threshold = -1
-                    )
-                print(f'IOU: {iou}')
-                for m in ('micro', 'macro'):
-                    print(f'\t{m.upper()}:')
-                    for k in sorted(metrics['fwd'][m]):
-                        print('\t', k, round(100*metrics['fwd'][m][k],4))
+    for iou in [0.2, 0.5, 0.8]:
+        # Currently do not have class probabilities < 1 for detectron output (see above), so these are redundant
+        #for class_threshold in [0.0, 0.5, 0.95]:
+        #for class_threshold in [0.5]:
+        metrics, conf_mats = evaluate_based_on_manifest(
+            manifests_by_thresh[0.5],
+            #cfg.SOUND_EVENT,
+            output_dir = os.path.join(cfg.SOUND_EVENT.experiment_dir, results_folder_name),
+            iou = iou,
+            class_threshold = 0.5,
+            det_thresh = 0.5,
+            label_mapping = cfg.SOUND_EVENT.label_mapping,
+            unknown_label = cfg.SOUND_EVENT.unknown_label,
+            )
+        full_results[f'f1@{iou}'] = metrics
+        summary_results[f'micro-f1@{iou}'] = metrics['fwd']['micro']['f1']
+        summary_results[f'macro-f1@{iou}'] = metrics['fwd']['macro']['f1']
+        #print(f'IOU: {iou}')
+    print(' '.join(f'{k}: {v:.5f}' for k,v in summary_results.items()))
+        #for m in ('micro', 'macro'):
+            #print(f'\t{m.upper()}:')
+            #for k in sorted(metrics['fwd'][m]):
+                #print('\t', k, round(100*metrics['fwd'][m][k],4))
 
-                #print('MACRO:', {k:round(100*metrics['fwd']['macro'][k],4) for k in sorted(metrics['fwd']['macro'].keys())})
-                #print('MICRO:', {k:round(100*metrics['fwd']['micro'][k],4) for k in sorted(metrics['fwd']['micro'].keys())})
+        #print('MACRO:', {k:round(100*metrics['fwd']['macro'][k],4) for k in sorted(metrics['fwd']['macro'].keys())})
+        #print('MICRO:', {k:round(100*metrics['fwd']['micro'][k],4) for k in sorted(metrics['fwd']['micro'].keys())})
 
 def generate_predictions(model, dataloader):
     """ Run all clips stemming from a single sound file through model """
