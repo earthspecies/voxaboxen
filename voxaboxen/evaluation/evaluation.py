@@ -4,24 +4,18 @@ import torch
 import os
 import tqdm
 from scipy.signal import find_peaks, medfilt
-import yaml
-from matplotlib import pyplot as plt
-import seaborn as sns
 import pandas as pd
 
 from voxaboxen.evaluation.raven_utils import Clip
 from voxaboxen.model.model import rms_and_mixup
 from voxaboxen.evaluation.nms import nms, soft_nms
-from voxaboxen.evaluation.conf_mats import get_confusion_matrix, summarize_confusion_matrix, plot_confusion_matrix
-from fn_profiling import profile_lines
-plt.switch_backend('agg')
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def f1_from_counts(tp, fp, fn):
-    prec = tp/(tp+fp+1e-8)
-    rec = tp/(tp+fn+1e-8)
-    f1 = 2*prec*rec / (prec+rec+1e-8)
+    prec = 1 if tp==0 else tp/(tp+fp)
+    rec = 0 if tp==0 else tp/(tp+fn)
+    f1 = 0 if prec+rec==0 else 2*prec*rec / (prec+rec)
     return {'prec': prec, 'rec':rec, 'f1':f1}
 
 def macro_micro_metrics(summary, unknown_label="Unknown"):
@@ -78,58 +72,58 @@ def summarize_metrics(metrics):
     overall = { l: {'TP' : 0, 'FP' : 0, 'FN' : 0, 'TP_seg' : 0, 'FP_seg' : 0, 'FN_seg' : 0} for l in class_labels}
 
     for fp in fps:
-      for l in class_labels:
-        counts = metrics[fp][l]
-        overall[l]['TP'] += counts['TP']
-        overall[l]['FP'] += counts['FP']
-        overall[l]['FN'] += counts['FN']
-        overall[l]['TP_seg'] += counts['TP_seg']
-        overall[l]['FP_seg'] += counts['FP_seg']
-        overall[l]['FN_seg'] += counts['FN_seg']
+        for l in class_labels:
+            counts = metrics[fp][l]
+            overall[l]['TP'] += counts['TP']
+            overall[l]['FP'] += counts['FP']
+            overall[l]['FN'] += counts['FN']
+            overall[l]['TP_seg'] += counts['TP_seg']
+            overall[l]['FP_seg'] += counts['FP_seg']
+            overall[l]['FN_seg'] += counts['FN_seg']
 
     for l in class_labels:
-      tp = overall[l]['TP']
-      fp = overall[l]['FP']
-      fn = overall[l]['FN']
-      tp_seg = overall[l]['TP_seg']
-      fp_seg = overall[l]['FP_seg']
-      fn_seg = overall[l]['FN_seg']
+        tp = overall[l]['TP']
+        fp = overall[l]['FP']
+        fn = overall[l]['FN']
+        tp_seg = overall[l]['TP_seg']
+        fp_seg = overall[l]['FP_seg']
+        fn_seg = overall[l]['FN_seg']
 
-      if tp + fp == 0:
-        prec = 1
-      else:
-        prec = tp / (tp + fp)
-      overall[l]['precision'] = prec
+        if tp + fp == 0:
+            prec = 1
+        else:
+            prec = tp / (tp + fp)
+        overall[l]['precision'] = prec
 
-      if tp_seg + fp_seg == 0:
-        prec_seg = 1
-      else:
-        prec_seg = tp_seg / (tp_seg + fp_seg)
-      overall[l]['precision_seg'] = prec_seg
+        if tp_seg + fp_seg == 0:
+            prec_seg = 1
+        else:
+            prec_seg = tp_seg / (tp_seg + fp_seg)
+        overall[l]['precision_seg'] = prec_seg
 
-      if tp + fn == 0:
-        rec = 1
-      else:
-        rec = tp / (tp + fn)
-      overall[l]['recall'] = rec
+        if tp + fn == 0:
+            rec = 1
+        else:
+            rec = tp / (tp + fn)
+        overall[l]['recall'] = rec
 
-      if tp_seg + fn_seg == 0:
-        rec_seg = 1
-      else:
-        rec_seg = tp_seg / (tp_seg + fn_seg)
-      overall[l]['recall_seg'] = rec_seg
+        if tp_seg + fn_seg == 0:
+            rec_seg = 1
+        else:
+            rec_seg = tp_seg / (tp_seg + fn_seg)
+        overall[l]['recall_seg'] = rec_seg
 
-      if prec + rec == 0:
-        f1 = 0
-      else:
-        f1 = 2*prec*rec / (prec + rec)
-      overall[l]['f1'] = f1
+        if prec + rec == 0:
+            f1 = 0
+        else:
+            f1 = 2*prec*rec / (prec + rec)
+        overall[l]['f1'] = f1
 
-      if prec_seg + rec_seg == 0:
-        f1_seg = 0
-      else:
-        f1_seg = 2*prec_seg*rec_seg / (prec_seg + rec_seg)
-      overall[l]['f1_seg'] = f1_seg
+        if prec_seg + rec_seg == 0:
+            f1_seg = 0
+        else:
+            f1_seg = 2*prec_seg*rec_seg / (prec_seg + rec_seg)
+        overall[l]['f1_seg'] = f1_seg
 
     return overall
 
@@ -147,79 +141,80 @@ def generate_predictions(model, single_clip_dataloader, args, verbose=True):
     all_rev_classifs = []
 
     if verbose:
-      iterator = tqdm.tqdm(enumerate(single_clip_dataloader), total=len(single_clip_dataloader))
+        iterator = tqdm.tqdm(enumerate(single_clip_dataloader), total=len(single_clip_dataloader))
     else:
-      iterator = enumerate(single_clip_dataloader)
+        iterator = enumerate(single_clip_dataloader)
 
     with torch.no_grad():
-      for i, X in iterator:
-        X = X.to(device = device, dtype = torch.float)
-        X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
+        for i, X in iterator:
+            X = X.to(device = device, dtype = torch.float)
+            X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
 
-        model_outputs = model(X)
-        assert isinstance(model_outputs, tuple)
-        all_detections.append(model_outputs[0])
-        all_regressions.append(model_outputs[1])
-        if args.segmentation_based:
-            classification=torch.nn.functional.sigmoid(model_outputs[2])
-        else:
-            classification=torch.nn.functional.softmax(model_outputs[2], dim=-1)
-        all_classifs.append(classification)
+            model_outputs = model(X)
+            assert isinstance(model_outputs, tuple)
+            all_detections.append(model_outputs[0])
+            all_regressions.append(model_outputs[1])
+            if args.segmentation_based:
+                classification=torch.nn.functional.sigmoid(model_outputs[2])
+            else:
+                classification=torch.nn.functional.softmax(model_outputs[2], dim=-1)
+            all_classifs.append(classification)
+            if model.is_bidirectional:
+                assert all(x is not None for x in model_outputs)
+                all_rev_detections.append(model_outputs[3])
+                all_rev_regressions.append(model_outputs[4])
+                all_rev_classifs.append(model_outputs[5].softmax(-1)) # segmentation-based is not used when bidirectional
+            else:
+                assert all(x is None for x in model_outputs[3:])
+
+                if args.is_test and i==15:
+                    break
+
+        all_detections = torch.cat(all_detections)
+        all_regressions = torch.cat(all_regressions)
+        all_classifs = torch.cat(all_classifs)
         if model.is_bidirectional:
-            assert all(x is not None for x in model_outputs)
-            all_rev_detections.append(model_outputs[3])
-            all_rev_regressions.append(model_outputs[4])
-            all_rev_classifs.append(model_outputs[5].softmax(-1)) # segmentation-based is not used when bidirectional
+            all_rev_detections = torch.cat(all_rev_detections)
+            all_rev_regressions = torch.cat(all_rev_regressions)
+            all_rev_classifs = torch.cat(all_rev_classifs)
+
+        ######## Todo: Need better checking that preds are the correct dur
+        assert all_detections.size(dim=1) % 2 == 0
+        first_quarter_window_dur_samples=all_detections.size(dim=1)//4
+        last_quarter_window_dur_samples=(all_detections.size(dim=1)//2)-first_quarter_window_dur_samples
+
+        def assemble(d, r, c):
+            """We use half overlapping windows, need to throw away boundary predictions.
+            See get_val_dataloader and get_test_dataloader in data.py"""
+            # assemble detections
+            beginning_d_bit = d[0,:first_quarter_window_dur_samples]
+            end_d_bit = d[-1,-last_quarter_window_dur_samples:]
+            d_clipped = d[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples]
+            middle_d_bit = torch.reshape(d_clipped, (-1,))
+            assembled_d = torch.cat([beginning_d_bit, middle_d_bit, end_d_bit])
+
+            # assemble regressions
+            beginning_r_bit = r[0,:first_quarter_window_dur_samples]
+            end_r_bit = r[-1,-last_quarter_window_dur_samples:]
+            r_clipped = r[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples]
+            middle_r_bit = torch.reshape(r_clipped, (-1,))
+            assembled_r = torch.cat([beginning_r_bit, middle_r_bit, end_r_bit])
+
+            # assemble classifs
+            beginning_c_bit = c[0,:first_quarter_window_dur_samples, :]
+            end_c_bit = c[-1,-last_quarter_window_dur_samples:, :]
+            c_clipped = c[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
+            middle_c_bit = torch.reshape(c_clipped, (-1, c_clipped.size(-1)))
+            assembled_c = torch.cat([beginning_c_bit, middle_c_bit, end_c_bit])
+            return assembled_d.detach().cpu().numpy(), assembled_r.detach().cpu().numpy(), assembled_c.detach().cpu().numpy(),
+
+        assembled_dets, assembled_regs, assembled_classifs = assemble(all_detections, all_regressions, all_classifs)
+        if model.is_bidirectional:
+            assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs = assemble(all_rev_detections, all_rev_regressions, all_rev_classifs)
         else:
-            assert all(x is None for x in model_outputs[3:])
+            assembled_rev_dets = assembled_rev_regs = assembled_rev_classifs = None
 
-        if args.is_test and i==15:
-            break
-
-      all_detections = torch.cat(all_detections)
-      all_regressions = torch.cat(all_regressions)
-      all_classifs = torch.cat(all_classifs)
-      if model.is_bidirectional:
-          all_rev_detections = torch.cat(all_rev_detections)
-          all_rev_regressions = torch.cat(all_rev_regressions)
-          all_rev_classifs = torch.cat(all_rev_classifs)
-
-      assert all_detections.size(dim=1) % 2 == 0
-      first_quarter_window_dur_samples=all_detections.size(dim=1)//4
-      last_quarter_window_dur_samples=(all_detections.size(dim=1)//2)-first_quarter_window_dur_samples
-
-      def assemble(d, r, c):
-          """We use half overlapping windows, need to throw away boundary predictions.
-          See get_val_dataloader and get_test_dataloader in data.py"""
-          # assemble detections
-          beginning_d_bit = d[0,:first_quarter_window_dur_samples]
-          end_d_bit = d[-1,-last_quarter_window_dur_samples:]
-          d_clipped = d[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples]
-          middle_d_bit = torch.reshape(d_clipped, (-1,))
-          assembled_d = torch.cat([beginning_d_bit, middle_d_bit, end_d_bit])
-
-          # assemble regressions
-          beginning_r_bit = r[0,:first_quarter_window_dur_samples]
-          end_r_bit = r[-1,-last_quarter_window_dur_samples:]
-          r_clipped = r[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples]
-          middle_r_bit = torch.reshape(r_clipped, (-1,))
-          assembled_r = torch.cat([beginning_r_bit, middle_r_bit, end_r_bit])
-
-          # assemble classifs
-          beginning_c_bit = c[0,:first_quarter_window_dur_samples, :]
-          end_c_bit = c[-1,-last_quarter_window_dur_samples:, :]
-          c_clipped = c[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
-          middle_c_bit = torch.reshape(c_clipped, (-1, c_clipped.size(-1)))
-          assembled_c = torch.cat([beginning_c_bit, middle_c_bit, end_c_bit])
-          return assembled_d.detach().cpu().numpy(), assembled_r.detach().cpu().numpy(), assembled_c.detach().cpu().numpy(),
-
-      assembled_dets, assembled_regs, assembled_classifs = assemble(all_detections, all_regressions, all_classifs)
-      if model.is_bidirectional:
-          assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs = assemble(all_rev_detections, all_rev_regressions, all_rev_classifs)
-      else:
-          assembled_rev_dets = assembled_rev_regs = assembled_rev_classifs = None
-
-      return assembled_dets, assembled_regs, assembled_classifs, assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs
+        return assembled_dets, assembled_regs, assembled_classifs, assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs
 
 def pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_probs, pred_sr, is_rev):
     '''
@@ -239,7 +234,7 @@ def pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_pro
     for i in range(len(detection_peaks)):
         duration = durations[i]
         if duration <= 0:
-          continue
+            continue
 
         if is_rev:
             end = detection_peaks[i]
@@ -299,36 +294,36 @@ def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs, unkn
 
     return out
 
-def generate_features(model, single_clip_dataloader, args, verbose = True):
+def generate_features(model, single_clip_dataloader, args, verbose=True):
     model = model.to(device)
     model.eval()
 
     all_features = []
 
     if verbose:
-      iterator = tqdm.tqdm(enumerate(single_clip_dataloader), total=len(single_clip_dataloader))
+        iterator = tqdm.tqdm(enumerate(single_clip_dataloader), total=len(single_clip_dataloader))
     else:
-      iterator = enumerate(single_clip_dataloader)
+        iterator = enumerate(single_clip_dataloader)
 
     with torch.no_grad():
-      for i, X in iterator:
-        X = X.to(device = device, dtype = torch.float)
-        X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
-        features = model.generate_features(X)
-        all_features.append(features)
-      all_features = torch.cat(all_features)
+        for i, X in iterator:
+            X = X.to(device = device, dtype = torch.float)
+            X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
+            features = model.generate_features(X)
+            all_features.append(features)
+        all_features = torch.cat(all_features)
 
-      ######## Need better checking that features are the correct dur
-      assert all_features.size(dim=1) % 2 == 0
-      first_quarter_window_dur_samples=all_features.size(dim=1)//4
-      last_quarter_window_dur_samples=(all_features.size(dim=1)//2)-first_quarter_window_dur_samples
+        ######## Need better checking that features are the correct dur
+        assert all_features.size(dim=1) % 2 == 0
+        first_quarter_window_dur_samples=all_features.size(dim=1)//4
+        last_quarter_window_dur_samples=(all_features.size(dim=1)//2)-first_quarter_window_dur_samples
 
-      # assemble features
-      beginning_bit = all_features[0,:first_quarter_window_dur_samples,:]
-      end_bit = all_features[-1,-last_quarter_window_dur_samples:,:]
-      features_clipped = all_features[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
-      all_features = torch.reshape(features_clipped, (-1, features_clipped.size(-1)))
-      all_features = torch.cat([beginning_bit, all_features, end_bit])
+        # assemble features
+        beginning_bit = all_features[0,:first_quarter_window_dur_samples,:]
+        end_bit = all_features[-1,-last_quarter_window_dur_samples:,:]
+        features_clipped = all_features[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
+        all_features = torch.reshape(features_clipped, (-1, features_clipped.size(-1)))
+        all_features = torch.cat([beginning_bit, all_features, end_bit])
 
     return all_features.detach().cpu().numpy()
 
@@ -412,14 +407,12 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thres
         fen = fwd_matches['End Time (s)'].to_numpy()
         bbn = bck_matches['Begin Time (s)'].to_numpy()
         ben = bck_matches['End Time (s)'].to_numpy()
-        #starts = (fbn + bbn) / 2
         starts = fbn
-        #ends = (fen + ben) / 2
         ends = ben
-        ious = ((fen + ben) - (fbn + bbn)) / (2*(np.maximum(fen, ben) - np.minimum(fbn, bbn)))
+        #ious = ((fen + ben) - (fbn + bbn)) / (2*(np.maximum(fen, ben) - np.minimum(fbn, bbn)))
+        ious = (np.minimum(fen, ben) - np.maximum(fbn, bbn)) / (np.maximum(fen, ben) - np.minimum(fbn, bbn))
         probs = (1 - (1-fwd_matches['Detection Prob'].to_numpy())*(1-bck_matches['Detection Prob'].to_numpy())) * ious
         match_preds = pd.DataFrame({'Begin Time (s)': starts, 'End Time (s)': ends, 'Detection Prob': probs, 'Annotation':fwd_matches['Annotation'], 'Class Prob':1.})
-    #assert np.allclose(match_preds2.drop('Annotation', axis=1).to_numpy(), match_preds.drop('Annotation', axis=1).to_numpy())
 
     # Include the union of all predictions that weren't part of the matching
     fwd_matched_idxs = [m[0] for m in matching]
@@ -441,92 +434,92 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thres
 
 def export_to_selection_table(detections, regressions, classifications, fn, args, is_bck, verbose=True, target_dir=None, detection_threshold=0.5, classification_threshold=0):
     if hasattr(args, "bidirectional") and args.bidirectional:
-      if is_bck:
-        fn += '-bck'
-      else:
-        fn += '-fwd'
+        if is_bck:
+            fn += '-bck'
+        else:
+            fn += '-fwd'
 
     if target_dir is None:
-      target_dir = args.experiment_output_dir
+        target_dir = args.experiment_output_dir
 
     if hasattr(args, "segmentation_based") and args.segmentation_based:
-      pred_sr = args.sr // args.scale_factor
-      bboxes = []
-      det_probs = []
-      class_idxs = []
-      class_probs = []
-      for c in range(np.shape(classifications)[1]):
-        classifications_sub=classifications[:,c]
-        
-        if hasattr(args, "median_filter_width") and args.median_filter_width > 1:
-            classifications_sub = medfilt(classifications_sub, args.median_filter_width)
-        
-        classifications_sub_binary=(classifications_sub>=detection_threshold)
-        classifications_sub_binary=fill_holes(classifications_sub_binary,int(args.fill_holes_dur_sec*pred_sr))
-        classifications_sub_binary=delete_short(classifications_sub_binary,int(args.delete_short_dur_sec*pred_sr))
+        pred_sr = args.sr // args.scale_factor
+        bboxes = []
+        det_probs = []
+        class_idxs = []
+        class_probs = []
+        for c in range(np.shape(classifications)[1]):
+            classifications_sub=classifications[:,c]
 
-        starts = classifications_sub_binary[1:] * ~classifications_sub_binary[:-1]
-        starts = np.where(starts)[0] + 1
-        if classifications_sub_binary[0]:
-            starts = np.append(starts, 0)
+            if hasattr(args, "median_filter_width") and args.median_filter_width > 1:
+                classifications_sub = medfilt(classifications_sub, args.median_filter_width)
 
-        for start in starts:
-            look_forward = classifications_sub_binary[start:]
-            ends = np.where(~look_forward)[0]
-            if len(ends)>0:
-                end = start+np.amin(ends)
-            else:
-                end = len(classifications_sub_binary)-1
+            classifications_sub_binary=(classifications_sub>=detection_threshold)
+            classifications_sub_binary=fill_holes(classifications_sub_binary,int(args.fill_holes_dur_sec*pred_sr))
+            classifications_sub_binary=delete_short(classifications_sub_binary,int(args.delete_short_dur_sec*pred_sr))
 
-            bbox = [start/pred_sr,end/pred_sr]
-            bboxes.append(bbox)
-            det_probs.append(classifications_sub[start:end].mean())
-            class_idxs.append(c)
-            class_probs.append(classifications_sub[start:end].mean())
+            starts = classifications_sub_binary[1:] * ~classifications_sub_binary[:-1]
+            starts = np.where(starts)[0] + 1
+            if classifications_sub_binary[0]:
+                starts = np.append(starts, 0)
 
-      bboxes=np.array(bboxes)
-      det_probs=np.array(det_probs)
-      class_idxs=np.array(class_idxs)
-      class_probs=np.array(class_probs)
+            for start in starts:
+                look_forward = classifications_sub_binary[start:]
+                ends = np.where(~look_forward)[0]
+                if len(ends)>0:
+                    end = start+np.amin(ends)
+                else:
+                    end = len(classifications_sub_binary)-1
+
+                bbox = [start/pred_sr,end/pred_sr]
+                bboxes.append(bbox)
+                det_probs.append(classifications_sub[start:end].mean())
+                class_idxs.append(c)
+                class_probs.append(classifications_sub[start:end].mean())
+
+        bboxes=np.array(bboxes)
+        det_probs=np.array(det_probs)
+        class_idxs=np.array(class_idxs)
+        class_probs=np.array(class_probs)
 
     else:
-      ## peaks
-      detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
-      det_probs = properties['peak_heights']
+        ## peaks
+        detection_peaks, properties = find_peaks(detections, height = detection_threshold, distance=args.peak_distance)
+        det_probs = properties['peak_heights']
 
-      ## regressions and classifications
-      durations = []
-      class_idxs = []
-      class_probs = []
+        ## regressions and classifications
+        durations = []
+        class_idxs = []
+        class_probs = []
 
-      for i in detection_peaks:
-        dur = regressions[i]
-        durations.append(dur)
+        for i in detection_peaks:
+            dur = regressions[i]
+            durations.append(dur)
 
-        c = np.argmax(classifications[i,:])
-        p = classifications[i,c]
+            c = np.argmax(classifications[i,:])
+            p = classifications[i,c]
 
-        if p < classification_threshold:
-          c = -1
+            if p < classification_threshold:
+                c = -1
 
-        class_idxs.append(c)
-        class_probs.append(p)
+            class_idxs.append(c)
+            class_probs.append(p)
 
-      durations = np.array(durations)
-      class_idxs = np.array(class_idxs)
-      class_probs = np.array(class_probs)
+        durations = np.array(durations)
+        class_idxs = np.array(class_idxs)
+        class_probs = np.array(class_probs)
 
-      pred_sr = args.sr // args.scale_factor
+        pred_sr = args.sr // args.scale_factor
 
-      bboxes, det_probs, class_idxs, class_probs = pred2bbox(detection_peaks, det_probs, durations, class_idxs, class_probs, pred_sr, is_bck)
+        bboxes, det_probs, class_idxs, class_probs = pred2bbox(detection_peaks, det_probs, durations, class_idxs, class_probs, pred_sr, is_bck)
 
     if args.nms == "soft_nms":
-      bboxes, det_probs, class_idxs, class_probs = soft_nms(bboxes, det_probs, class_idxs, class_probs, sigma=args.soft_nms_sigma, thresh=detection_threshold)
+        bboxes, det_probs, class_idxs, class_probs = soft_nms(bboxes, det_probs, class_idxs, class_probs, sigma=args.soft_nms_sigma, thresh=detection_threshold)
     elif args.nms == "nms":
-      bboxes, det_probs, class_idxs, class_probs = nms(bboxes, det_probs, class_idxs, class_probs, iou_thresh=args.nms_thresh)
+        bboxes, det_probs, class_idxs, class_probs = nms(bboxes, det_probs, class_idxs, class_probs, iou_thresh=args.nms_thresh)
 
     if verbose:
-      print(f"Found {len(det_probs)} boxes")
+        print(f"Found {len(det_probs)} boxes")
 
     target_fp = os.path.join(target_dir, f"peaks_pred_{fn}.txt")
 
@@ -535,7 +528,7 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
 
     return target_fp
 
-def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresholds=None, verbose = True):
+def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresholds=None, verbose=True):
     if detection_thresholds is None:
         detection_thresholds = [args.detection_threshold]
     fns = []
@@ -608,13 +601,11 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
     # first loop through thresholds to gather all results
     scores_by_class = {c:[] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, 'outputs')
-    comb_discard_threshes_to_sweep = np.linspace(0, 0.99, 30) if bidirectional else [0]
+    comb_discard_threshes_to_sweep = np.linspace(0, 0.99, 10) if bidirectional else [0]
     comb_iou_threshes_to_sweep = np.linspace(0.2, 0.9, 10) if bidirectional else [0]
-    #comb_iou_threshes_to_sweep = [comb_iou_thresh]
     for cdt in tqdm.tqdm(comb_discard_threshes_to_sweep):
         for cit in comb_iou_threshes_to_sweep:
             for det_thresh, test_manifest in manifests_by_thresh.items():
-                #results_dir = os.path.join(exp_dir, 'mAP', f'detthresh{det_thresh}')
                 test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=cdt, comb_iou_thresh=cit, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(pred_type,))
                 for c, s in test_metrics[pred_type]['summary'].items():
                     scores_by_class[c].append(dict(s, det_thresh=det_thresh, discard_thresh=cdt, ciou=cit))
@@ -637,7 +628,7 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
                 prec_by_rec[r] = p
         recs, precs = list(prec_by_rec.keys()), list(prec_by_rec.values())
 
-        # 11-point AP computation: https://homepages.inf.ed.ac.uk/ckiw/postscript/ijcv_voc09.pdf
+        # n-point AP computation: https://homepages.inf.ed.ac.uk/ckiw/postscript/ijcv_voc09.pdf
         recs_np = np.array(recs)
         precs_np = np.array(precs)
         auc = 0
@@ -646,15 +637,11 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
             p_interp_at_recall_level = np.amax(precs_np[recs_np>=recall_level])
             auc += p_interp_at_recall_level/len(recall_levels)
 
-        if auc==1:
-            breakpoint()
-
         ap_by_class[c] = auc
         map_results[c]['sweep'] = sweep_
         map_results[c]['precs'] = precs
         map_results[c]['recs'] = recs
 
-    # map_score = float(np.array(list(ap_by_class.values())).mean())
     map_score = []
     for c in ap_by_class:
         if c!= unknown_label:

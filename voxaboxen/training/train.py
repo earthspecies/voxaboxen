@@ -27,8 +27,8 @@ def train(model, args):
     reg_loss_fn = get_reg_loss_fn(args)
     class_loss_fn = get_class_loss_fn(args)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad = True)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=- 1, verbose=False)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad=True)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs, eta_min=0, last_epoch=-1)
 
     train_evals = []
     learning_rates = []
@@ -155,9 +155,9 @@ def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, det_loss_fn, reg_loss
 def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args):
     model.train()
     if t < args.unfreeze_encoder_epoch:
-      model.freeze_encoder()
+        model.freeze_encoder()
     else:
-      model.unfreeze_encoder()
+        model.unfreeze_encoder()
 
 
     evals = {}
@@ -211,9 +211,10 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
 
         optimizer.step()
         if (i+1)%args.display_pbar == 0:
-          data_iterator.set_description(pbar_str)
+            data_iterator.set_description(pbar_str)
 
-        if (args.is_test or args.cut_train_short) and i == 5: break
+        if (args.is_test or args.cut_train_short) and i == 5:
+            break
 
     train_loss = train_loss / num_batches_seen
     evals['loss'] = float(train_loss)
@@ -228,8 +229,7 @@ def val_epoch(model, t, dataloader, args):
     manifest = manifests[args.detection_threshold]
     e, _ = evaluate_based_on_manifest(manifest, output_dir=args.experiment_output_dir, iou=args.model_selection_iou, det_thresh=args.detection_threshold, class_threshold=args.model_selection_class_threshold, comb_discard_threshold=args.comb_discard_thresh, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
 
-    #metrics_to_print = ['precision','recall','f1', 'precision_seg', 'recall_seg', 'f1_seg']
-    metrics_to_print = ['precision','recall','f1']
+    metrics_to_print = ['precision','recall','f1', 'precision_seg', 'recall_seg', 'f1_seg']
     print(f"Epoch {t} | val@{args.model_selection_iou}IoU:")
     evals = {}
     for pt in e.keys():
@@ -246,134 +246,139 @@ def val_epoch(model, t, dataloader, args):
         print()
     return evals
 
-def modified_focal_loss(pred, gt, pos_loss_weight = 1):
-  # Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
-  '''
-      pred [batch, time,]
-      gt [batch, time,]
-  '''
+def modified_focal_loss(pred, gt, pos_loss_weight=1):
+    '''
+    Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
+        pred [batch, time,]
+        gt [batch, time,]
+    '''
 
-  pos_inds = gt.eq(1).float()
-  neg_inds = gt.lt(1).float()
+    pos_inds = gt.eq(1).float()
+    neg_inds = gt.lt(1).float()
 
-  neg_weights = torch.pow(1 - gt, 4)
+    neg_weights = torch.pow(1 - gt, 4)
 
-  loss = 0
+    loss = 0
 
-  pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds * pos_loss_weight
-  neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
+    pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds * pos_loss_weight
+    neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
 
-  loss = -1.*(neg_loss + pos_loss)
+    loss = -1.*(neg_loss + pos_loss)
 
-  loss = loss.mean()
-  return loss
+    loss = loss.mean()
+    return loss
 
 
 def masked_reg_loss(regression, r, d, y, class_weights = None):
-  # regression, r (Tensor): [batch, time,]
-  # r (Tensor) : [batch, time,], float tensor
-  # d (Tensor) : [batch, time,], float tensor
-  # y (Tensor) : [batch, time, n_classes]
-  # class_weights (Tensor) : [n_classes,]
+    """
+    regression, r (Tensor): [batch, time,]
+    r (Tensor) : [batch, time,], float tensor
+    d (Tensor) : [batch, time,], float tensor
+    y (Tensor) : [batch, time, n_classes]
+    class_weights (Tensor) : [n_classes,]
+    """
 
-  reg_loss = F.l1_loss(regression, r, reduction='none')
-  mask = d.eq(1).float()
+    reg_loss = F.l1_loss(regression, r, reduction='none')
+    mask = d.eq(1).float()
 
-  reg_loss = reg_loss * mask
+    reg_loss = reg_loss * mask
 
-  if class_weights is not None:
+    if class_weights is not None:
+        y = rearrange(y, 'b t c -> b c t')
+
+        high_prob = torch.amax(y, dim = 1)
+        knowns = high_prob.eq(1).float()
+        unknowns = high_prob.lt(1).float()
+
+        reg_loss_unknowns = reg_loss * unknowns
+
+        class_weights = torch.reshape(class_weights, (1, -1, 1))
+        class_weights = y * class_weights
+        class_weights = torch.amax(class_weights, dim = 1)
+
+        reg_loss_knowns = reg_loss * knowns * class_weights
+
+        reg_loss = reg_loss_unknowns + reg_loss_knowns
+
+    reg_loss = torch.sum(reg_loss)
+    n_pos = mask.sum()
+
+    reg_loss = reg_loss / torch.clip(n_pos,min=1)
+    #equivalent to the below without forcing torch synchronisation
+    #if n_pos>0:
+        #reg_loss2 = reg_loss2 / n_pos
+
+    return reg_loss
+
+def masked_classification_loss(class_logits, y, d, class_weights = None):
+    """
+    class_logits (Tensor): [batch, time,n_classes]
+    y (Tensor): [batch, time,n_classes]
+    d (Tensor) : [batch, time,], float tensor
+    class_weight : [n_classes,], float tensor
+    """
+
+    class_logits = rearrange(class_logits, 'b t c -> b c t')
     y = rearrange(y, 'b t c -> b c t')
 
     high_prob = torch.amax(y, dim = 1)
     knowns = high_prob.eq(1).float()
     unknowns = high_prob.lt(1).float()
 
-    reg_loss_unknowns = reg_loss * unknowns
+    mask = d.eq(1).float() # mask out time steps where no event is present
 
-    class_weights = torch.reshape(class_weights, (1, -1, 1))
-    class_weights = y * class_weights
-    class_weights = torch.amax(class_weights, dim = 1)
+    known_class_loss = F.cross_entropy(class_logits, y, weight=class_weights, reduction='none')
+    known_class_loss = known_class_loss * mask * knowns
+    known_class_loss = torch.sum(known_class_loss)
 
-    reg_loss_knowns = reg_loss * knowns * class_weights
+    unknown_class_loss = F.cross_entropy(class_logits, y, weight=None, reduction='none')
+    unknown_class_loss = unknown_class_loss * mask * unknowns
+    unknown_class_loss = torch.sum(unknown_class_loss)
 
-    reg_loss = reg_loss_unknowns + reg_loss_knowns
+    class_loss = known_class_loss + unknown_class_loss
+    n_pos = mask.sum()
 
-  reg_loss = torch.sum(reg_loss)
-  n_pos = mask.sum()
+    #class_loss2 = class_loss.clone()
+    class_loss = class_loss / torch.clip(n_pos,min=1)
+    #if n_pos>0:
+      #class_loss2 = class_loss2 / n_pos
+    #assert class_loss==class_loss
 
-  reg_loss = reg_loss / torch.clip(n_pos,min=1)
-  #reg_loss2 = reg_loss.clone()
-  #if n_pos>0:
-    #reg_loss2 = reg_loss2 / n_pos
-  #assert reg_loss == reg_loss2
-
-  return reg_loss
-
-def masked_classification_loss(class_logits, y, d, class_weights = None):
-  # class_logits (Tensor): [batch, time,n_classes]
-  # y (Tensor): [batch, time,n_classes]
-  # d (Tensor) : [batch, time,], float tensor
-  # class_weight : [n_classes,], float tensor
-
-  class_logits = rearrange(class_logits, 'b t c -> b c t')
-  y = rearrange(y, 'b t c -> b c t')
-
-  high_prob = torch.amax(y, dim = 1)
-  knowns = high_prob.eq(1).float()
-  unknowns = high_prob.lt(1).float()
-
-  mask = d.eq(1).float() # mask out time steps where no event is present
-
-  known_class_loss = F.cross_entropy(class_logits, y, weight=class_weights, reduction='none')
-  known_class_loss = known_class_loss * mask * knowns
-  known_class_loss = torch.sum(known_class_loss)
-
-  unknown_class_loss = F.cross_entropy(class_logits, y, weight=None, reduction='none')
-  unknown_class_loss = unknown_class_loss * mask * unknowns
-  unknown_class_loss = torch.sum(unknown_class_loss)
-
-  class_loss = known_class_loss + unknown_class_loss
-  n_pos = mask.sum()
-
-  #class_loss2 = class_loss.clone()
-  class_loss = class_loss / torch.clip(n_pos,min=1)
-  #if n_pos>0:
-    #class_loss2 = class_loss2 / n_pos
-  #assert class_loss==class_loss
-
-  return class_loss
+    return class_loss
 
 def segmentation_loss(class_logits, y, d, class_weights=None):
-  # class_logits (Tensor): [batch, time,n_classes]
-  # y (Tensor): [batch, time,n_classes]
-  # d (Tensor) : [batch, time,], float tensor
-  # class_weight : [n_classes,], float tensor
+    """
+    class_logits (Tensor): [batch, time,n_classes]
+    y (Tensor): [batch, time,n_classes]
+    d (Tensor) : [batch, time,], float tensor
+    class_weight : [n_classes,], float tensor
+    """
 
-  default_focal_loss = torchvision.ops.sigmoid_focal_loss(class_logits, y, reduction='mean')
-  return default_focal_loss
+    default_focal_loss = torchvision.ops.sigmoid_focal_loss(class_logits, y, reduction='mean')
+    return default_focal_loss
 
 def get_class_loss_fn(args):
     if hasattr(args,"segmentation_based") and args.segmentation_based:
-      return segmentation_loss
+        return segmentation_loss
     elif os.path.exists(cache_fp:=f'{args.experiment_dir}/cached_class_weights.pt') and not args.recompute_class_weights:
         class_weights = torch.load(cache_fp).to(device)
     else:
-      dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
-      class_proportions = dataloader_temp.dataset.get_class_proportions()
-      class_weights = 1. / (class_proportions + 1e-6)
-      class_weights = class_weights * (class_proportions>0) # ignore weights for unrepresented classes
+        dataloader_temp = get_train_dataloader(args, random_seed_shift = 0)
+        class_proportions = dataloader_temp.dataset.get_class_proportions()
+        class_weights = 1. / (class_proportions + 1e-6)
+        class_weights = class_weights * (class_proportions>0) # ignore weights for unrepresented classes
 
-      class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
-      print(f"Using class weights {class_weights}")
+        class_weights = (1. / (np.mean(class_weights) + 1e-6)) * class_weights # normalize so average weight = 1
+        print(f"Using class weights {class_weights}")
 
-      class_weights = torch.Tensor(class_weights).to(device)
+        class_weights = torch.Tensor(class_weights).to(device)
     return partial(masked_classification_loss, class_weights = class_weights)
 
 def get_reg_loss_fn(args):
     if hasattr(args,"segmentation_based") and args.segmentation_based:
-      def zrl(regression, r, d, y, class_weights = None):
-        return torch.tensor(0.)
-      return zrl
+        def zrl(regression, r, d, y, class_weights = None):
+            return torch.tensor(0.)
+        return zrl
     elif os.path.exists(cache_fp:=f'{args.experiment_dir}/cached_class_weights.pt') and not args.recompute_class_weights:
         class_weights = torch.load(cache_fp).to(device)
     else:
@@ -390,9 +395,9 @@ def get_reg_loss_fn(args):
     return partial(masked_reg_loss, class_weights = class_weights)
 
 def get_detection_loss_fn(args):
-  if hasattr(args,"segmentation_based") and args.segmentation_based:
-    def zdl(pred, gt, pos_loss_weight = 1):
-      return torch.tensor(0.)
-    return zdl
-  else:
-    return modified_focal_loss
+    if hasattr(args,"segmentation_based") and args.segmentation_based:
+        def zdl(pred, gt, pos_loss_weight = 1):
+            return torch.tensor(0.)
+        return zdl
+    else:
+        return modified_focal_loss

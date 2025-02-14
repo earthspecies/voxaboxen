@@ -48,8 +48,10 @@ class DetectronDataset(DetectionDataset):
         for _, row in selection_table.iterrows():
             start = row['Begin Time (s)']
             end = row['End Time (s)']
-            bottom = row['Low Freq (Hz)']
-            top = row['High Freq (Hz)']
+            #bottom = row['Low Freq (Hz)']
+            bottom = 50
+            #top = row['High Freq (Hz)']
+            top = 8000
             label = row['Annotation']
 
             if end<=start:

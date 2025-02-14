@@ -1,4 +1,6 @@
 import sys
+import json
+import yaml
 #sys.path.append("/home/jupyter/sound_event_detection/")
 
 import librosa
@@ -40,6 +42,7 @@ def evaluate_from_cfg(args):
 def run_evaluation(model, inference_fp, cfg, results_folder_name):
     """ Run model evaluation on files indicated in inference_fp, save metrics in path specified with results_folder_name """
 
+    os.makedirs(os.path.join(cfg.SOUND_EVENT.experiment_dir, results_folder_name), exist_ok=True)
     inference_dir = os.path.join(cfg.SOUND_EVENT.experiment_dir, 'inferences')
     if not os.path.isdir(inference_dir):
         os.makedirs(inference_dir)
@@ -50,9 +53,6 @@ def run_evaluation(model, inference_fp, cfg, results_folder_name):
 
     target_fps = []
     files_to_infer = pd.read_csv(inference_fp)#.drop('Unnamed:0')
-    #if len(files_to_infer) == 0:
-        #print(f"No sound files specified in {inference_fp}")
-        #return
     pred_fps_by_thresh = {}
     det_thresh_range = np.linspace(0.01, 0.99, 3)
     assert 0.5 in det_thresh_range
@@ -72,30 +72,11 @@ def run_evaluation(model, inference_fp, cfg, results_folder_name):
         )
 
         boxes, scores, classes, len_t = generate_predictions(model, dataloader)
-        #events, keep_indices = soft_nms(events, scores, classes, np.ones_like(classes))
-        #if events is not None:
-        #    if cfg.SOUND_EVENT.EVAL.TIME_BASED_NMS:
-        #        #boxes shape: (n_boxes, 2=(onset,offset))
-        #        events, keep_indices = nms(events, scores, iou_thresh=cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
-        #        scores = scores[keep_indices]; classes = classes[keep_indices]
-        #    else:
-        #        if cfg.SOUND_EVENT.EVAL.IGNORE_INTERCLASS_IOU:
-        #            #boxes shape: (n_boxes, 4=(xmin,ymin,xmax,ymax))
-        #            keep_indices = box_ops.batched_nms(torch.Tensor(boxes), torch.Tensor(scores), torch.Tensor(classes), iou_threshold=cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
-        #        else:
-        #            keep_indices = box_ops.nms(torch.Tensor(boxes), torch.Tensor(scores), iou_threshold=cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST)
-        #        keep_indices = sorted(keep_indices.numpy()) #Will be sorted by score, now re-sort by time
-        #        events = events[keep_indices, :]; scores = scores[keep_indices]; classes = classes[keep_indices]
 
-        #det_thresh_range = np.linspace(scores.min(), scores.max(), args.n_map)
         events, boxes, scores, classes = remove_edge_boxes(boxes, scores, classes, len_t, dataloader)
         for dt in det_thresh_range:
             dt_fn = f'{fn}-detthresh{dt}'
             target_fp = os.path.join(inference_dir, f"peaks_pred_{dt_fn}.txt")
-            #events_dt = events[scores>=dt]
-            #boxes_dt = boxes[scores>=dt]
-            #classes_dt = classes[scores>=dt]
-            #scores_dt = scores[scores>=dt]
             events_dt, keep_indices = soft_nms(events, scores, thresh=dt)
             keep_indices = sorted(keep_indices)
             classes_dt = classes[keep_indices]
@@ -120,18 +101,7 @@ def run_evaluation(model, inference_fp, cfg, results_folder_name):
     summary_results = {}
     for iou in [0.5,0.8]:
         summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] = mean_average_precision(manifests_by_thresh, cfg.SOUND_EVENT.label_mapping, exp_dir=cfg.SOUND_EVENT.experiment_dir, iou=iou)
-    ## If we have a dataset with existing manual annotations, compute metrics against these annotations
-    #if ("selection_table_fp" in files_to_infer.columns) or ("annotations_fp" in files_to_infer.columns):
-    #    #TODO why are these different than how it was originally set up?
-    #    files_to_infer["filename"] = files_to_infer["fn"]
-    #    files_to_infer['duration_sec'] = [librosa.get_duration(filename=f) for f in files_to_infer['audio_fp']]
-    #    files_to_infer["fwd_predictions_fp"] = target_fps
-    #    if "selection_table_fp" in files_to_infer.columns:
-    #        files_to_infer["annotations_fp"] = files_to_infer["selection_table_fp"]
     for iou in [0.2, 0.5, 0.8]:
-        # Currently do not have class probabilities < 1 for detectron output (see above), so these are redundant
-        #for class_threshold in [0.0, 0.5, 0.95]:
-        #for class_threshold in [0.5]:
         metrics, conf_mats = evaluate_based_on_manifest(
             manifests_by_thresh[0.5],
             #cfg.SOUND_EVENT,
@@ -145,15 +115,13 @@ def run_evaluation(model, inference_fp, cfg, results_folder_name):
         full_results[f'f1@{iou}'] = metrics
         summary_results[f'micro-f1@{iou}'] = metrics['fwd']['micro']['f1']
         summary_results[f'macro-f1@{iou}'] = metrics['fwd']['macro']['f1']
-        #print(f'IOU: {iou}')
-    print(' '.join(f'{k}: {v:.5f}' for k,v in summary_results.items()))
-        #for m in ('micro', 'macro'):
-            #print(f'\t{m.upper()}:')
-            #for k in sorted(metrics['fwd'][m]):
-                #print('\t', k, round(100*metrics['fwd'][m][k],4))
+    with open(os.path.join(cfg.SOUND_EVENT.experiment_dir, results_folder_name, f'full_results.json'), 'w') as f:
+        json.dump(full_results, f)
 
-        #print('MACRO:', {k:round(100*metrics['fwd']['macro'][k],4) for k in sorted(metrics['fwd']['macro'].keys())})
-        #print('MICRO:', {k:round(100*metrics['fwd']['micro'][k],4) for k in sorted(metrics['fwd']['micro'].keys())})
+    with open(os.path.join(cfg.SOUND_EVENT.experiment_dir, results_folder_name, f'results.yaml'), 'w') as f:
+        yaml.dump(summary_results, f)
+
+    print(' '.join(f'{k}: {v:.5f}' for k,v in summary_results.items()))
 
 def generate_predictions(model, dataloader):
     """ Run all clips stemming from a single sound file through model """
