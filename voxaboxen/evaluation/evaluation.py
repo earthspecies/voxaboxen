@@ -184,7 +184,6 @@ def generate_predictions(model, single_clip_dataloader, args, verbose=True):
           all_rev_regressions = torch.cat(all_rev_regressions)
           all_rev_classifs = torch.cat(all_rev_classifs)
 
-      ######## Todo: Need better checking that preds are the correct dur
       assert all_detections.size(dim=1) % 2 == 0
       first_quarter_window_dur_samples=all_detections.size(dim=1)//4
       last_quarter_window_dur_samples=(all_detections.size(dim=1)//2)-first_quarter_window_dur_samples
@@ -383,9 +382,6 @@ def write_tsv(out_fp, data):
 
 def select_from_neg_idxs(df, neg_idxs):
     masked = df.loc[~df.index.isin(neg_idxs)]
-    #bool_mask = [i not in neg_idxs for i in range(len(df))]
-    #masked2 = df.loc[bool_mask]
-    #assert (masked==masked2).all().all()
     return masked
 
 def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thresh, det_thresh):
@@ -405,21 +401,6 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thres
         c.compute_matching(IoU_minimum=comb_iou_thresh)
         matching = np.array(c.matching)
         np.save(match_cache_fp, matching)
-    #match_preds_list = []
-    #for fp, bp in matching:
-    #    match_pred = fwd_preds.loc[fp].copy()
-    #    bck_pred = bck_preds.iloc[bp]
-    #    # Sorta like assuming forward and back predictions are independent, gives a high prob for the matched predictions
-    #    #iou_ = (min(match_pred['End Time (s)'], bck_pred['End Time (s)']) - max(match_pred['Begin Time (s)'], bck_pred['Begin Time (s)'])) / (max(match_pred['End Time (s)'], bck_pred['End Time (s)']) - min(match_pred['Begin Time (s)'], bck_pred['Begin Time (s)']))
-    #    iou = ((match_pred['End Time (s)'] + bck_pred['End Time (s)']) - (match_pred['Begin Time (s)'] + bck_pred['Begin Time (s)'])) / (2*(max(match_pred['End Time (s)'], bck_pred['End Time (s)']) - min(match_pred['Begin Time (s)'], bck_pred['Begin Time (s)'])))
-    #    match_pred['Begin Time (s)'] = (match_pred['Begin Time (s)']+bck_pred['Begin Time (s)'])/2
-    #    match_pred['End Time (s)'] = (match_pred['End Time (s)']+bck_pred['End Time (s)'])/2
-    #    #print(iou_, iou)
-    #    match_pred['Detection Prob'] = (1 - (1-match_pred['Detection Prob'])*(1-bck_pred['Detection Prob'])) * iou
-    #    match_preds_list.append(match_pred)
-
-    #match_preds = pd.DataFrame(match_preds_list, columns=fwd_preds.columns)
-
 
     if matching.shape == (0,):
         match_preds = pd.DataFrame([], columns=fwd_preds.columns)
@@ -477,10 +458,8 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
       for c in range(np.shape(classifications)[1]):
         classifications_sub=classifications[:,c]
         
-        #
         if hasattr(args, "median_filter_width") and args.median_filter_width > 1:
             classifications_sub = medfilt(classifications_sub, args.median_filter_width)
-        #
         
         classifications_sub_binary=(classifications_sub>=detection_threshold)
         classifications_sub_binary=fill_holes(classifications_sub_binary,int(args.fill_holes_dur_sec*pred_sr))
@@ -599,7 +578,6 @@ def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresh
         manifests_by_thresh[dt] = manifest
     return manifests_by_thresh
 
-#def evaluate_based_on_manifest(manifest, output_dir, results_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, bidirectional=False):
 def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, comb_iou_thresh=0.5, bidirectional=False, pred_types=None):
     if pred_types is None:
         pred_types = ('fwd', 'bck', 'comb', 'match') if bidirectional else ('fwd',)

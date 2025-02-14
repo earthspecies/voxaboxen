@@ -30,9 +30,9 @@ def inference(inference_args):
   print(f"Loading model weights from {model_checkpoint_fp}")
   cp = torch.load(model_checkpoint_fp)
   if "model_state_dict" in cp.keys():
-      model.load_state_dict(cp["model_state_dict"])
+    model.load_state_dict(cp["model_state_dict"])
   else:
-      model.load_state_dict(cp)
+    model.load_state_dict(cp)
   model = model.to(device)
   
   for i, row in files_to_infer.iterrows():
@@ -54,17 +54,20 @@ def inference(inference_args):
       continue
 
     if inference_args.disable_bidirectional and not model.is_bidirectional:
-        print('Warning: you have passed the disable-bidirectional arg but model is not is_bidirectional')
+      print('Warning: you have passed the disable-bidirectional arg but model is not is_bidirectional')
     detections, regressions, classifs, rev_detections, rev_regressions, rev_classifs = generate_predictions(model, dataloader, args, verbose = True)
+    
     fwd_target_fp = export_to_selection_table(detections, regressions, classifs, fn, args, is_bck=False, verbose=True, target_dir=output_dir, detection_threshold=inference_args.detection_threshold, classification_threshold=inference_args.classification_threshold)
+    
     if model.is_bidirectional and not inference_args.disable_bidirectional:
-        rev_target_fp = export_to_selection_table(rev_detections, rev_regressions, rev_classifs, fn, args, is_bck=True, verbose=True, target_dir=output_dir, detection_threshold=inference_args.detection_threshold, classification_threshold=inference_args.classification_threshold)
-        comb_target_fp, match_target_fp = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=args.comb_iou_threshold, comb_discard_threshold=args.comb_discard_thresh)
-        print(f"Saving predictions for {fn} to {comb_target_fp}")
+      rev_target_fp = export_to_selection_table(rev_detections, rev_regressions, rev_classifs, fn, args, is_bck=True, verbose=True, target_dir=output_dir, detection_threshold=inference_args.detection_threshold, classification_threshold=inference_args.classification_threshold)
+      comb_target_fp, match_target_fp = combine_fwd_bck_preds(args.experiment_output_dir, fn, comb_iou_threshold=inference_args.comb_iou_threshold, comb_discard_threshold=inference_args.comb_discard_thresh, det_thresh=inference_args.detection_threshold)
+      
+      print(f"Saving predictions for {fn} to {comb_target_fp}")
 
     else:
-        print(f"Saving predictions for {fn} to {fwd_target_fp}")
+      print(f"Saving predictions for {fn} to {fwd_target_fp}")
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+  main(sys.argv[1:])
 

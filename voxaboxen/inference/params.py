@@ -11,6 +11,8 @@ def parse_inference_args(inference_args):
   parser.add_argument('--file-info-for-inference', type=str, required=True, help = "filepath of info csv listing filenames and filepaths of audio for inference")
   parser.add_argument('--detection-threshold', type=float, default=0.5, help="detection peaks need to be at or above this threshold to make it into the exported selection table")
   parser.add_argument('--classification-threshold', type=float, default=0.5, help="classification probability needs to be at or above this threshold to not be labeled as Unknown")
+  parser.add_argument('--comb-iou-threshold', type=float,default=0.5, help="iou threshold for combining fwd and bck predictions, when bidirectional==True")
+  parser.add_argument('--comb-discard-threshold', type=float, default=0.5, help="only keep combined detections above some threshold detection probability")
   parser.add_argument('--disable-bidirectional', action='store_true')
 
   inference_args = parser.parse_args(inference_args)
