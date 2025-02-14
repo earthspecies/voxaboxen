@@ -450,7 +450,7 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
       target_dir = args.experiment_output_dir
 
     if hasattr(args, "segmentation_based") and args.segmentation_based:
-      pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
+      pred_sr = args.sr // args.scale_factor
       bboxes = []
       det_probs = []
       class_idxs = []
@@ -516,7 +516,7 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
       class_idxs = np.array(class_idxs)
       class_probs = np.array(class_probs)
 
-      pred_sr = args.sr // (args.scale_factor * args.prediction_scale_factor)
+      pred_sr = args.sr // args.scale_factor
 
       bboxes, det_probs, class_idxs, class_probs = pred2bbox(detection_peaks, det_probs, durations, class_idxs, class_probs, pred_sr, is_bck)
 

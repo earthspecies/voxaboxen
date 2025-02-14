@@ -23,14 +23,12 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--clip-hop', type=float, default=None, help = "clip hop, in seconds. If None, automatically set to be half clip duration. Used only during training; clip hop is automatically set to be 1/2 clip duration for inference")
   parser.add_argument('--train-info-fp', type=str, required=False, help = "train info, to override project train info")
   parser.add_argument('--num-workers', type=int, default=8)
-  #parser.add_argument('--recompute-params', action='store_true')
 
   # Model
   parser.add_argument('--bidirectional', action='store_true', help="train and inference in both directions and combine results")
   parser.add_argument('--sr', type=int, default=16000)
   parser.add_argument('--scale-factor', type=int, default = 320, help = "downscaling performed by encoder")
   parser.add_argument('--encoder-type', type=str, default = "aves", choices = ["aves", "hubert_base", "frame_atst", "beats", "crnn"])
-  parser.add_argument('--prediction-scale-factor', type=int, default = 1, help = "downsampling rate from encoder sr to prediction sr. Deprecated.")
   parser.add_argument('--detection-threshold', type=float, default = 0.5, help = "output probability to count as positive detection")
   parser.add_argument('--rms-norm', action="store_true", help = "If true, apply rms normalization to each clip")
   parser.add_argument('--previous-checkpoint-fp', type=str, default=None, help="path to checkpoint of previously trained detection model")
@@ -38,7 +36,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--stereo', action='store_true', help="If passed, will process stereo data as stereo. order of channels matters")
   parser.add_argument('--multichannel', action='store_true', help="If passed, will encode each audio channel seperately, then add together the encoded audio before final layer")
   parser.add_argument('--segmentation-based', action='store_true', help="If passed, will make predictions based on frame-wise segmentations rather than box starts")
-  parser.add_argument('--comb-discard-thresh', type=float, default=0.75, help="If bidirectional, sets threshold for combining forward and backward predictions")
+  parser.add_argument('--comb-discard-thresh', type=float, default=0.75, help="If bidirectional, sets threshold for combining forward and backward predictions. Only used in val epochs")
 
   # Encoder-specific
   ## AVES
@@ -64,7 +62,6 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--omit-empty-clip-prob', type=float, default=0, help="if a clip has no annotations, do not use for training with this probability")
   parser.add_argument('--lamb', type=float, default=.04, help="parameter controlling strength regression loss")
   parser.add_argument('--rho', type=float, default = .01, help="parameter controlling strength of classification loss")
-  # parser.add_argument('--step-size', type=int, default=7, help="number epochs between lr decrease")
   parser.add_argument('--model-selection-iou', type=float, default=0.5, help="iou for used for computing f1 for early stopping")
   parser.add_argument('--model-selection-class-threshold', type=float, default=0.0, help="class threshold for used for computing f1 for early stopping")
 
@@ -73,9 +70,6 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--val-during-training', action="store_true", help="Whether to do val epochs during training")
 
   # Augmentations
-  parser.add_argument('--amp-aug', action ="store_true", help="Whether to use amplitude augmentation")
-  parser.add_argument('--amp-aug-low-r', type=float, default = 0.8)
-  parser.add_argument('--amp-aug-high-r', type=float, default = 1.2)
   parser.add_argument('--mixup', action ="store_true", help="Whether to use mixup augmentation")
 
   # Inference
@@ -88,7 +82,7 @@ def parse_args(args,allow_unknown=False):
   parser.add_argument('--fill-holes-dur-sec', type=float, default=0, help="if using segmentation based model, fill holes shorter than this as a post-processing step")
   parser.add_argument('--n-val-fit', type=int, default=19)
   parser.add_argument('--n-map', type=int, default=30)
-  parser.add_argument('--median-filter-width', type = int, default = 1)
+  parser.add_argument('--median-filter-width', type = int, default = 1, help="if using segmentation based model, do median filtering with this filter width)
 
   if allow_unknown:
     args, remaining = parser.parse_known_args(args)

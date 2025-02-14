@@ -41,12 +41,6 @@ class DetectionDataset(Dataset):
         self.clip_hop = args.clip_hop
         assert (self.clip_hop*args.sr).is_integer()
         self.seed = args.seed + random_seed_shift
-        self.amp_aug = args.amp_aug
-        if self.amp_aug:
-          self.amp_aug_low_r = args.amp_aug_low_r
-          self.amp_aug_high_r = args.amp_aug_high_r
-          assert (self.amp_aug_low_r >= 0) #and (self.amp_aug_high_r <= 1) and
-          assert (self.amp_aug_low_r <= self.amp_aug_high_r)
 
         self.scale_factor = args.scale_factor
         self.prediction_scale_factor = args.prediction_scale_factor
@@ -70,14 +64,6 @@ class DetectionDataset(Dataset):
         self.args=args
         # make metadata
         self.make_metadata()
-
-    def augment_amplitude(self, signal):
-        if not self.amp_aug:
-            return signal
-        else:
-            r = self.rng.uniform(self.amp_aug_low_r, self.amp_aug_high_r)
-            aug_signal = r*signal
-            return aug_signal
 
     def process_selection_table(self, selection_table_fp):
         selection_table = pd.read_csv(selection_table_fp, sep = '\t')
@@ -221,8 +207,6 @@ class DetectionDataset(Dataset):
         audio = torch.from_numpy(audio)
 
         audio = audio-torch.mean(audio, -1, keepdim=True)
-        if self.amp_aug and self.train:
-            audio = self.augment_amplitude(audio)
         if file_sr != self.sr:
             audio = torchaudio.functional.resample(audio, file_sr, self.sr)
 

@@ -121,8 +121,6 @@ class DetectronDataset(DetectionDataset):
         fn, audio_fp, start, end = self.metadata[index]
         audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=True)
         audio = audio-np.mean(audio)
-        if self.amp_aug and self.train:
-            audio = self.augment_amplitude(audio)
         audio = torch.from_numpy(audio)
         if file_sr != self.sr:
           audio = torchaudio.functional.resample(audio, file_sr, self.sr)

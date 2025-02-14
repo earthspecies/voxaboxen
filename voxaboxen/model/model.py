@@ -88,7 +88,7 @@ class DetectionHead(nn.Module):
   def __init__(self, args, embedding_dim=None):
       super().__init__()
       self.n_classes = len(args.label_set)
-      self.head = nn.Conv1d(embedding_dim, 2+self.n_classes, args.prediction_scale_factor, stride=args.prediction_scale_factor, padding=0)
+      self.head = nn.Conv1d(embedding_dim, 2+self.n_classes, 1, stride=1, padding=0)
       self.args=args
 
   def forward(self, x):
