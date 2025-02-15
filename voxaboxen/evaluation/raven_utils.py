@@ -200,5 +200,5 @@ class Clip():
                 n_missed_detections = n_annot - n_positive_detections_col
                 confusion_matrix[cm_nobox_idx, cm_label_idx] = n_missed_detections
 
-      return confusion_matrix, confusion_matrix_labels
+        return confusion_matrix, confusion_matrix_labels
 

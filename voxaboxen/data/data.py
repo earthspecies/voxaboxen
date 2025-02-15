@@ -16,24 +16,24 @@ def normalize_sig_np(sig, eps=1e-8):
     return sig
 
 def crop_and_pad(wav, sr, dur_sec):
-  # crops and pads waveform to be the expected number of samples; used after resampling to ensure proper size
-  target_dur_samples = int(sr * dur_sec)
-  wav = wav[..., :target_dur_samples]
+    """Crop and pad waveform to be the expected number of samples; used after resampling to ensure proper size."""
+    target_dur_samples = int(sr * dur_sec)
+    wav = wav[..., :target_dur_samples]
 
-  pad = target_dur_samples - wav.size(-1)
-  if pad > 0:
-    wav = F.pad(wav, (0,pad)) #padding starts from last dims
+    pad = target_dur_samples - wav.size(-1)
+    if pad > 0:
+        wav = F.pad(wav, (0,pad)) #padding starts from last dims
 
-  return wav
+    return wav
 
 class DetectionDataset(Dataset):
     def __init__(self, info_df, train, args, random_seed_shift = 0):
         self.info_df = info_df
         self.label_set = args.label_set
         if hasattr(args, 'unknown_label'):
-          self.unknown_label = args.unknown_label
+            self.unknown_label = args.unknown_label
         else:
-          self.unknown_label = None
+            self.unknown_label = None
         self.label_mapping = args.label_mapping
         self.n_classes = len(self.label_set)
         self.sr = args.sr
@@ -43,23 +43,23 @@ class DetectionDataset(Dataset):
         self.seed = args.seed + random_seed_shift
 
         self.scale_factor = args.scale_factor
-        self.prediction_scale_factor = args.prediction_scale_factor
-        self.scale_factor_raw_to_prediction = self.scale_factor*self.prediction_scale_factor
+        #self.prediction_scale_factor = args.prediction_scale_factor
+        #self.scale_factor_raw_to_prediction = self.scale_factor*self.prediction_scale_factor
         self.rng = default_rng(seed=self.seed)
         self.train=train
         if hasattr(args, 'stereo') and args.stereo:
-          self.mono = False
+            self.mono = False
         elif hasattr(args, 'multichannel') and args.multichannel:
-          self.mono = False
+            self.mono = False
         else:
-          self.mono = True
+            self.mono = True
 
         if self.train:
-          self.omit_empty_clip_prob = args.omit_empty_clip_prob
-          self.clip_start_offset = self.rng.integers(0, np.floor(self.clip_hop*self.sr)) / self.sr
+            self.omit_empty_clip_prob = args.omit_empty_clip_prob
+            self.clip_start_offset = self.rng.integers(0, np.floor(self.clip_hop*self.sr)) / self.sr
         else:
-          self.omit_empty_clip_prob = 0
-          self.clip_start_offset = 0
+            self.omit_empty_clip_prob = 0
+            self.clip_start_offset = 0
 
         self.args=args
         # make metadata
@@ -75,17 +75,17 @@ class DetectionDataset(Dataset):
             label = row['Annotation']
 
             if end<=start:
-              continue
+                continue
 
             if label in self.label_mapping:
-              label = self.label_mapping[label]
+                label = self.label_mapping[label]
             else:
-              continue
+                continue
 
             if label == self.unknown_label:
-              label_idx = -1
+                label_idx = -1
             else:
-              label_idx = self.label_set.index(label)
+                label_idx = self.label_set.index(label)
             tree.addi(start, end, label_idx)
 
         return tree
@@ -133,13 +133,13 @@ class DetectionDataset(Dataset):
         counts = np.zeros((self.n_classes,))
 
         for k in self.selection_table_dict:
-          st = self.selection_table_dict[k]
-          for interval in st:
-            annot = interval.data
-            if annot == -1:
-              continue
-            else:
-              counts[annot] += 1
+            st = self.selection_table_dict[k]
+            for interval in st:
+                annot = interval.data
+                if annot == -1:
+                    continue
+                else:
+                    counts[annot] += 1
 
         total_count = np.sum(counts)
         proportions = counts / total_count
@@ -148,8 +148,10 @@ class DetectionDataset(Dataset):
 
     def get_annotation(self, pos_intervals, audio):
         raw_seq_len = audio.shape[-1]
-        seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
-        anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
+        #seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
+        seq_len = int(math.ceil(raw_seq_len / self.scale_factor))
+        #anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
+        anno_sr = int(self.sr // self.scale_factor)
 
         regression_annos = np.zeros((seq_len,))
         class_annos = np.zeros((seq_len, self.n_classes))
@@ -179,18 +181,18 @@ class DetectionDataset(Dataset):
             rev_regression_annos[end_idx] = dur
 
             if hasattr(self.args,"segmentation_based") and self.args.segmentation_based:
-              if class_idx == -1:
-                pass
-              else:
-                class_annos[start_idx:start_idx+dur_samples,class_idx]=1.
+                if class_idx == -1:
+                    pass
+                else:
+                    class_annos[start_idx:start_idx+dur_samples,class_idx]=1.
 
             else:
-              if class_idx != -1:
-                class_annos[start_idx, class_idx] = 1.
-                rev_class_annos[end_idx, class_idx] = 1.
-              else:
-                class_annos[start_idx, :] = 1./self.n_classes # if unknown, enforce uncertainty
-                rev_class_annos[end_idx, :] = 1./self.n_classes # if unknown, enforce uncertainty
+                if class_idx != -1:
+                    class_annos[start_idx, class_idx] = 1.
+                    rev_class_annos[end_idx, class_idx] = 1.
+                else:
+                    class_annos[start_idx, :] = 1./self.n_classes # if unknown, enforce uncertainty
+                    rev_class_annos[end_idx, :] = 1./self.n_classes # if unknown, enforce uncertainty
 
 
         anchor_annos = np.stack(anchor_annos)
@@ -222,18 +224,18 @@ class DetectionDataset(Dataset):
 
 
 def get_train_dataloader(args, random_seed_shift = 0):
-  train_info_fp = args.train_info_fp
-  train_info_df = pd.read_csv(train_info_fp)
+    train_info_fp = args.train_info_fp
+    train_info_df = pd.read_csv(train_info_fp)
 
-  train_dataset = DetectionDataset(train_info_df, True, args, random_seed_shift = random_seed_shift)
-  train_dataloader = DataLoader(train_dataset,
-                                batch_size=args.batch_size,
-                                shuffle=True,
-                                num_workers=args.num_workers,
-                                pin_memory=True,
-                                drop_last = True)
+    train_dataset = DetectionDataset(train_info_df, True, args, random_seed_shift = random_seed_shift)
+    train_dataloader = DataLoader(train_dataset,
+                                  batch_size=args.batch_size,
+                                  shuffle=True,
+                                  num_workers=args.num_workers,
+                                  pin_memory=True,
+                                  drop_last = True)
 
-  return train_dataloader
+    return train_dataloader
 
 
 class SingleClipDataset(Dataset):
@@ -248,11 +250,11 @@ class SingleClipDataset(Dataset):
         self.annot_fp = annot_fp # attribute that is accessed elsewhere
         self.sr = args.sr
         if hasattr(args, 'stereo') and args.stereo:
-          self.mono = False
+            self.mono = False
         elif hasattr(args, 'multichannel') and args.multichannel:
-          self.mono = False
+            self.mono = False
         else:
-          self.mono = True
+            self.mono = True
 
     def __len__(self):
         return self.num_clips
@@ -267,7 +269,7 @@ class SingleClipDataset(Dataset):
 
         audio = audio-torch.mean(audio, -1, keepdim=True)
         if file_sr != self.sr:
-          audio = torchaudio.functional.resample(audio, file_sr, self.sr)
+            audio = torchaudio.functional.resample(audio, file_sr, self.sr)
 
         audio = crop_and_pad(audio, self.sr, self.clip_duration)
 
@@ -275,49 +277,49 @@ class SingleClipDataset(Dataset):
 
 def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):
     return DataLoader(
-      SingleClipDataset(audio_fp, clip_hop, args, annot_fp = annot_fp),
-      batch_size = args.batch_size,
-      shuffle=False,
-      num_workers=args.num_workers,
-      pin_memory=True,
-      drop_last=False,
+        SingleClipDataset(audio_fp, clip_hop, args, annot_fp = annot_fp),
+        batch_size = args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        drop_last=False,
     )
 
 def get_val_dataloader(args):
-  val_info_fp = args.val_info_fp
-  val_info_df = pd.read_csv(val_info_fp)
+    val_info_fp = args.val_info_fp
+    val_info_df = pd.read_csv(val_info_fp)
 
-  val_dataloaders = {}
+    val_dataloaders = {}
 
-  for i in range(len(val_info_df)):
-    fn = val_info_df.iloc[i]['fn']
-    audio_fp = val_info_df.iloc[i]['audio_fp']
-    annot_fp = val_info_df.iloc[i]['selection_table_fp']
-    val_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
+    for i in range(len(val_info_df)):
+        fn = val_info_df.iloc[i]['fn']
+        audio_fp = val_info_df.iloc[i]['audio_fp']
+        annot_fp = val_info_df.iloc[i]['selection_table_fp']
+        val_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
 
-  return val_dataloaders
+    return val_dataloaders
 
 def get_test_dataloader(args):
-  test_info_fp = args.test_info_fp
-  test_info_df = pd.read_csv(test_info_fp)
+    test_info_fp = args.test_info_fp
+    test_info_df = pd.read_csv(test_info_fp)
 
-  test_dataloaders = {}
+    test_dataloaders = {}
 
-  for i in range(len(test_info_df)):
-    fn = test_info_df.iloc[i]['fn']
-    audio_fp = test_info_df.iloc[i]['audio_fp']
-    annot_fp = test_info_df.iloc[i]['selection_table_fp']
-    test_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
+    for i in range(len(test_info_df)):
+        fn = test_info_df.iloc[i]['fn']
+        audio_fp = test_info_df.iloc[i]['audio_fp']
+        annot_fp = test_info_df.iloc[i]['selection_table_fp']
+        test_dataloaders[fn] = get_single_clip_data(audio_fp, args.clip_duration/2, args, annot_fp = annot_fp)
 
-  return test_dataloaders
+    return test_dataloaders
 
 def get_anchor_anno(start_idx, dur_samples, seq_len):
-  # start times plus gaussian blur
-  # std setting follows CornerNet, where adaptive standard deviation is set to 1/3 image radius
-  std = dur_samples / 6
-  x = (np.arange(seq_len) - start_idx) ** 2
-  x = x / (2 * std**2)
-  x = np.exp(-x)
-  return x
+    # start times plus gaussian blur
+    # std setting follows CornerNet, where adaptive standard deviation is set to 1/3 image radius
+    std = dur_samples / 6
+    x = (np.arange(seq_len) - start_idx) ** 2
+    x = x / (2 * std**2)
+    x = np.exp(-x)
+    return x
 
 

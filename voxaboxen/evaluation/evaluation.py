@@ -597,12 +597,16 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
 
     return metrics, conf_mat_summaries
 
-def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', unknown_label='Unknown', bidirectional=False, comb_iou_thresh=0):
+def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', unknown_label='Unknown', bidirectional=False, comb_iou_thresh=0, is_test=False):
     # first loop through thresholds to gather all results
     scores_by_class = {c:[] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, 'outputs')
-    comb_discard_threshes_to_sweep = np.linspace(0, 0.99, 10) if bidirectional else [0]
-    comb_iou_threshes_to_sweep = np.linspace(0.2, 0.9, 10) if bidirectional else [0]
+    if bidirectional:
+        comb_discard_threshes_to_sweep = [0.5] if is_test else np.linspace(0, 0.99, 10)
+        comb_iou_threshes_to_sweep = [0.5] if is_test else np.linspace(0.2, 0.9, 10)
+    else:
+        comb_discard_threshes_to_sweep = [0]
+        comb_iou_threshes_to_sweep = [0]
     for cdt in tqdm.tqdm(comb_discard_threshes_to_sweep):
         for cit in comb_iou_threshes_to_sweep:
             for det_thresh, test_manifest in manifests_by_thresh.items():

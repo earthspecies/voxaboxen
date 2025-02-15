@@ -98,7 +98,9 @@ def train_model(args):
             summary_results[f'macro-f1@{iou}'] = test_metrics[best_pred_type]['macro']['f1']
 
         print(f'Time to compute f1s: {time()-eval_starttime:.3f}s')
-        if args.bidirectional:
+        if args.is_test:
+            det_thresh_range = [0.5]
+        elif args.bidirectional:
             det_thresh_range = np.concatenate([np.linspace(0.001, 0.2, args.n_map//3), np.linspace(0.21, 0.7, args.n_map//3)]) # to make sure the lower range is covered, sweep fewer overall cus sweep other threshes too
         else:
             det_thresh_range = np.linspace(0.01, 0.99, args.n_map)
@@ -108,7 +110,7 @@ def train_model(args):
         for iou in [0.5, 0.8]:
             if split=='val' and iou==0.8:
                 continue
-            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=experiment_dir, iou=iou, pred_type=best_pred_type, bidirectional=args.bidirectional, comb_iou_thresh=best_comb_iou)
+            summary_results[f'mean_ap@{iou}'], full_results[f'mAP@{iou}'], full_results[f'ap_by_class@{iou}'] =  mean_average_precision(manifests_by_thresh=manifests_by_thresh, label_mapping=args.label_mapping, exp_dir=experiment_dir, iou=iou, pred_type=best_pred_type, bidirectional=args.bidirectional, comb_iou_thresh=best_comb_iou, is_test=args.is_test)
 
         with open(os.path.join(args.experiment_dir, f'{split}_full_results.json'), 'w') as f:
             json.dump(full_results, f)

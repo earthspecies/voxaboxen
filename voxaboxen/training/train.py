@@ -213,7 +213,7 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
         if (i+1)%args.display_pbar == 0:
             data_iterator.set_description(pbar_str)
 
-        if (args.is_test or args.cut_train_short) and i == 5:
+        if args.is_test and i == 5:
             break
 
     train_loss = train_loss / num_batches_seen
