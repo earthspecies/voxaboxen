@@ -13,7 +13,6 @@ def parse_args(args,allow_unknown=False):
     parser.add_argument('--name', type = str, required=True)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--is-test', '-t', action='store_true', help='run a quick version for testing')
-    parser.add_argument('--cut-train-short', action='store_true')
     parser.add_argument('--recompute-class-weights', action='store_true')
     parser.add_argument('--exists-strategy', type=str, default='none', choices=['none', 'overwrite', 'resume'])
 
