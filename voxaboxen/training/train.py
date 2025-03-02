@@ -71,7 +71,10 @@ def train(model, args):
       scheduler.step()
 
       if use_val and args.early_stopping:
-        current_f1 = eval_scores['comb']['f1'] if model.is_bidirectional else eval_scores['fwd']['f1']
+        if hasattr(args, "segmentation_based") and args.segmentation_based:
+          current_f1 = eval_scores['fwd']['f1_seg']
+        else:
+          current_f1 = eval_scores['comb']['f1'] if model.is_bidirectional else eval_scores['fwd']['f1']
         if current_f1 > best_f1:
           print('found new best model')
           best_f1 = current_f1
