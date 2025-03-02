@@ -531,7 +531,7 @@ def predict_and_generate_manifest(model, dataloader_dict, args, verbose = True):
   manifest = pd.DataFrame({'filename' : fns, 'fwd_predictions_fp' : fwd_predictions_fps, 'bck_predictions_fp' : bck_predictions_fps, 'annotations_fp' : annotations_fps, 'duration_sec' : durations})
   return manifest
 
-def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold, comb_discard_threshold):
+def evaluate_based_on_manifest(manifest, args, output_dir, iou, class_threshold, comb_discard_threshold=0.5):
   pred_types = ('fwd', 'bck', 'comb', 'match') if args.bidirectional else ('fwd',)
   metrics = {p:{} for p in pred_types}
   conf_mats = {p:{} for p in pred_types}
