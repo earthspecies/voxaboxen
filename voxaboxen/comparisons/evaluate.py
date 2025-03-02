@@ -48,6 +48,7 @@ def run_evaluation(model, inference_fp, cfg, results_folder_name):
         model.cuda()
 
     target_fps = []
+    durations = []
     files_to_infer = pd.read_csv(inference_fp)
     if len(files_to_infer) == 0:
         print(f"No sound files specified in {inference_fp}")
@@ -65,6 +66,13 @@ def run_evaluation(model, inference_fp, cfg, results_folder_name):
             pin_memory=True,
             drop_last=False,
         )
+
+        # Calculate duration based on clip parameters
+        num_clips = len(dataloader.dataset)
+        clip_duration = dataset.clip_duration
+        clip_hop = dataset.clip_hop
+        duration_sec = (num_clips - 1) * clip_hop + clip_duration
+        durations.append(duration_sec)
 
         boxes, scores, classes, len_t = generate_predictions(model, dataloader)
         #TODO (low priority) clean up by accounting for whether to keep arrays as numpy or torch?
@@ -89,13 +97,15 @@ def run_evaluation(model, inference_fp, cfg, results_folder_name):
         write_tsv(target_fp, st)
         print(f"Saving predictions for {fn} to {target_fp}")
         target_fps.append(target_fp)
-    
+
+    files_to_infer["duration_sec"] = durations
+
     ## If we have a dataset with existing manual annotations, compute metrics against these annotations
     if ("selection_table_fp" in files_to_infer.columns) or ("annotations_fp" in files_to_infer.columns):
         print("Calculating metrics against manual annotations.")
         #TODO why are these different than how it was originally set up?
         files_to_infer["filename"] = files_to_infer["fn"]
-        files_to_infer["predictions_fp"] = target_fps
+        files_to_infer["fwd_predictions_fp"] = target_fps
         if "selection_table_fp" in files_to_infer.columns:
             files_to_infer["annotations_fp"] = files_to_infer["selection_table_fp"]
         for iou in [0.2, 0.5, 0.8]:
