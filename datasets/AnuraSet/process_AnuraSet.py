@@ -31,7 +31,7 @@ def main():
     cwd = os.getcwd()
 
     raw_data_dir = os.path.join(cwd, 'raw_data')
-    labels_dir = os.path.join(cwd, 'power_labels')
+    labels_dir = os.path.join(cwd, 'strong_labels')
 
     formatted_data_dir = os.path.join(cwd, 'formatted')
     formatted_annot_dir = os.path.join(formatted_data_dir, 'selection_tables')
