@@ -248,6 +248,8 @@ def delete_short(m, min_pos):
     starts = m[1:] * ~m[:-1]
 
     starts = np.where(starts)[0] + 1
+    if m[0]:
+        starts = np.concatenate(([0], starts))
 
     clips = []
 
@@ -291,6 +293,8 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
       
       starts = classifications_sub_binary[1:] * ~classifications_sub_binary[:-1]
       starts = np.where(starts)[0] + 1
+      if classifications_sub_binary[0]:
+          starts = np.append(np.array([0]), starts)
       
       for start in starts:
           look_forward = classifications_sub_binary[start:]
