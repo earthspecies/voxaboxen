@@ -10,7 +10,7 @@ from voxaboxen.evaluation.raven_utils import Clip
 from voxaboxen.model.model import rms_and_mixup
 from voxaboxen.evaluation.nms import nms, soft_nms
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+#device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def f1_from_counts(tp, fp, fn):
     prec = 1 if tp==0 else tp/(tp+fp)
@@ -130,7 +130,8 @@ def summarize_metrics(metrics):
 def generate_predictions(model, single_clip_dataloader, args, verbose=True):
     assert single_clip_dataloader.dataset.clip_hop == args.clip_duration/2, "For inference, clip hop is assumed to be equal to half clip duration"
 
-    model = model.to(device)
+    #model = model.to(device)
+    device = next(iter(model.parameters())).device
     model.eval()
 
     all_detections = []
@@ -295,7 +296,8 @@ def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs, unkn
     return out
 
 def generate_features(model, single_clip_dataloader, args, verbose=True):
-    model = model.to(device)
+    device = next(iter(model.parameters())).device
+    #model = model.to(device)
     model.eval()
 
     all_features = []
@@ -390,7 +392,8 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thres
     c = Clip()
     c.load_annotations(fwd_preds_fp)
     c.load_predictions(bck_preds_fp)
-    if os.path.exists(match_cache_fp:=f'{target_dir}/tmp-cache/match_cache_{fn}-detthresh{det_thresh}-cit{comb_iou_thresh}.npy'):
+    os.makedirs(f'{target_dir}/tmp-cache', exist_ok=True)
+    if os.path.exists(match_cache_fp:=f'{target_dir}/tmp-cache/match_cache_{fn}-detthresh{det_thresh}-cit{comb_iou_thresh}.npy') and False:
         matching = np.load(match_cache_fp)
     else:
         c.compute_matching(IoU_minimum=comb_iou_thresh)

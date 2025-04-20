@@ -15,6 +15,7 @@ def parse_args(args,allow_unknown=False):
     parser.add_argument('--is-test', '-t', action='store_true', help='run a quick version for testing')
     parser.add_argument('--recompute-class-weights', action='store_true')
     parser.add_argument('--exists-strategy', type=str, default='none', choices=['none', 'overwrite', 'resume'])
+    parser.add_argument('--cpu', action="store_true", help="run training and inference on cpu")
 
     # Data
     parser.add_argument('--project-config-fp', type = str, required=True)
@@ -100,6 +101,7 @@ def parse_args(args,allow_unknown=False):
     if args.clip_hop is None:
         setattr(args, "clip_hop", args.clip_duration/2)
 
+    args.device = "cuda" if torch.cuda.is_available() and not args.cpu else "cpu"
     if allow_unknown:
         return args, remaining
     else:
