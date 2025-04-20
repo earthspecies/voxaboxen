@@ -16,8 +16,25 @@ def stats_from_section(df):
     nboxes = df.shape[0]
     onsets, ends = df['Begin Time (s)'].to_numpy(), df['End Time (s)'].to_numpy()
     boxlens = ends - onsets
-    noverlaps = np.triu(np.expand_dims(ends[:-1], 1) > onsets[1:]).sum()
+    if ARGS.multiovlps:
+        # drop df.Annotation NaN column
+        time_overlap = np.triu(np.expand_dims(ends[:-1], 1) > onsets[1:])
+        if 'Annotation' in df.columns and ARGS.same_class_only:
+            same_class = np.expand_dims(df['Annotation'][:-1].values,1) == df['Annotation'][1:].values
+            noverlaps = np.logical_and(same_class, time_overlap).sum()
+        else:
+            noverlaps = time_overlap.sum()
+    else:
+        time_overlap = ends[:-1] > onsets[1:]
+        if 'Annotation' in df.columns and ARGS.same_class_only:
+            same_class = df['Annotation'][:-1].values == df['Annotation'][1:].values
+            noverlaps = np.logical_and(time_overlap, same_class).sum()
+        else:
+            noverlaps = time_overlap.sum()
     if (boxlens==0).any():
+        breakpoint()
+    print(f'nboxes: {nboxes}    noverlaps: {noverlaps}')
+    if (ends[:-1] > onsets[1:]).sum()/nboxes > 0.75:
         breakpoint()
     return nboxes, noverlaps, boxlens
 
@@ -35,6 +52,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dset_name', '-d', type=str, default='OZF')
     parser.add_argument('--show-plots', action='store_true')
+    parser.add_argument('--multiovlps', action='store_true')
+    parser.add_argument('--same-class-only', action='store_true')
     ARGS = parser.parse_args()
 
     filewise_nboxes = []
@@ -59,6 +78,8 @@ if __name__ == '__main__':
         if ARGS.dset_name=='hawaii' and 'Recording' in fp:
             continue
         df = pd.read_csv(fp, sep='\t')
+        if 'Annotation' in df.columns and df.Annotation.isna().all():
+            df = df.drop('Annotation', axis=1)
         if 'View' in df.columns:
             df = df.loc[df['View']=='Spectrogram 1']
         nbxs, nols, bxls = stats_from_section(df)
