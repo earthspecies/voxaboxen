@@ -29,7 +29,6 @@ df = df[[('cuda', 'nobid'), ('cuda', 'bid'), ('cpu', 'nobid'), ('cpu', 'bid')]]
 for x,y in df.columns:
     df[(x, y+'-rtf')] = df[(x,y)] / testset_durs
 print(df)
-breakpoint()
 
 latex = df.to_latex('inference_times.tex',
     float_format="%.3f",
