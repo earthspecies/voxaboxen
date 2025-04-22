@@ -13,13 +13,45 @@ from voxaboxen.evaluation.nms import nms, soft_nms
 #device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def f1_from_counts(tp, fp, fn):
+    """
+    Calculate precision, recall and F1 score from true positives, false positives and false negatives.
+
+    Parameters
+    ----------
+    tp : int
+        Number of true positives
+    fp : int
+        Number of false positives
+    fn : int
+        Number of false negatives
+
+    Returns
+    -------
+    dict
+        Dictionary containing precision, recall and F1 score
+    """
+
     prec = 1 if tp==0 else tp/(tp+fp)
     rec = 0 if tp==0 else tp/(tp+fn)
     f1 = 0 if prec+rec==0 else 2*prec*rec / (prec+rec)
     return {'prec': prec, 'rec':rec, 'f1':f1}
 
-def macro_micro_metrics(summary, unknown_label="Unknown"):
-    """summary (dict) : {class_label: {'f1' : float, 'precision' : float, 'recall' : float, 'f1_seg' : float, 'precision_seg' : float, 'recall_seg' : float, 'TP': int, 'FP' : int, 'FN' : int, TP_seg': int, 'FP_seg' : int, 'FN_seg' : int}}"""
+def macro_micro_f1_metrics(summary, unknown_label="Unknown"):
+    """
+    Calculate macro and micro averaged  from per-class summary statistics.
+
+    Parameters
+    ----------
+    summary : dict
+        Dictionary of the sort output by summarize_metrics(), containing per-class metrics and counts
+    unknown_label : str, optional
+        Label to exclude from macro averaging, by default "Unknown"
+
+    Returns
+    -------
+    tuple
+        Tuple containing (macro_metrics, micro_metrics) dictionaries
+    """
 
     metrics = ['f1', 'precision', 'recall', 'f1_seg', 'precision_seg', 'recall_seg']
     macro = {}
@@ -48,6 +80,36 @@ def macro_micro_metrics(summary, unknown_label="Unknown"):
     return macro, micro
 
 def get_metrics(predictions_fp, annotations_fp, iou, class_threshold, duration, label_mapping, unknown_label):
+    """
+    Compare the predicted boxes in `prediction_fp` to the true boxes as given in
+    annotations_fp, and use graph matching to compute TP, FP and FN counts by
+    class.
+
+    Parameters
+    ----------
+    predictions_fp : str
+        Filepath to predictions file
+    annotations_fp : str
+        Filepath to annotations file
+    iou : float
+        Intersection-over-Union threshold for matching
+    class_threshold : float
+        Confidence threshold for class predictions
+    duration : float
+        Duration of audio clip in seconds
+    label_mapping : dict
+        Mapping between annotation labels and model classes
+    unknown_label : str
+        Label to use for unknown classes
+
+    Returns
+    -------
+    dict
+        Nested dictionary, outer-keys are class names, inner-keys are TP, FP,
+        FN, TP_seg, FP_seg, FN_seg, the latter three referring to the counts
+        from segmentation-based matching.
+    """
+
     label_set = list(label_mapping.keys())
     c = Clip(label_set=label_set, unknown_label=unknown_label)
     c.duration = duration
@@ -57,23 +119,67 @@ def get_metrics(predictions_fp, annotations_fp, iou, class_threshold, duration, 
     c.load_annotations(annotations_fp, label_mapping = label_mapping)
 
     c.compute_matching(IoU_minimum = iou)
-    metrics = c.evaluate()
+    tfpn_counts_by_class = c.evaluate()
 
-    return metrics
+    return tfpn_counts_by_class
 
-def summarize_metrics(metrics):
-    """ metrics (dict) : {fp : fp_metrics},  where
-    # fp_metrics (dict) : {class_label: {'TP': int, 'FP' : int, 'FN' : int, 'TP_seg' : int, 'FP_seg' : int, 'FN_seg' : int}}
+def summarize_metrics(tpfn_counts):
+    """
+    Aggregate true/false positive/negative counts across files and compute precision, recall, and F1 scores.
+
+    Parameters
+    ----------
+    tpfn_counts : dict
+        Dictionary containing per-file metrics counts with structure:
+        {
+            filepath1: {
+                class_label1: {
+                    'TP': int,      # True positives for detection
+                    'FP': int,      # False positives for detection
+                    'FN': int,      # False negatives for detection
+                    'TP_seg': int,  # True positives by segmentation-base evaluation
+                    'FP_seg': int,  # False positives by segmentation-base evaluation
+                    'FN_seg': int   # False negatives by segmentation-base evaluation
+                },
+                class_label2: {...},
+                ...
+            },
+            filepath2: {...},
+            ...
+        }
+
+    Returns
+    -------
+    dict
+        Dictionary containing aggregated metrics per class with structure:
+        {
+            class_label1: {
+                'TP': int,             # Sum of true positives
+                'FP': int,             # Sum of false positives
+                'FN': int,             # Sum of false negatives
+                'TP_seg': int,         # Sum of segmentation-based true positives
+                'FP_seg': int,         # Sum of segmentation-based false positives
+                'FN_seg': int,         # Sum of segmentation-based false negatives
+                'precision': float,     # Detection precision (TP/(TP+FP))
+                'precision_seg': float, # Precision
+                'recall': float,       # Detection recall (TP/(TP+FN))
+                'recall_seg': float,    # Segmentation-based recall
+                'f1': float,           # Detection F1 score
+                'f1_seg': float        # Segmentation-based F1 score
+            },
+            class_label2: {...},
+            ...
+        }
     """
 
-    fps = sorted(metrics.keys())
-    class_labels = sorted(metrics[fps[0]].keys())
+    fps = sorted(tpfn_counts.keys())
+    class_labels = sorted(tpfn_counts[fps[0]].keys())
 
     overall = { l: {'TP' : 0, 'FP' : 0, 'FN' : 0, 'TP_seg' : 0, 'FP_seg' : 0, 'FN_seg' : 0} for l in class_labels}
 
     for fp in fps:
         for l in class_labels:
-            counts = metrics[fp][l]
+            counts = tpfn_counts[fp][l]
             overall[l]['TP'] += counts['TP']
             overall[l]['FP'] += counts['FP']
             overall[l]['FN'] += counts['FN']
@@ -128,9 +234,28 @@ def summarize_metrics(metrics):
     return overall
 
 def generate_predictions(model, single_clip_dataloader, args, verbose=True):
+    """
+    Generate predictions for a single audio clip using the model.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Model to use for prediction
+    single_clip_dataloader : torch.utils.data.DataLoader
+        DataLoader for a single audio clip
+    args : argparse.Namespace
+        Configuration arguments
+    verbose : bool, optional
+        Whether to show progress bar, by default True
+
+    Returns
+    -------
+    tuple
+        Tuple containing forward and backward predictions (detections, regressions, classifications)
+    """
+
     assert single_clip_dataloader.dataset.clip_hop == args.clip_duration/2, "For inference, clip hop is assumed to be equal to half clip duration"
 
-    #model = model.to(device)
     device = next(iter(model.parameters())).device
     model.eval()
 
@@ -218,14 +343,32 @@ def generate_predictions(model, single_clip_dataloader, args, verbose=True):
         return assembled_dets, assembled_regs, assembled_classifs, assembled_rev_dets, assembled_rev_regs, assembled_rev_classifs
 
 def pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_probs, pred_sr, is_rev):
-    '''
-    detection_peaks, detection_probs, durations, class_idxs, class_probs :
-        shape=(num_frames,)
+    """
+    Convert detection peaks and durations to bounding box format.
 
-    pred_sr:
-        prediction sampling rate in Hz
+    Parameters
+    ----------
+    detection_peaks : array-like
+        Array of detected peak positions
+    detection_probs : array-like
+        Array of detection probabilities
+    durations : array-like
+        Array of predicted durations
+    class_idxs : array-like
+        Array of predicted class indices
+    class_probs : array-like
+        Array of class probabilities
+    pred_sr : int
+        Prediction sampling rate in Hz
+    is_rev : bool
+        Whether predictions are from backward pass
 
-    '''
+    Returns
+    -------
+    tuple
+        Tuple containing (bboxes, detection_probs, class_idxs, class_probs)
+    """
+
     detection_peaks = detection_peaks / pred_sr
     bboxes = []
     detection_probs_sub = []
@@ -253,29 +396,30 @@ def pred2bbox(detection_peaks, detection_probs, durations, class_idxs, class_pro
     return np.array(bboxes), np.array(detection_probs_sub), np.array(class_idxs_sub), np.array(class_probs_sub)
 
 def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs, unknown_label):
-    '''
-    output bounding boxes to a selection table
+    """
+    Convert bounding boxes to Raven selection table format.
 
-    out_fp:
-        output file path
+    Parameters
+    ----------
+    bboxes : array-like
+        Array of bounding boxes [start, end]
+    class_idxs : array-like
+        Array of class indices
+    label_set : list
+        List of class labels
+    detection_probs : array-like
+        Array of detection probabilities
+    class_probs : array-like
+        Array of class probabilities
+    unknown_label : str
+        Label to use for unknown classes
 
-    bboxes: numpy array
-        shape=(num_bboxes, 2)
+    Returns
+    -------
+    list
+        List of rows for Raven selection table
+    """
 
-    class_idxs: numpy array
-        shape=(num_bboxes,)
-
-    label_set: list
-
-    detection_probs: numpy array
-        shape =(num_bboxes,)
-
-    class_probs: numpy array
-        shape = (num_bboxes,)
-
-    unknown_label: str
-
-    '''
     if bboxes is None:
       return [['Begin Time (s)', 'End Time (s)', 'Annotation', 'Detection Prob', 'Class Prob']]
 
@@ -295,46 +439,29 @@ def bbox2raven(bboxes, class_idxs, label_set, detection_probs, class_probs, unkn
 
     return out
 
-def generate_features(model, single_clip_dataloader, args, verbose=True):
-    device = next(iter(model.parameters())).device
-    #model = model.to(device)
-    model.eval()
+def fill_holes(m, min_hole):
+    """
+    Fill small gaps in binary mask.
 
-    all_features = []
+    Parameters
+    ----------
+    m : array-like
+        Binary mask
+    min_hole : int
+        Minimum length of a sequence of False's that won't get filled in, all
+        sequences of length less than this will get flipped to True's
 
-    if verbose:
-        iterator = tqdm.tqdm(enumerate(single_clip_dataloader), total=len(single_clip_dataloader))
-    else:
-        iterator = enumerate(single_clip_dataloader)
+    Returns
+    -------
+    numpy.ndarray
+        Filled binary mask
+    """
 
-    with torch.no_grad():
-        for i, X in iterator:
-            X = X.to(device = device, dtype = torch.float)
-            X, _, _, _ = rms_and_mixup(X, None, None, None, False, args)
-            features = model.generate_features(X)
-            all_features.append(features)
-        all_features = torch.cat(all_features)
-
-        ######## Need better checking that features are the correct dur
-        assert all_features.size(dim=1) % 2 == 0
-        first_quarter_window_dur_samples=all_features.size(dim=1)//4
-        last_quarter_window_dur_samples=(all_features.size(dim=1)//2)-first_quarter_window_dur_samples
-
-        # assemble features
-        beginning_bit = all_features[0,:first_quarter_window_dur_samples,:]
-        end_bit = all_features[-1,-last_quarter_window_dur_samples:,:]
-        features_clipped = all_features[:,first_quarter_window_dur_samples:-last_quarter_window_dur_samples,:]
-        all_features = torch.reshape(features_clipped, (-1, features_clipped.size(-1)))
-        all_features = torch.cat([beginning_bit, all_features, end_bit])
-
-    return all_features.detach().cpu().numpy()
-
-def fill_holes(m, max_hole):
     stops = m[:-1] * ~m[1:]
     stops = np.where(stops)[0]
 
     for stop in stops:
-        look_forward = m[stop+1:stop+1+max_hole]
+        look_forward = m[stop+1:stop+1+min_hole]
         if np.any(look_forward):
             next_start = np.amin(np.where(look_forward)[0]) + stop + 1
             m[stop : next_start] = True
@@ -342,6 +469,23 @@ def fill_holes(m, max_hole):
     return m
 
 def delete_short(m, min_pos):
+    """
+    Delete short sequences of True's in binary mask.
+
+    Parameters
+    ----------
+    m : array-like
+        Binary mask
+    min_pos : int
+        Minimum length of a sequence of True's that won't get deleted, all
+        sequences of length less than this will get flipped to False's
+
+    Returns
+    -------
+    numpy.ndarray
+        Filled binary mask
+    """
+
     starts = m[1:] * ~m[:-1]
 
     starts = np.where(starts)[0] + 1
@@ -364,12 +508,16 @@ def delete_short(m, min_pos):
     return m
 
 def write_tsv(out_fp, data):
-    '''
-    out_fp:
-        output file path
+    """
+    Write data to TSV file.
 
-    data: list of lists
-    '''
+    Parameters
+    ----------
+    out_fp : str
+        Output file path
+    data : list
+        Iterable of lists, which will be written as rows to `out_fp`
+    """
 
     with open(out_fp, 'w', newline='') as ff:
         tsv_output = csv.writer(ff, delimiter='\t')
@@ -378,10 +526,60 @@ def write_tsv(out_fp, data):
             tsv_output.writerow(row)
 
 def select_from_neg_idxs(df, neg_idxs):
+    """
+    Select rows not in given indices from DataFrame.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input DataFrame
+    neg_idxs : array-like
+        Indices to exclude
+
+    Returns
+    -------
+    pandas.DataFrame
+        Filtered DataFrame
+    """
     masked = df.loc[~df.index.isin(neg_idxs)]
     return masked
 
 def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thresh, det_thresh):
+    """
+    Combine forward and backward predictions using graph matching.
+
+    Parameters
+    ----------
+    target_dir : str
+        Directory containing prediction files
+    fn : str
+        Base filename
+    comb_discard_threshold : float
+        Probability threshold for discarding predictions
+    comb_iou_thresh : float
+        IoU threshold for matching predictions, a pair of fwd and bck prediction
+        that have IoU above this threshold are connected in the graph and the
+        algorithm can choose to match them
+    det_thresh : float
+        Detection threshold
+
+    Returns
+    -------
+    tuple
+        Tuple containing filepaths to combined and matched predictions
+
+    Notes
+    -----
+    This function returns both the combined predictions and the matched pred-
+    ictions. The latter are the outputs from the graph matching. The former
+    include the latter and also whatever forward and backward predictions were
+    not a part of the matching but which have high probability.
+
+    Graph matching is performed using the Hopcroft-Karp-Karzanov algorithm for
+    maximum graph matching, which computes the matching with the maximum number
+    of edges.
+    """
+
     fwd_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-detthresh{det_thresh}-fwd.txt')
     bck_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-detthresh{det_thresh}-bck.txt')
     comb_preds_fp = os.path.join(target_dir, f'peaks_pred_{fn}-detthresh{det_thresh}-comb.txt')
@@ -436,6 +634,40 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thres
     return comb_preds_fp, match_preds_fp
 
 def export_to_selection_table(detections, regressions, classifications, fn, args, is_bck, verbose=True, target_dir=None, detection_threshold=0.5, classification_threshold=0):
+    """
+    Convert a set of model outputs (detections, regressions, classifications)
+    into a set of predicted bounding boxes, and write as a Raven-style selection
+    table.
+
+    Parameters
+    ----------
+    detections : array-like
+        Detection scores (as probabilities)
+    regressions : array-like
+        Duration predictions
+    classifications : array-like
+        Classification scores (as logits)
+    fn : str
+        Output filename
+    args : argparse.Namespace
+        Configuration arguments
+    is_bck : bool
+        Whether predictions are from the backward version of the model
+    verbose : bool, optional
+        Whether to print progress, by default True
+    target_dir : str, optional
+        Output directory, by default None, in which case it is taken from `args`
+    detection_threshold : float, optional
+        Detection threshold, by default 0.5
+    classification_threshold : float, optional
+        Classification threshold, by default 0
+
+    Returns
+    -------
+    str
+        Path to saved selection table
+    """
+
     if hasattr(args, "bidirectional") and args.bidirectional:
         if is_bck:
             fn += '-bck'
@@ -532,6 +764,36 @@ def export_to_selection_table(detections, regressions, classifications, fn, args
     return target_fp
 
 def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresholds=None, verbose=True):
+    """
+    Generate predictions for multiple files and create manifest of results.
+
+    For each threshold in `detection_thresholds`, for each filename in the keys
+    of `dataloader_dict`, create a set of predictions and save as a selection
+    table. For each trehosld, create a manifest specifying the foward and back-
+    ward predictions for each file, and the files with the corresponding
+    ground truth boxes. Return a dictionary of manifests, one for each
+    threshold.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Model to use for prediction
+    dataloader_dict : dict
+        Dictionary mapping filenames to DataLoaders
+    args : argparse.Namespace
+        Configuration arguments
+    detection_thresholds : list, optional
+        List of detection thresholds to evaluate, by default None, in which case
+        a single threshold of args.detection_threshold is used
+    verbose : bool, optional
+        Whether to show progress, by default True
+
+    Returns
+    -------
+    dict
+        Dictionary mapping thresholds to prediction manifests
+    """
+
     if detection_thresholds is None:
         detection_thresholds = [args.detection_threshold]
     fns = []
@@ -575,6 +837,43 @@ def predict_and_generate_manifest(model, dataloader_dict, args, detection_thresh
     return manifests_by_thresh
 
 def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label_mapping, unknown_label, det_thresh, comb_discard_threshold=0, comb_iou_thresh=0.5, bidirectional=False, pred_types=None):
+    """
+    Evaluate predictions using manifest file.
+
+    Parameters
+    ----------
+    manifest : pandas.DataFrame
+        Manifest containing prediction and annotation paths
+    output_dir : str
+        Directory to save results
+    iou : float
+        Intersection-over-Union threshold for matching during evaluation
+    class_threshold : float
+        Confidence threshold for class predictions
+    label_mapping : dict
+        Mapping between annotation labels and model classes
+    unknown_label : str
+        Label to use for unknown classes
+    det_thresh : float
+        Detection threshold, detections with probability below `det_thresh` will
+        be discarded
+    comb_discard_threshold : float, optional
+        Same as `det_thresh` but applied after combining forward and backward
+        predictions, by default 0, only used if `bidirectional`=True
+    comb_iou_thresh : float, optional
+        IoU threshold for combining predictions, by default 0.5, only used if
+        `bidirectional`=True
+    bidirectional : bool, optional
+        Whether model is bidirectional, by default False
+    pred_types : tuple, optional
+        Types of predictions to evaluate, by default None
+
+    Returns
+    -------
+    metrics : dict
+        Nested dictionary containing scores for each metric for each pred type
+    """
+
     if pred_types is None:
         pred_types = ('fwd', 'bck', 'comb', 'match') if bidirectional else ('fwd',)
     metrics = {p:{} for p in pred_types}
@@ -591,16 +890,52 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
             metrics[pred_type][fn] = get_metrics(preds_fp, annots_fp, iou, class_threshold, duration, label_mapping, unknown_label)
 
     # summarize and save metrics
-    conf_mat_summaries = {}
     for pred_type in pred_types:
         summary = summarize_metrics(metrics[pred_type])
         metrics[pred_type]['summary'] = summary
-        macro, micro = macro_micro_metrics(summary)
+        macro, micro = macro_micro_f1_metrics(summary)
         metrics[pred_type]['macro'], metrics[pred_type]['micro'] = macro, micro
 
-    return metrics, conf_mat_summaries
+    return metrics
 
 def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', unknown_label='Unknown', bidirectional=False, comb_iou_thresh=0, is_test=False):
+    """
+    Calculate mean average precision across detection thresholds.
+
+    Parameters
+    ----------
+    manifests_by_thresh : dict
+        Dictionary mapping thresholds to prediction manifests
+    label_mapping : dict
+        Mapping between annotation labels and model classes
+    exp_dir : str
+        Experiment directory
+    iou : float, optional
+        Intersection-over-Union threshold for matching during evaluation, by
+        default 0.5
+    pred_type : {'fwd', 'bck', 'comb', 'match'}, optional
+        Type of predictions to evaluate, by default 'fwd'
+    unknown_label : str, optional
+        Label to use for unknown classes, by default 'Unknown'
+    bidirectional : bool, optional
+        Whether model is bidirectional, by default False
+    comb_iou_thresh : float, optional
+        IoU threshold for combining predictions, by default 0
+    is_test : bool, optional
+        Whether in test mode (reduced evaluation), by default False
+
+    Returns
+    -------
+    mAP : float
+        Mean average precision
+    scores_by_class : dict
+        Keys are class names, values are lists of all precision scores for that
+        class across all thresholds
+    ap_by_class:
+        Keys are class names, values are floats for the mean precision for that
+        class across all thresholds
+    """
+
     # first loop through thresholds to gather all results
     scores_by_class = {c:[] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, 'outputs')

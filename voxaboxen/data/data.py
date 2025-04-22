@@ -12,11 +12,47 @@ import torchaudio
 from torch.nn import functional as F
 
 def normalize_sig_np(sig, eps=1e-8):
+    """
+    Normalize a signal to [-1, 1] range.
+
+    Parameters
+    ----------
+    sig : numpy.ndarray
+        Input signal to normalize
+    eps : float, optional
+        Small constant to avoid division by zero, by default 1e-8
+
+    Returns
+    -------
+    numpy.ndarray
+        Normalized signal
+    """
+
     sig = sig / (np.max(np.abs(sig))+eps)
     return sig
 
 def crop_and_pad(wav, sr, dur_sec):
-    """Crop and pad waveform to be the expected number of samples; used after resampling to ensure proper size."""
+    """
+    Crop or pad waveform to match target duration and sample rate.
+
+    Used after resampling when loading data to ensure the waveform is the
+    proper size for the dataset.
+
+    Parameters
+    ----------
+    wav : torch.Tensor
+        Input waveform tensor
+    sr : int
+        Sample rate
+    dur_sec : float
+        Target duration in seconds
+
+    Returns
+    -------
+    torch.Tensor
+        Waveform with exact target duration in samples
+    """
+
     target_dur_samples = int(sr * dur_sec)
     wav = wav[..., :target_dur_samples]
 
@@ -27,6 +63,35 @@ def crop_and_pad(wav, sr, dur_sec):
     return wav
 
 class DetectionDataset(Dataset):
+    """
+    PyTorch Dataset for loading audio segments and corresponding annotations
+    from across multiple files.
+
+    Parameters
+    ----------
+    info_df : pandas.DataFrame
+        DataFrame containing audio file metadata with columns:
+        - 'fn': filename identifier
+        - 'audio_fp': audio file path
+        - 'selection_table_fp': annotation file path
+    train : bool
+        Whether dataset is for training
+    args : argparse.Namespace
+        Configuration arguments containing:
+        - label_set: List of class labels
+        - unknown_label: Label for unknown classes
+        - label_mapping: Dictionary mapping annotation labels to model classes
+        - sr: Sample rate
+        - clip_duration: Duration of audio clips in seconds
+        - clip_hop: Hop size between clips in seconds
+        - seed: Random seed
+        - scale_factor: Downsampling factor
+        - stereo/multichannel: Audio channel configuration
+        - omit_empty_clip_prob: Probability of omitting empty clips during training
+    random_seed_shift : int, optional
+        Additional seed offset, by default 0
+    """
+
     def __init__(self, info_df, train, args, random_seed_shift = 0):
         self.info_df = info_df
         self.label_set = args.label_set
@@ -66,6 +131,20 @@ class DetectionDataset(Dataset):
         self.make_metadata()
 
     def process_selection_table(self, selection_table_fp):
+        """
+        Process annotation file into interval tree format.
+
+        Parameters
+        ----------
+        selection_table_fp : str
+            Path to annotation file (tab-separated)
+
+        Returns
+        -------
+        IntervalTree
+            Tree containing labeled time intervals
+        """
+
         selection_table = pd.read_csv(selection_table_fp, sep = '\t')
         tree = IntervalTree()
 
@@ -91,6 +170,8 @@ class DetectionDataset(Dataset):
         return tree
 
     def make_metadata(self):
+        """Generate dataset metadata including clip boundaries."""
+
         selection_table_dict = dict()
         metadata = []
 
@@ -122,6 +203,24 @@ class DetectionDataset(Dataset):
         self.metadata = metadata
 
     def get_pos_intervals(self, fn, start, end):
+        """
+        Get annotated intervals within specified time range.
+
+        Parameters
+        ----------
+        fn : str
+            Filename identifier
+        start : float
+            Start time in seconds
+        end : float
+            End time in seconds
+
+        Returns
+        -------
+        list
+            List of (start, end, label_idx) tuples
+        """
+
         tree = self.selection_table_dict[fn]
 
         intervals = tree[start:end]
@@ -130,6 +229,15 @@ class DetectionDataset(Dataset):
         return intervals
 
     def get_class_proportions(self):
+        """
+        Calculate class distribution in dataset.
+
+        Returns
+        -------
+        numpy.ndarray
+            Array of class proportions
+        """
+
         counts = np.zeros((self.n_classes,))
 
         for k in self.selection_table_dict:
@@ -147,10 +255,30 @@ class DetectionDataset(Dataset):
         return proportions
 
     def get_annotation(self, pos_intervals, audio):
+        """
+        Generate target annotations from positive intervals.
+
+        Parameters
+        ----------
+        pos_intervals : list
+            List of (start, end, label_idx) tuples
+        audio : torch.Tensor
+            Input audio tensor
+
+        Returns
+        -------
+        tuple
+            Tuple containing:
+            - anchor_annos: Anchor point annotations
+            - regression_annos: Duration annotations
+            - class_annos: Class probability annotations
+            - rev_anchor_annos: Reverse anchor points
+            - rev_regression_annos: Reverse duration
+            - rev_class_annos: Reverse class probabilities
+        """
+
         raw_seq_len = audio.shape[-1]
-        #seq_len = int(math.ceil(raw_seq_len / self.scale_factor_raw_to_prediction))
         seq_len = int(math.ceil(raw_seq_len / self.scale_factor))
-        #anno_sr = int(self.sr // self.scale_factor_raw_to_prediction)
         anno_sr = int(self.sr // self.scale_factor)
 
         regression_annos = np.zeros((seq_len,))
@@ -203,6 +331,27 @@ class DetectionDataset(Dataset):
         return anchor_annos, regression_annos, class_annos, rev_anchor_annos, rev_regression_annos, rev_class_annos
 
     def __getitem__(self, index):
+        """
+        Get dataset item by index.
+
+        Parameters
+        ----------
+        index : int
+            Item index
+
+        Returns
+        -------
+        tuple
+            Tuple containing:
+            - audio: Audio tensor
+            - anchor_anno: Anchor annotations
+            - regression_anno: Duration annotations
+            - class_anno: Class annotations
+            - rev_anchor_anno: Reverse anchors
+            - rev_regression_anno: Reverse durations
+            - rev_class_anno: Reverse classes
+        """
+
         fn, audio_fp, start, end = self.metadata[index]
 
         audio, file_sr = librosa.load(audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=self.mono)
@@ -224,6 +373,21 @@ class DetectionDataset(Dataset):
 
 
 def get_train_dataloader(args, random_seed_shift = 0):
+    """
+    Create training DataLoader.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Configuration arguments
+    random_seed_shift : int, optional
+        Additional seed offset, by default 0
+
+    Returns
+    -------
+    torch.DataLoader
+    """
+
     train_info_fp = args.train_info_fp
     train_info_df = pd.read_csv(train_info_fp)
 
@@ -239,6 +403,23 @@ def get_train_dataloader(args, random_seed_shift = 0):
 
 
 class SingleClipDataset(Dataset):
+    """
+    PyTorch Dataset for loading audio segments from a single file.
+
+    Dataset for processing single audio clips.
+
+    Parameters
+    ----------
+    audio_fp : str
+        Path to audio file
+    clip_hop : float
+        Hop size between clips in seconds
+    args : argparse.Namespace
+        Configuration arguments
+    annot_fp : str, optional
+        Path to annotation file, by default None
+    """
+
     def __init__(self, audio_fp, clip_hop, args, annot_fp = None):
         # waveform (samples,)
         super().__init__()
@@ -260,7 +441,7 @@ class SingleClipDataset(Dataset):
         return self.num_clips
 
     def __getitem__(self, idx):
-        """ Map int idx to dict of torch tensors """
+        """Get audio clip by index and return as torch.tensor."""
         start = idx * self.clip_hop
 
         audio, file_sr = librosa.load(self.audio_fp, sr=None, offset=start, duration=self.clip_duration, mono=self.mono)
@@ -276,6 +457,26 @@ class SingleClipDataset(Dataset):
         return audio
 
 def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):
+    """
+    Create DataLoader for single audio file.
+
+    Parameters
+    ----------
+    audio_fp : str
+        Path to audio file
+    clip_hop : float
+        Hop size between clips in seconds
+    args : argparse.Namespace
+        Configuration arguments
+    annot_fp : str, optional
+        Path to annotation file, by default None
+
+    Returns
+    -------
+    DataLoader
+        Single clip DataLoader
+    """
+
     return DataLoader(
         SingleClipDataset(audio_fp, clip_hop, args, annot_fp = annot_fp),
         batch_size = args.batch_size,
@@ -286,6 +487,20 @@ def get_single_clip_data(audio_fp, clip_hop, args, annot_fp = None):
     )
 
 def get_val_dataloader(args):
+    """
+    Create validation DataLoaders.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Configuration arguments
+
+    Returns
+    -------
+    dict
+        Dictionary mapping filenames to DataLoaders
+    """
+
     val_info_fp = args.val_info_fp
     val_info_df = pd.read_csv(val_info_fp)
 
@@ -300,6 +515,20 @@ def get_val_dataloader(args):
     return val_dataloaders
 
 def get_test_dataloader(args):
+    """
+    Create test DataLoaders.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Configuration arguments
+
+    Returns
+    -------
+    dict
+        Dictionary mapping filenames to DataLoaders
+    """
+
     test_info_fp = args.test_info_fp
     test_info_df = pd.read_csv(test_info_fp)
 
@@ -314,12 +543,32 @@ def get_test_dataloader(args):
     return test_dataloaders
 
 def get_anchor_anno(start_idx, dur_samples, seq_len):
-    # start times plus gaussian blur
-    # std setting follows CornerNet, where adaptive standard deviation is set to 1/3 image radius
+    """
+    Represent start idx as a Gaussian blurred onehot encoding.
+
+        Parameters
+    ----------
+    start_idx : int
+        Start index of annotation
+    dur_samples : int
+        Duration in samples
+    seq_len : int
+        Total sequence length
+
+    Returns
+    -------
+    numpy.ndarray
+        Anchor point annotations
+
+    Notes
+    -----
+    This setting of `std` follows CornerNet, where adaptive standard deviation
+    is set to 1/3 image radius.
+
+    """
+
     std = dur_samples / 6
     x = (np.arange(seq_len) - start_idx) ** 2
     x = x / (2 * std**2)
     x = np.exp(-x)
     return x
-
-

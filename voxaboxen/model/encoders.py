@@ -23,7 +23,7 @@ class EncoderBase(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.sr=args.sr
-        
+
     def forward(self, sig):
         pass
 
@@ -32,14 +32,14 @@ class EncoderBase(nn.Module):
 
     def unfreeze(self):
         pass
-      
+
 ###### Wav2Vec2 family
-      
+
 class Wav2Vec2Base(EncoderBase):
     def __init__(self, args):
         super().__init__(args)
         self.sr=args.sr
-        
+
     def forward(self, sig):
         # extract_feature in the torchaudio version will output all 12 layers' output, -1 to select the final one
         out = self.model.extract_features(sig)[0][-1]
@@ -74,7 +74,7 @@ class AvesEmbedding(Wav2Vec2Base):
             obj = json.load(ff)
 
         return obj
-      
+
 class HubertBaseEmbedding(Wav2Vec2Base):
     def __init__(self, args):
         super().__init__(args)
@@ -84,9 +84,9 @@ class HubertBaseEmbedding(Wav2Vec2Base):
         self.model = bundle.get_model()
         self.model.feature_extractor.requires_grad_(False)
         self.embedding_dim = bundle._params['encoder_embed_dim']
-        
+
 ###### ATST Family
-        
+
 class ATSTEncoder(EncoderBase):
     def __init__(self, args):
         super().__init__(args)
@@ -94,18 +94,18 @@ class ATSTEncoder(EncoderBase):
         self.get_embedding = get_timestamp_embedding
         self.atst = load_model(args.frame_atst_weight_fp)
         self.embedding_dim = self.atst.timestamp_embedding_size
-        
+
     def forward(self, x):
         encoding = self.get_embedding(x, self.atst)
         encoding = rearrange(encoding, 'b c t -> b t c')
         return encoding
-    
+
     def freeze(self):
         self.atst.freeze()
 
     def unfreeze(self):
         self.atst.unfreeze()
-        
+
 ###### BEATs Family
 
 class BEATsEncoder(EncoderBase):
@@ -117,11 +117,11 @@ class BEATsEncoder(EncoderBase):
         self.beats = BEATs(beats_cfg)
         self.beats.load_state_dict(beats_ckpt['model'])
         self.embedding_dim = self.beats.cfg.encoder_embed_dim
-        
+
     def forward(self, x):
         encoding = self.beats.extract_features(x, feature_only=True)[0]
         return encoding
-    
+
     def freeze(self):
         for name, param in self.beats.named_parameters():
             param.requires_grad = False
@@ -131,21 +131,21 @@ class BEATsEncoder(EncoderBase):
         for name, param in self.beats.named_parameters():
             param.requires_grad = True
         self.beats.train()
-        
+
 class CRNNEncoder(EncoderBase):
     def __init__(self, args):
         super().__init__(args)
         from voxaboxen.model.crnn import CRNN
         self.encoder = CRNN(args)
         self.embedding_dim = self.encoder.output_dim
-        
+
     def forward(self, x):
         encoding = self.encoder(x)
         return encoding
-    
+
     def freeze(self):
         print("Freeze not implemented for randomly initialized CRNN")
 
 
-        
-        
+
+

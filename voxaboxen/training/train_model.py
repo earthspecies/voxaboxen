@@ -15,6 +15,8 @@ import shutil
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def train_model(args):
+    """Full training and evaluation with the parameters in args (namespace)."""
+
     ## Setup
     args = parse_args(args)
 

@@ -22,6 +22,31 @@ if device == "cpu":
   warnings.warn("Only using CPU! Check CUDA")
 
 def train(model, args):
+    """Train a model with the given arguments.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        The model to train
+    args : argparse.Namespace or similar
+        Training configuration containing:
+        - lr: learning rate
+        - n_epochs: number of epochs
+        - early_stopping: whether to use early stopping
+        - val_during_training: whether to validate during training
+        - patience: early stopping patience
+        - min_epochs: minimum epochs before validation
+        - experiment_dir: directory to save outputs
+        - is_test: whether this is a test run
+        - bidirectional: whether model is bidirectional
+        - rho: class loss weight
+        - lamb: regression loss weight
+
+    Returns
+    -------
+    torch.nn.Module
+        The trained model
+    """
 
     detection_loss_fn = get_detection_loss_fn(args)
     reg_loss_fn = get_reg_loss_fn(args)
@@ -35,13 +60,13 @@ def train(model, args):
     val_evals = []
 
     if args.early_stopping:
-      assert args.val_info_fp is not None
+        assert args.val_info_fp is not None
 
     if (args.val_info_fp is not None) and args.val_during_training:
-      val_dataloader = get_val_dataloader(args)
-      use_val_ = True
+        val_dataloader = get_val_dataloader(args)
+        use_val_ = True
     else:
-      use_val_ = False
+        use_val_ = False
 
     best_f1 = 0
     patience = 0
@@ -63,57 +88,57 @@ def train(model, args):
         train_evals_by_epoch = {i : e for i, e in enumerate(train_evals)}
         train_evals_fp = os.path.join(args.experiment_dir, "train_history.yaml")
         with open(train_evals_fp, 'w') as f:
-          yaml.dump(train_evals_by_epoch, f)
+            yaml.dump(train_evals_by_epoch, f)
 
         use_val = use_val_ and t>=args.min_epochs
         if use_val:
-          eval_scores = val_epoch(model, t, val_dataloader, args)
-          # TODO: maybe plot evals for other pred_types
-          val_evals.append(eval_scores['fwd'].copy())
-          #plot_eval(train_evals, learning_rates, args, val_evals=val_evals)
+            eval_scores = val_epoch(model, t, val_dataloader, args)
+            # TODO: maybe plot evals for other pred_types
+            val_evals.append(eval_scores['fwd'].copy())
+            #plot_eval(train_evals, learning_rates, args, val_evals=val_evals)
 
-          val_evals_by_epoch = {i : e for i, e in enumerate(val_evals)}
-          val_evals_fp = os.path.join(args.experiment_dir, "val_history.yaml")
-          with open(val_evals_fp, 'w') as f:
-            yaml.dump(val_evals_by_epoch, f)
+            val_evals_by_epoch = {i : e for i, e in enumerate(val_evals)}
+            val_evals_fp = os.path.join(args.experiment_dir, "val_history.yaml")
+            with open(val_evals_fp, 'w') as f:
+                yaml.dump(val_evals_by_epoch, f)
         else:
-          plot_eval(train_evals, learning_rates, args)
+            plot_eval(train_evals, learning_rates, args)
         scheduler.step()
 
         if use_val and args.early_stopping:
-          current_f1 = eval_scores['comb']['f1'] if model.is_bidirectional else eval_scores['fwd']['f1']
-          if args.is_test or (current_f1 > best_f1):
-            print('found new best model')
-            best_f1 = current_f1
+            current_f1 = eval_scores['comb']['f1'] if model.is_bidirectional else eval_scores['fwd']['f1']
+            if args.is_test or (current_f1 > best_f1):
+                print('found new best model')
+                best_f1 = current_f1
 
-            checkpoint_dict = {
-            "epoch": t,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "scheduler_state_dict": scheduler.state_dict(),
-            "train_evals": train_evals,
-            "val_evals" : val_evals
-            }
+                checkpoint_dict = {
+                "epoch": t,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "train_evals": train_evals,
+                "val_evals" : val_evals
+                }
 
-            torch.save(
-                checkpoint_dict,
-                os.path.join(args.experiment_dir, "model.pt"),
-            )
+                torch.save(
+                    checkpoint_dict,
+                    os.path.join(args.experiment_dir, "model.pt"),
+                )
 
-        else:
-          checkpoint_dict = {
-          "epoch": t,
-          "model_state_dict": model.state_dict(),
-          "optimizer_state_dict": optimizer.state_dict(),
-          "scheduler_state_dict": scheduler.state_dict(),
-          "train_evals": train_evals,
-          "val_evals" : val_evals
-          }
+            else:
+              checkpoint_dict = {
+              "epoch": t,
+              "model_state_dict": model.state_dict(),
+              "optimizer_state_dict": optimizer.state_dict(),
+              "scheduler_state_dict": scheduler.state_dict(),
+              "train_evals": train_evals,
+              "val_evals" : val_evals
+              }
 
-          torch.save(
-                checkpoint_dict,
-                os.path.join(args.experiment_dir, "model.pt"),
-            )
+              torch.save(
+                    checkpoint_dict,
+                    os.path.join(args.experiment_dir, "model.pt"),
+                )
 
 
     print("Done!")
@@ -124,13 +149,52 @@ def train(model, args):
 
     # resave validation with best model
     if use_val:
-      val_epoch(model, args.n_epochs, val_dataloader, args)
+        val_epoch(model, args.n_epochs, val_dataloader, args)
 
     return model
 
 def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, det_loss_fn, reg_loss_fn, class_loss_fn):
-    # We mask out loss from each end of the clip, so the model isn't forced to learn to detect events that are partially cut off.
-    # This does not affect inference, because during inference we overlap clips at 50%
+    """Calculate loss function with end masking.
+
+    Parameters
+    ----------
+    dets : torch.Tensor
+        Ground truth detections [batch, time]
+    det_preds : torch.Tensor
+        Predicted detections [batch, time]
+    regs : torch.Tensor
+        Ground truth regressions [batch, time]
+    reg_preds : torch.Tensor
+        Predicted regressions [batch, time]
+    y : torch.Tensor
+        Ground truth labels [batch, time, n_classes]
+    y_preds : torch.Tensor
+        Predicted labels (one-hot) [batch, time, n_classes]
+    args : argparse.Namespace
+        Configuration containing:
+        - end_mask_perc: percentage of ends to mask
+        - pos_loss_weight: weight for positive samples
+        - rho: class loss weight
+        - lamb: regression loss weight
+    det_loss_fn : callable
+        Detection loss function
+    reg_loss_fn : callable
+        Regression loss function
+    class_loss_fn : callable
+        Classification loss function
+
+    Returns
+    -------
+    0-d torch.tensor(), detection_loss
+    0-d torch.tensor(), regression_loss
+    0-d torch.tensor(), class_loss
+
+    Notes
+    -----
+    We mask out loss from each end of the clip, so the model isn't forced to
+    learn to detect events that are partially cut off. This does not affect
+    inference, because during inference we overlap clips at 50%
+    """
 
     end_mask_perc = args.end_mask_perc
     end_mask_dur = int(det_preds.size(1)*end_mask_perc)
@@ -153,6 +217,40 @@ def lf(dets, det_preds, regs, reg_preds, y, y_preds, args, det_loss_fn, reg_loss
     return detection_loss, reg_loss, class_loss
 
 def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args):
+    """Train model for one epoch.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Model to train
+    t : int
+        Current epoch number
+    dataloader : torch.utils.data.DataLoader
+        Training data loader
+    detection_loss_fn : callable
+        Detection loss function
+    reg_loss_fn : callable
+        Regression loss function
+    class_loss_fn : callable
+        Classification loss function
+    optimizer : torch.optim.Optimizer
+        Model optimizer
+    args : argparse.Namespace
+        Configuration containing:
+        - unfreeze_encoder_epoch: epoch at which to unfreeze encoder
+        - rho: class loss weight
+        - lamb: regression loss weight
+        - display_pbar: how often to update progress bar
+        - is_test: whether this is a test run (reduced train and eval)
+
+    Returns
+    -------
+    model: DetectionModel or similar
+        the updated input model
+    evals: dict
+        training metrics
+    """
+
     model.train()
     if t < args.unfreeze_encoder_epoch:
         model.freeze_encoder()
@@ -223,6 +321,34 @@ def train_epoch(model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss
     return model, evals
 
 def val_epoch(model, t, dataloader, args):
+    """Compute metrics on model for one epoch on the given dataloader.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Model to validate
+    t : int
+        Current epoch number
+    dataloader : torch.utils.data.DataLoader
+        Validation data loader
+    args : argparse.Namespace
+        Configuration containing:
+        - detection_threshold: detection threshold
+        - experiment_output_dir: output directory
+        - model_selection_iou: IoU threshold for matching during evaluation
+        - model_selection_class_threshold: class threshold
+        - comb_discard_thresh: discard threshold
+        - label_mapping: label mappings
+        - unknown_label: unknown label name
+        - bidirectional: whether model is bidirectional
+        - label_set: set of labels
+
+    Returns
+    -------
+    evals: dict
+        metrics
+    """
+
     model.eval()
 
     manifests = predict_and_generate_manifest(model, dataloader, args, verbose = False)
@@ -235,10 +361,10 @@ def val_epoch(model, t, dataloader, args):
     for pt in e.keys():
         evals[pt] = {k:[] for k in metrics_to_print}
         for k in metrics_to_print:
-          for l in args.label_set:
-            m = e[pt]['summary'][l][k]
-            evals[pt][k].append(m)
-          evals[pt][k] = float(np.mean(evals[pt][k]))
+            for l in args.label_set:
+                m = e[pt]['summary'][l][k]
+                evals[pt][k].append(m)
+            evals[pt][k] = float(np.mean(evals[pt][k]))
 
         for m in metrics_to_print:
             score = evals[pt][m]
@@ -247,11 +373,26 @@ def val_epoch(model, t, dataloader, args):
     return evals
 
 def modified_focal_loss(pred, gt, pos_loss_weight=1):
-    '''
+    """Modified focal loss for detection.
+
+    Parameters
+    ----------
+    pred : torch.Tensor
+        Predictions [batch, time]
+    gt : torch.Tensor
+        Ground truth [batch, time]
+    pos_loss_weight : float, optional
+        Weight for positive samples (default: 1)
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar loss value
+
+    Notes
+    -----
     Modified from https://github.com/xingyizhou/CenterNet/blob/2b7692c377c6686fb35e473dac2de6105eed62c6/src/lib/models/losses.py
-        pred [batch, time,]
-        gt [batch, time,]
-    '''
+    """
 
     pos_inds = gt.eq(1).float()
     neg_inds = gt.lt(1).float()
@@ -270,12 +411,26 @@ def modified_focal_loss(pred, gt, pos_loss_weight=1):
 
 
 def masked_reg_loss(regression, r, d, y, class_weights = None):
-    """
-    regression, r (Tensor): [batch, time,]
-    r (Tensor) : [batch, time,], float tensor
-    d (Tensor) : [batch, time,], float tensor
-    y (Tensor) : [batch, time, n_classes]
-    class_weights (Tensor) : [n_classes,]
+    """Masked regression loss.
+
+    Parameters
+    ----------
+    regression : torch.Tensor
+        Predicted regression [batch, time]
+    r : torch.Tensor
+        Ground truth regression [batch, time]
+    d : torch.Tensor
+        Detection mask [batch, time]
+    y : torch.Tensor
+        Class labels [batch, time, n_classes]
+    class_weights : torch.Tensor, optional
+        How to weight loss by class [n_classes]
+        default: None, means no reweighting, i.e. uniform
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar loss value
     """
 
     reg_loss = F.l1_loss(regression, r, reduction='none')
@@ -311,6 +466,25 @@ def masked_reg_loss(regression, r, d, y, class_weights = None):
     return reg_loss
 
 def masked_classification_loss(class_logits, y, d, class_weights = None):
+    """Masked classification loss.
+
+    Parameters
+    ----------
+    class_logits : torch.Tensor
+        Class logits [batch, time, n_classes]
+    y : torch.Tensor
+        Ground truth labels [batch, time, n_classes]
+    d : torch.Tensor
+        Detection mask [batch, time]
+    class_weights : torch.Tensor, optional
+        Class weights [n_classes] (default: None)
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar loss value
+    """
+
     """
     class_logits (Tensor): [batch, time,n_classes]
     y (Tensor): [batch, time,n_classes]
@@ -341,23 +515,51 @@ def masked_classification_loss(class_logits, y, d, class_weights = None):
     #class_loss2 = class_loss.clone()
     class_loss = class_loss / torch.clip(n_pos,min=1)
     #if n_pos>0:
-      #class_loss2 = class_loss2 / n_pos
+        #class_loss2 = class_loss2 / n_pos
     #assert class_loss==class_loss
 
     return class_loss
 
 def segmentation_loss(class_logits, y, d, class_weights=None):
-    """
-    class_logits (Tensor): [batch, time,n_classes]
-    y (Tensor): [batch, time,n_classes]
-    d (Tensor) : [batch, time,], float tensor
-    class_weight : [n_classes,], float tensor
+    """Segmentation loss using focal loss.
+
+    Parameters
+    ----------
+    class_logits : torch.Tensor
+        Class logits [batch, time, n_classes]
+    y : torch.Tensor
+        Ground truth labels [batch, time, n_classes]
+    d : torch.Tensor
+        Detection mask [batch, time]
+    class_weights : torch.Tensor, optional
+        Unused, for API compatibility (default: None)
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar loss value
     """
 
     default_focal_loss = torchvision.ops.sigmoid_focal_loss(class_logits, y, reduction='mean')
     return default_focal_loss
 
 def get_class_loss_fn(args):
+    """Get classification loss function based on args.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Configuration containing:
+        - segmentation_based: whether to use segmentation
+        - experiment_dir: experiment directory
+        - recompute_class_weights: whether to recompute weights
+
+    Returns
+    -------
+    callable
+        Classification loss function
+    """
+
     if hasattr(args,"segmentation_based") and args.segmentation_based:
         return segmentation_loss
     elif os.path.exists(cache_fp:=f'{args.experiment_dir}/cached_class_weights.pt') and not args.recompute_class_weights:
@@ -375,6 +577,22 @@ def get_class_loss_fn(args):
     return partial(masked_classification_loss, class_weights = class_weights)
 
 def get_reg_loss_fn(args):
+    """Get regression loss function based on args.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Configuration containing:
+        - segmentation_based: whether to use segmentation
+        - experiment_dir: experiment directory
+        - recompute_class_weights: whether to recompute weights
+
+    Returns
+    -------
+    callable
+        Regression loss function
+    """
+
     if hasattr(args,"segmentation_based") and args.segmentation_based:
         def zrl(regression, r, d, y, class_weights = None):
             return torch.tensor(0.)
@@ -395,6 +613,19 @@ def get_reg_loss_fn(args):
     return partial(masked_reg_loss, class_weights = class_weights)
 
 def get_detection_loss_fn(args):
+    """Get detection loss function based on args.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Configuration containing:
+        - segmentation_based: whether to use segmentation
+
+    Returns
+    -------
+    callable
+        Detection loss function
+    """
     if hasattr(args,"segmentation_based") and args.segmentation_based:
         def zdl(pred, gt, pos_loss_weight = 1):
             return torch.tensor(0.)

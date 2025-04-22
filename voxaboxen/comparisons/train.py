@@ -26,6 +26,7 @@ def train(args):
 
     experiment_output_dir = os.path.join(experiment_dir, "outputs")
     setattr(sound_event_args, 'experiment_output_dir', experiment_output_dir)
+    breakpoint()
     if not os.path.exists(sound_event_args.experiment_output_dir):
         os.makedirs(sound_event_args.experiment_output_dir)
     aves_params.save_params(sound_event_args)
@@ -35,9 +36,10 @@ def train(args):
     n_ckpts = len(glob(cfg.OUTPUT_DIR + "/*.pth"))
     #resume = True if n_ckpts > 0 else False
     resume = False
-    old_stdout = sys.stdout; sys.stdout = io.StringIO()
+    breakpoint()
     trainer = SoundEventTrainer(cfg)
     trainer.resume_or_load(resume=resume)
+    old_stdout = sys.stdout; sys.stdout = io.StringIO()
     sys.stdout = old_stdout
     if not sound_event_args.name.endswith('-frcnn'):
         sound_event_args.name += '-frcnn'
@@ -46,10 +48,10 @@ def train(args):
         cp = torch.load(sound_event_args.previous_checkpoint_fp)
         trainer.model.load_state_dict(cp)
 
-    try:
-        trainer.train()
-    except StopIteration:
-        print("Reached stop iteration. Training complete.")
+    #try:
+        #trainer.train()
+    #except StopIteration:
+        #print("Reached stop iteration. Training complete.")
 
     # ~~~~ Evaluate on val and test set
     print("Running evaluation on train set",flush=True)
