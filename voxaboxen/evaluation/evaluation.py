@@ -872,6 +872,8 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
     -------
     metrics : dict
         Nested dictionary containing scores for each metric for each pred type
+    confusion_matrix: None
+        Deprecated; TODO re-implement
     """
 
     if pred_types is None:
@@ -896,7 +898,7 @@ def evaluate_based_on_manifest(manifest, output_dir, iou, class_threshold, label
         macro, micro = macro_micro_f1_metrics(summary)
         metrics[pred_type]['macro'], metrics[pred_type]['micro'] = macro, micro
 
-    return metrics
+    return metrics, None
 
 def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5, pred_type='fwd', unknown_label='Unknown', bidirectional=False, comb_iou_thresh=0, is_test=False):
     """
