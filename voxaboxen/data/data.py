@@ -108,8 +108,6 @@ class DetectionDataset(Dataset):
         self.seed = args.seed + random_seed_shift
 
         self.scale_factor = args.scale_factor
-        #self.prediction_scale_factor = args.prediction_scale_factor
-        #self.scale_factor_raw_to_prediction = self.scale_factor*self.prediction_scale_factor
         self.rng = default_rng(seed=self.seed)
         self.train=train
         if hasattr(args, 'stereo') and args.stereo:

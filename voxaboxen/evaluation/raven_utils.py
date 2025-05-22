@@ -1,15 +1,44 @@
-import os
 import numpy as np
 import pandas as pd
-import yaml
 import librosa
-from tqdm import tqdm
 import warnings
 
 import voxaboxen.evaluation.metrics as metrics
-from fn_profiling import profile_lines
 
 class Clip():
+    """
+    A class representing an audio clip and its associated metadata, annotations, and predictions.
+
+    Parameters
+    ----------
+    label_set : set or list, optional
+        A collection of known labels that annotations and predictions can belong to.
+    unknown_label : str or any, optional
+        A label used to denote unknown or unlabeled data.
+
+    Attributes
+    ----------
+    sr : int or None
+        Sampling rate of the audio clip in Hz.
+    samples : np.ndarray or None
+        Audio samples as a NumPy array.
+    duration : float or None
+        Duration of the audio clip in seconds.
+    annotations : pandas.DataFrame or None
+        Ground-truth annotations for the audio clip.
+    predictions : pandas.DataFrame or None
+        Predicted annotations for the audio clip.
+    matching : list or None
+        Information about how predictions and annotations are matched.
+    matched_annotations : list or None
+        Subset of annotations that have been matched to predictions.
+    matched_predictions : list or None
+        Subset of predictions that have been matched to annotations.
+    label_set : set or list or None
+        The set of valid labels used for annotations and predictions.
+    unknown_label : str or any
+        The label used to represent unknown or missing categories.
+    """
     def __init__(self, label_set = None, unknown_label = None):
         self.sr = None
         self.samples = None
@@ -45,11 +74,6 @@ class Clip():
     def load_audio(self, fp):
         self.samples, self.sr = librosa.load(fp, sr = None)
         self.duration = len(self.samples) / self.sr
-
-    def play_audio(self, start_sec, end_sec):
-        start_sample = int(self.sr * start_sec)
-        end_sample = int(self.sr *end_sec)
-        display(ipd.Audio(self.samples[start_sample:end_sample], rate = self.sr))
 
     def load_annotations(self, fp, view = None, label_mapping = None):
         self.annotations = self.load_selection_table(fp, view = view, label_mapping = label_mapping)

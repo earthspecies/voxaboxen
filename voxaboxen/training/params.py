@@ -7,6 +7,19 @@ import os
 import yaml
 
 def parse_args(args,allow_unknown=False):
+    """
+    Parse args
+
+    Parameters
+    ----------
+    args : str
+    allow_unknown : bool (Optional)
+        Whether to allow unknown args to be passed
+    Returns
+    ----------
+    args : argparse.Namespace
+        Configuration arguments
+    """
     parser = argparse.ArgumentParser()
 
     # General
@@ -108,6 +121,17 @@ def parse_args(args,allow_unknown=False):
         return args
 
 def read_config(args):
+    """
+    Load project-level config and incorporate into args
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Configuration arguments
+    Returns
+    ----------
+    args : argparse.Namespace
+        Configuration arguments
+    """
     with open(args.project_config_fp, 'r') as f:
         project_config = yaml.safe_load(f)
 
@@ -117,12 +141,28 @@ def read_config(args):
     return args
 
 def set_seed(seed):
+    """
+    Set random seed
+    Parameters
+    ----------
+    seed : int
+    Returns
+    ----------
+    """
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
 def save_params(args):
-    """ Save a copy of the params used for this experiment """
+    """
+    Save a copy of the params used for this experiment
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Configuration arguments
+    Returns
+    ----------
+    """
     logging.info("Params:")
     params_file = os.path.join(args.experiment_dir, "params.yaml")
 
@@ -136,6 +176,17 @@ def save_params(args):
         yaml.dump(args_dict, f)
 
 def load_params(fp):
+    """
+    Checks args to make sure values are allowed.
+    Parameters
+    ----------
+    fp : str
+        path to model args saved as .yaml
+    Returns
+    ----------
+    args : argparse.Namespace
+        Configuration arguments
+    """
     with open(fp, 'r') as f:
         args_dict = yaml.safe_load(f)
 
@@ -147,6 +198,15 @@ def load_params(fp):
     return args
 
 def check_config(args):
+    """
+    Checks args to make sure values are allowed.
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Configuration arguments
+    Returns
+    ----------
+    """
     assert args.end_mask_perc < 0.25, "Masking above 25% of each end during training will interfere with inference"
     assert ((args.clip_duration * args.sr)/(2*args.scale_factor)).is_integer(), "Must pick clip duration to ensure no rounding errors during inference"
     if args.segmentation_based and (args.rho!=1):

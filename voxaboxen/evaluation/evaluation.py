@@ -10,8 +10,6 @@ from voxaboxen.evaluation.raven_utils import Clip
 from voxaboxen.model.model import rms_and_mixup
 from voxaboxen.evaluation.nms import nms, soft_nms
 
-#device = "cuda" if torch.cuda.is_available() else "cpu"
-
 def f1_from_counts(tp, fp, fn):
     """
     Calculate precision, recall and F1 score from true positives, false positives and false negatives.

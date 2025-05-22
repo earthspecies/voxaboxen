@@ -1,11 +1,29 @@
 import numpy as np
 from matplotlib import pyplot as plt
 import seaborn as sns
-
 from voxaboxen.evaluation.raven_utils import Clip
 
-
 def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold):
+    """
+    Produces a confusion matrix for predictions on one audio file
+    Parameters
+    ----------
+    predictions_fp : str
+        path to predictions selection table
+    annotations_fp : str
+        path to annotations selection table
+    args : argparse.Namespace
+        Configuration arguments containing model parameters
+    iou : float
+        IoU value for matching predictions with annotations
+    class_threshold : float
+        Value under which class predictions will be counted as Unknown
+    Returns
+    -------
+    confusion_matrix : numpy.ndarray
+    confusion_matrix_labels : list
+        list of str for confusion matrix labels
+    """
     c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
 
     c.load_predictions(predictions_fp)
@@ -20,8 +38,17 @@ def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_thresh
     return confusion_matrix, confusion_matrix_labels
 
 def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
-    """ confusion_matrix (dict) : {fp : fp_cm}, where
-    fp_cm  : numpy array
+    """ 
+    Aggregates multiple per-file confusion matrices
+    Parameters
+    ----------
+    confusion_matrix : dict
+        dict of the form {fp : fp_cm}, where fp_cm is numpy array giving the confusion matrix
+    confusion_matrix_labels : list
+    Returns
+    -------
+    overall : numpy.ndarray
+    confusion_matrix_labels : list
     """
 
     fps = sorted(confusion_matrix.keys())
@@ -35,6 +62,9 @@ def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
     return overall, confusion_matrix_labels
 
 def plot_confusion_matrix(data, label_names, target_dir, name=""):
+    """
+    Plots confusion matrix
+    """
     fig = plt.figure(num=None, figsize=(16, 12), dpi=80, facecolor='w', edgecolor='k')
     plt.clf()
     ax = fig.add_subplot(111)
