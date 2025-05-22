@@ -606,10 +606,12 @@ def combine_fwd_bck_preds(target_dir, fn, comb_discard_threshold, comb_iou_thres
         fen = fwd_matches['End Time (s)'].to_numpy()
         bbn = bck_matches['Begin Time (s)'].to_numpy()
         ben = bck_matches['End Time (s)'].to_numpy()
-        starts = fbn
-        ends = ben
-        #ious = ((fen + ben) - (fbn + bbn)) / (2*(np.maximum(fen, ben) - np.minimum(fbn, bbn)))
-        ious = (np.minimum(fen, ben) - np.maximum(fbn, bbn)) / (np.maximum(fen, ben) - np.minimum(fbn, bbn))
+        starts = (fbn + bbn) / 2
+        ends = (fen + ben) / 2
+        #starts = fbn
+        #ends = ben
+        ious = ((fen + ben) - (fbn + bbn)) / (2*(np.maximum(fen, ben) - np.minimum(fbn, bbn)))
+        #ious = (np.minimum(fen, ben) - np.maximum(fbn, bbn)) / (np.maximum(fen, ben) - np.minimum(fbn, bbn))
         probs = (1 - (1-fwd_matches['Detection Prob'].to_numpy())*(1-bck_matches['Detection Prob'].to_numpy())) * ious
         match_preds = pd.DataFrame({'Begin Time (s)': starts, 'End Time (s)': ends, 'Detection Prob': probs, 'Annotation':fwd_matches['Annotation'], 'Class Prob':1.})
 
@@ -940,7 +942,7 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
     scores_by_class = {c:[] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, 'outputs')
     if bidirectional:
-        comb_discard_threshes_to_sweep = [0.5] if is_test else np.linspace(0, 0.99, 10)
+        comb_discard_threshes_to_sweep = [0.5] if is_test else np.linspace(0, 0.99, 30)
         comb_iou_threshes_to_sweep = [0.5] if is_test else np.linspace(0.2, 0.9, 10)
     else:
         comb_discard_threshes_to_sweep = [0]
@@ -948,7 +950,7 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
     for cdt in tqdm.tqdm(comb_discard_threshes_to_sweep):
         for cit in comb_iou_threshes_to_sweep:
             for det_thresh, test_manifest in manifests_by_thresh.items():
-                test_metrics, test_conf_mats = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=cdt, comb_iou_thresh=cit, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(pred_type,))
+                test_metrics = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=cdt, comb_iou_thresh=cit, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(pred_type,))
                 for c, s in test_metrics[pred_type]['summary'].items():
                     scores_by_class[c].append(dict(s, det_thresh=det_thresh, discard_thresh=cdt, ciou=cit))
 
