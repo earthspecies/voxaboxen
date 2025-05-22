@@ -33,7 +33,9 @@ def extractName(s: str, search_class: bool = False) -> str:
     return string
 
 
-def check_docstrings(base_folder: str = ".", check_folders: list = None) -> bool:
+def check_docstrings(
+    base_folder: str = ".", check_folders: list = None, skip_files_list: list = None
+) -> bool:
     """Checks if all the functions or classes have a docstring.
 
     Arguments
@@ -58,6 +60,10 @@ def check_docstrings(base_folder: str = ".", check_folders: list = None) -> bool
     check = True
     # Loop over the detected libraries
     for libpath in lib_lst:
+        if skip_files_list is not None and any(
+            elem in libpath for elem in skip_files_list
+        ):
+            continue
         if "__" in libpath:
             continue
         print("Checking %s..." % (libpath))

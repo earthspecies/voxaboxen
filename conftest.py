@@ -14,6 +14,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     For now we only support the device argument.
     """
     parser.addoption("--base_folder", action="store", default=".")
+    parser.addoption("--skip_files_list", action="store", default=[".pyc"])
     parser.addoption("--device", action="store", default="cpu")
 
 
@@ -21,6 +22,10 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """This is called for every test. Only get/set command line arguments
     if the argument is specified in the list of test "fixturenames".
     """
+
+    option_value = metafunc.config.option.skip_files_list
+    if "skip_files_list" in metafunc.fixturenames and option_value is not None:
+        metafunc.parametrize("skip_files_list", [option_value])
 
     option_value = metafunc.config.option.base_folder
     if "base_folder" in metafunc.fixturenames and option_value is not None:

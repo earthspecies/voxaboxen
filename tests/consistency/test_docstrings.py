@@ -6,7 +6,7 @@ Header info specific to ESP
 from tests.utils.check_docstrings import check_docstrings
 
 
-def test_docstrings_exist(base_folder: str) -> None:
+def test_docstrings_exist(base_folder: str, skip_files_list: list) -> None:
     """Check that all class and functions contain a docstring.
     Numpy-style is used.
 
@@ -14,8 +14,8 @@ def test_docstrings_exist(base_folder: str) -> None:
     ---------
     base_folder: str, optional
         Path to the base folder where this function is executed.
-    folders_to_check: list[str], optional
-        Folders name that must be checked, by default, all of them.
-
+    skip_files_list: list[str], optional
+        List of filename that should be skipped.
     """
-    assert check_docstrings(base_folder, None)
+    print(skip_files_list)
+    assert check_docstrings(base_folder, None, skip_files_list=skip_files_list)
