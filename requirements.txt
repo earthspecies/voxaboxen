@@ -17,6 +17,7 @@ fonttools==4.58.0
 fsspec==2025.5.0
 identify==2.6.10
 idna==3.10
+iniconfig==2.1.0
 intervaltree==3.1.0
 jinja2==3.1.6
 joblib==1.5.0
@@ -51,11 +52,13 @@ packaging==25.0
 pandas==2.2.3
 pillow==11.2.1
 platformdirs==4.3.8
+pluggy==1.6.0
 plumbum==1.9.0
 pooch==1.8.2
 pre-commit==4.2.0
 pycparser==2.22
 pyparsing==3.2.3
+pytest==8.3.5
 python-dateutil==2.9.0.post0
 pytz==2025.2
 pywin32==310 ; platform_python_implementation != 'PyPy' and sys_platform == 'win32'

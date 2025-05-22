@@ -22,4 +22,5 @@ dependencies = [
     "tqdm>=4.67.0",
     "torchvision>=0.15.2",
     "pre-commit>=4.2.0",
+    "pytest>=8.3.5",
 ]

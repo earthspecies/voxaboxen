@@ -2,7 +2,8 @@
 This is a minimal example to check that training and evaluation runs properly
 """
 
-from voxaboxen.project.project_setup import project_setup, train_model
+from voxaboxen.project.project_setup import project_setup
+from voxaboxen.training.train_model import train_model
 
 
 def main() -> None:
