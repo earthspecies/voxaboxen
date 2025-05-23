@@ -950,7 +950,7 @@ def mean_average_precision(manifests_by_thresh, label_mapping, exp_dir, iou=0.5,
     for cdt in tqdm.tqdm(comb_discard_threshes_to_sweep):
         for cit in comb_iou_threshes_to_sweep:
             for det_thresh, test_manifest in manifests_by_thresh.items():
-                test_metrics = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=cdt, comb_iou_thresh=cit, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(pred_type,))
+                test_metrics, _ = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=det_thresh, class_threshold=0.0, comb_discard_threshold=cdt, comb_iou_thresh=cit, label_mapping=label_mapping, unknown_label='Unknown', bidirectional=bidirectional, pred_types=(pred_type,))
                 for c, s in test_metrics[pred_type]['summary'].items():
                     scores_by_class[c].append(dict(s, det_thresh=det_thresh, discard_thresh=cdt, ciou=cit))
 

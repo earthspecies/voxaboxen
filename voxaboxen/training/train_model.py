@@ -77,7 +77,7 @@ def train_model(args):
     if args.bidirectional:
         for comb_discard in np.linspace(0.0, 0.95, args.n_val_fit):
             for comb_iou in [0.5]:
-                metrics8 = evaluate_based_on_manifest(val_manifest, output_dir=args.experiment_output_dir, iou=0.8, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=comb_discard, comb_iou_thresh=comb_iou, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional, pred_types=(best_pred_type,))
+                metrics8, _ = evaluate_based_on_manifest(val_manifest, output_dir=args.experiment_output_dir, iou=0.8, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=comb_discard, comb_iou_thresh=comb_iou, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional, pred_types=(best_pred_type,))
                 new_f1 = metrics8[best_pred_type]['macro']['f1']
                 if new_f1 > best_f1:
                     best_f1 = new_f1
@@ -103,7 +103,7 @@ def train_model(args):
         full_results = {}
         eval_starttime = time()
         for iou in [0.5, 0.8]:
-            test_metrics = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=best_comb_discard, comb_iou_thresh=best_comb_iou, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
+            test_metrics, _ = evaluate_based_on_manifest(test_manifest, output_dir=experiment_output_dir, iou=iou, det_thresh=0.5, class_threshold=0.0, comb_discard_threshold=best_comb_discard, comb_iou_thresh=best_comb_iou, label_mapping=args.label_mapping, unknown_label=args.unknown_label, bidirectional=args.bidirectional)
             full_results[f'f1@{iou}'] = test_metrics
             summary_results[f'micro-f1@{iou}'] = test_metrics[best_pred_type]['micro']['f1']
             summary_results[f'macro-f1@{iou}'] = test_metrics[best_pred_type]['macro']['f1']
