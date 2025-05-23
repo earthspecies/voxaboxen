@@ -1,4 +1,9 @@
+"""
+Functions for non-maximal suppression
+"""
+
 import numpy as np
+
 
 def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh=0.001):
     """
@@ -14,10 +19,10 @@ def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh
 
         bbox_scores: numpy array
             shape=(num_bboxes,)
-            
+
         class_idxs: numpy array
             shape=(num_bboxes,)
-            
+
         class_probs: numpy array
             shape=(num_bboxes,)
 
@@ -37,9 +42,9 @@ def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh
     # Indexes concatenate boxes with the last column
     N = bbox_preds.shape[0]
 
-    assert (bbox_scores.shape[0] == N)
-    assert (class_idxs.shape[0] == N)
-    assert (class_probs.shape[0] == N)
+    assert bbox_scores.shape[0] == N
+    assert class_idxs.shape[0] == N
+    assert class_probs.shape[0] == N
 
     if N == 0:
         return bbox_preds, bbox_scores, class_idxs, class_probs
@@ -52,7 +57,7 @@ def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh
 
     scores = bbox_scores
 
-    areas = end-start # compute durations
+    areas = end - start  # compute durations
 
     for i in range(N):
         # intermediate parameters for later parameters exchange
@@ -65,7 +70,10 @@ def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh
             maxscore = scores[maxpos]
 
             if tscore < maxscore:
-                bbox_preds[i], bbox_preds[maxpos] = bbox_preds[maxpos].copy(), bbox_preds[i].copy()
+                bbox_preds[i], bbox_preds[maxpos] = (
+                    bbox_preds[maxpos].copy(),
+                    bbox_preds[i].copy(),
+                )
                 scores[i], scores[maxpos] = scores[maxpos].copy(), scores[i].copy()
                 areas[i], areas[maxpos] = areas[maxpos].copy(), areas[i].copy()
 
@@ -83,13 +91,14 @@ def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh
 
     # select the boxes and keep the corresponding indexes
     keep_indices = bbox_preds[:, 2][scores > thresh].astype(int)
-    
+
     new_bbox_preds = bbox_preds0[keep_indices, :2]
     new_bbox_scores = bbox_scores0[keep_indices]
     new_class_idxs = class_idxs[keep_indices]
     new_class_probs = class_probs[keep_indices]
 
     return new_bbox_preds, new_bbox_scores, new_class_idxs, new_class_probs
+
 
 def nms(bbox_preds, bbox_scores, class_idxs, class_probs, iou_thresh=0.5):
     """
@@ -105,13 +114,13 @@ def nms(bbox_preds, bbox_scores, class_idxs, class_probs, iou_thresh=0.5):
 
         bbox_scores: numpy array
             shape=(num_bboxes,)
-            
+
         class_idxs: numpy array
             shape=(num_bboxes,)
-            
+
         class_probs: numpy array
             shape=(num_bboxes,)
-        
+
         thresh:      score thresh
 
     # Return
@@ -126,9 +135,9 @@ def nms(bbox_preds, bbox_scores, class_idxs, class_probs, iou_thresh=0.5):
     # Indexes concatenate boxes with the last column
     N = bbox_preds.shape[0]
 
-    assert (bbox_scores.shape[0] == N)
-    assert (class_idxs.shape[0] == N)
-    assert (class_probs.shape[0] == N)
+    assert bbox_scores.shape[0] == N
+    assert class_idxs.shape[0] == N
+    assert class_probs.shape[0] == N
 
     if N == 0:
         return bbox_preds, bbox_scores, class_idxs, class_probs
@@ -141,7 +150,7 @@ def nms(bbox_preds, bbox_scores, class_idxs, class_probs, iou_thresh=0.5):
 
     scores = bbox_scores
 
-    areas = end-start
+    areas = end - start
 
     for i in range(N):
         # intermediate parameters for later parameters exchange
@@ -154,7 +163,10 @@ def nms(bbox_preds, bbox_scores, class_idxs, class_probs, iou_thresh=0.5):
             maxscore = scores[maxpos]
 
             if tscore < maxscore:
-                bbox_preds[i], bbox_preds[maxpos] = bbox_preds[maxpos].copy(), bbox_preds[i].copy()
+                bbox_preds[i], bbox_preds[maxpos] = (
+                    bbox_preds[maxpos].copy(),
+                    bbox_preds[i].copy(),
+                )
                 scores[i], scores[maxpos] = scores[maxpos].copy(), scores[i].copy()
                 areas[i], areas[maxpos] = areas[maxpos].copy(), areas[i].copy()
 
@@ -167,7 +179,7 @@ def nms(bbox_preds, bbox_scores, class_idxs, class_probs, iou_thresh=0.5):
         ovr = np.divide(inter, (areas[i] + areas[pos:] - inter))
 
         # Gaussian decay
-        weight = (ovr <= iou_thresh)
+        weight = ovr <= iou_thresh
         scores[pos:] = weight * scores[pos:]
 
     # select the boxes and keep the corresponding indexes

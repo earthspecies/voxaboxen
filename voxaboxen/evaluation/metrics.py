@@ -1,9 +1,11 @@
-# Taken from DCASE 2021 Task 5 evaluation source code
-# https://github.com/c4dm/dcase-few-shot-bioacoustic
-# MIT License
+"""
+Taken from DCASE 2021 Task 5 evaluation source code
+https://github.com/c4dm/dcase-few-shot-bioacoustic
+MIT License
+"""
 
-import numpy as np
 import mir_eval
+import numpy as np
 import scipy
 
 
@@ -104,14 +106,15 @@ def iou(ref, est, method="fast"):
             S[ref_id, matching_est_id] = intersection_over_union
 
     return S
-  
+
+
 def compute_intersection(ref, est, method="fast"):
     """Compute pairwise intersection between reference
     events and estimated events.
     Let us denote by a_i and b_i the onset and offset of reference event i.
     Let us denote by u_j and v_j the onset and offset of estimated event j.
     The Intersection between events i and j is defined as
-        (min(b_i, v_j)-max(a_i, u_j)) 
+        (min(b_i, v_j)-max(a_i, u_j))
     if the events are non-disjoint, and equal to zero otherwise.
     Parameters
     ----------
@@ -152,7 +155,7 @@ def compute_intersection(ref, est, method="fast"):
             intersection = min(ref_off, est_off) - max(ref_on, est_on)
             # union = max(ref_off, est_off) - min(ref_on, est_on)
             # intersection_over_union = intersection / union
-            S[ref_id, matching_est_id] = intersection #_over_union
+            S[ref_id, matching_est_id] = intersection  # _over_union
 
     return S
 
@@ -244,4 +247,4 @@ def slow_intersect(ref, est):
                 ]
             )
         )
-    return 
+    return

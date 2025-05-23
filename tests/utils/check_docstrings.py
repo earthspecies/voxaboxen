@@ -57,13 +57,10 @@ def check_docstrings(
         match_or=check_folders,
         exclude_or=[".pyc"],
     )
+    lib_lst = [item for item in lib_lst if item not in skip_files_list]
     check = True
     # Loop over the detected libraries
     for libpath in lib_lst:
-        if skip_files_list is not None and any(
-            elem in libpath for elem in skip_files_list
-        ):
-            continue
         if "__" in libpath:
             continue
         print("Checking %s..." % (libpath))

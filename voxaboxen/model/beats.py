@@ -1,12 +1,11 @@
-# --------------------------------------------------------
-# BEATs: Audio Pre-Training with Acoustic Tokenizers (https://arxiv.org/abs/2212.09058)
-# Github source: https://github.com/microsoft/unilm/tree/master/beats
-# Copyright (c) 2022 Microsoft
-# Licensed under The MIT License [see LICENSE for details]
-# Based on fairseq code bases
-# https://github.com/pytorch/fairseq
-# --------------------------------------------------------
-
+"""
+BEATs: Audio Pre-Training with Acoustic Tokenizers (https://arxiv.org/abs/2212.09058)
+Github source: https://github.com/microsoft/unilm/tree/master/beats
+Copyright (c) 2022 Microsoft
+Licensed under The MIT License [see LICENSE for details]
+Based on fairseq code bases
+https://github.com/pytorch/fairseq
+"""
 
 import torch
 import torch.nn as nn
@@ -22,6 +21,7 @@ import warnings
 from typing import Dict, Optional, Tuple
 
 class BEATsConfig:
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     def __init__(self, cfg=None):
         self.input_patch_size: int = -1  # path size of patch embedding
         self.embed_dim: int = 512  # patch embedding dimension
@@ -63,10 +63,12 @@ class BEATsConfig:
             self.update(cfg)
 
     def update(self, cfg: dict):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         self.__dict__.update(cfg)
 
 
 class BEATs(nn.Module):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     def __init__(
             self,
             cfg: BEATsConfig,
@@ -104,6 +106,7 @@ class BEATs(nn.Module):
             features: torch.Tensor,
             padding_mask: torch.Tensor,
     ) -> torch.Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         extra = padding_mask.size(1) % features.size(1)
         if extra > 0:
             padding_mask = padding_mask[:, :-extra]
@@ -119,6 +122,7 @@ class BEATs(nn.Module):
             fbank_mean: float = 15.41663,
             fbank_std: float = 6.55582,
     ) -> torch.Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         fbanks = []
         for waveform in source:
             waveform = waveform.unsqueeze(0) * 2 ** 15
@@ -136,6 +140,7 @@ class BEATs(nn.Module):
             fbank_std: float = 6.55582,
             feature_only=False,
     ):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         fbank = self.preprocess(source, fbank_mean=fbank_mean, fbank_std=fbank_std).to(torch.float32)
 
         if padding_mask is not None:
@@ -176,10 +181,9 @@ class BEATs(nn.Module):
             return lprobs, padding_mask
         else:
             return x, padding_mask
-          
-
 
 class TransformerEncoder(nn.Module):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     def __init__(self, args):
         super().__init__()
 
@@ -255,6 +259,7 @@ class TransformerEncoder(nn.Module):
         self.layer_wise_gradient_decay_ratio = getattr(args, "layer_wise_gradient_decay_ratio", 1)
 
     def forward(self, x, padding_mask=None, layer=None):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         x, layer_results = self.extract_features(x, padding_mask, layer)
 
         if self.layer_norm_first and layer is None:
@@ -263,7 +268,7 @@ class TransformerEncoder(nn.Module):
         return x, layer_results
 
     def extract_features(self, x, padding_mask=None, tgt_layer=None):
-
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         if padding_mask is not None:
             x[padding_mask] = 0
 
@@ -307,6 +312,7 @@ class TransformerEncoder(nn.Module):
 
 
 class TransformerSentenceEncoderLayer(nn.Module):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     def __init__(
             self,
             embedding_dim: float = 768,
@@ -375,6 +381,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
             need_weights: bool = False,
             pos_bias=None
     ):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         residual = x
 
         if self.layer_norm_first:
@@ -524,6 +531,7 @@ class MultiheadAttention(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         if self.qkv_same_dim:
             # Empirically observed the convergence to be much better with
             # the scaled initialization
@@ -546,6 +554,7 @@ class MultiheadAttention(nn.Module):
             nn.init.xavier_normal_(self.relative_attention_bias.weight)
 
     def _relative_positions_bucket(self, relative_positions, bidirectional=True):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         num_buckets = self.num_buckets
         max_distance = self.max_distance
         relative_buckets = 0
@@ -573,6 +582,7 @@ class MultiheadAttention(nn.Module):
         return relative_buckets
 
     def compute_bias(self, query_length, key_length):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         context_position = torch.arange(query_length, dtype=torch.long)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
         relative_position = memory_position - context_position
@@ -847,6 +857,7 @@ class MultiheadAttention(nn.Module):
             src_len: int,
             static_kv: bool,
     ) -> Optional[Tensor]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         # saved key padding masks have shape (bsz, seq_len)
         if prev_key_padding_mask is not None and static_kv:
             new_key_padding_mask = prev_key_padding_mask
@@ -886,6 +897,7 @@ class MultiheadAttention(nn.Module):
     def _get_input_buffer(
             self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]]
     ) -> Dict[str, Optional[Tensor]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         result = self.get_incremental_state(incremental_state, "attn_state")
         if result is not None:
             return result
@@ -898,9 +910,11 @@ class MultiheadAttention(nn.Module):
             incremental_state: Dict[str, Dict[str, Optional[Tensor]]],
             buffer: Dict[str, Optional[Tensor]],
     ):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         return self.set_incremental_state(incremental_state, "attn_state", buffer)
 
     def apply_sparse_mask(self, attn_weights, tgt_len: int, src_len: int, bsz: int):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         return attn_weights
 
 
@@ -919,6 +933,7 @@ def init_bert_params(module):
     """
 
     def normal_(data):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         # with FSDP, module params will be on CUDA, so we cast them back to CPU
         # so that the RNG is consistent with and without FSDP
         data.copy_(
@@ -939,18 +954,22 @@ def init_bert_params(module):
         normal_(module.v_proj.weight.data)
         
 class GradMultiply(torch.autograd.Function):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     @staticmethod
     def forward(ctx, x, scale):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         ctx.scale = scale
         res = x.new(x)
         return res
 
     @staticmethod
     def backward(ctx, grad):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         return grad * ctx.scale, None
 
 
 class SamePad(nn.Module):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     def __init__(self, kernel_size, causal=False):
         super().__init__()
         if causal:
@@ -959,21 +978,25 @@ class SamePad(nn.Module):
             self.remove = 1 if kernel_size % 2 == 0 else 0
 
     def forward(self, x):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         if self.remove > 0:
             x = x[:, :, : -self.remove]
         return x
 
 
 class Swish(nn.Module):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     def __init__(self):
         super(Swish, self).__init__()
         self.act = torch.nn.Sigmoid()
 
     def forward(self, x):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         return x * self.act(x)
 
 
 class GLU_Linear(nn.Module):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     def __init__(self, input_dim, output_dim, glu_type="sigmoid", bias_in_glu=True):
         super(GLU_Linear, self).__init__()
 
@@ -995,6 +1018,7 @@ class GLU_Linear(nn.Module):
             self.linear = nn.Linear(input_dim, output_dim * 2, False)
 
     def forward(self, x):
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         # to be consistent with GLU_Linear, we assume the input always has the #channel (#dim) in the last dimension of the tensor, so need to switch the dimension first for 1D-Conv case
         x = self.linear(x)
 
@@ -1005,18 +1029,17 @@ class GLU_Linear(nn.Module):
 
         return x
 
-
 def gelu_accurate(x):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     if not hasattr(gelu_accurate, "_a"):
         gelu_accurate._a = math.sqrt(2 / math.pi)
     return (
         0.5 * x * (1 + torch.tanh(gelu_accurate._a * (x + 0.044715 * torch.pow(x, 3))))
     )
 
-
 def gelu(x: torch.Tensor) -> torch.Tensor:
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
     return torch.nn.functional.gelu(x.float()).type_as(x)
-
 
 def get_activation_fn(activation: str):
     """Returns the activation function corresponding to `activation`"""

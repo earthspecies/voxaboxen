@@ -23,4 +23,5 @@ dependencies = [
     "torchvision>=0.15.2",
     "pre-commit>=4.2.0",
     "pytest>=8.3.5",
+    "lightning>=2.5.1.post0",
 ]

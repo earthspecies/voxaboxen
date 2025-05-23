@@ -39,7 +39,7 @@ jobs:
                   uv run deptry .
             - name: Consistency tests with pytest
               run: |
-                  pytest tests/consistency --base_folder voxaboxen
+                  pytest tests/consistency --base_folder
             - name: Unittests with pytest
               run: |
                   pytest tests/unittests

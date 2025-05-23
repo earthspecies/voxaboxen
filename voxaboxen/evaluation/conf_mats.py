@@ -1,7 +1,15 @@
+"""
+Functions for creating confusion matrices
+"""
+
+import os
+
 import numpy as np
-from matplotlib import pyplot as plt
 import seaborn as sns
+from matplotlib import pyplot as plt
+
 from voxaboxen.evaluation.raven_utils import Clip
+
 
 def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold):
     """
@@ -28,17 +36,18 @@ def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_thresh
 
     c.load_predictions(predictions_fp)
     c.threshold_class_predictions(class_threshold)
-    c.load_annotations(annotations_fp, label_mapping = args.label_mapping)
+    c.load_annotations(annotations_fp, label_mapping=args.label_mapping)
 
     confusion_matrix = {}
 
-    c.compute_matching(IoU_minimum = iou)
+    c.compute_matching(IoU_minimum=iou)
     confusion_matrix, confusion_matrix_labels = c.confusion_matrix()
 
     return confusion_matrix, confusion_matrix_labels
 
+
 def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
-    """ 
+    """
     Aggregates multiple per-file confusion matrices
     Parameters
     ----------
@@ -52,31 +61,32 @@ def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
     """
 
     fps = sorted(confusion_matrix.keys())
-    l = len(confusion_matrix_labels)
+    n_labels = len(confusion_matrix_labels)
 
-    overall = np.zeros((l, l))
+    overall = np.zeros((n_labels, n_labels))
 
     for fp in fps:
-      overall += confusion_matrix[fp]
+        overall += confusion_matrix[fp]
 
     return overall, confusion_matrix_labels
+
 
 def plot_confusion_matrix(data, label_names, target_dir, name=""):
     """
     Plots confusion matrix
     """
-    fig = plt.figure(num=None, figsize=(16, 12), dpi=80, facecolor='w', edgecolor='k')
+    fig = plt.figure(num=None, figsize=(16, 12), dpi=80, facecolor="w", edgecolor="k")
     plt.clf()
     ax = fig.add_subplot(111)
     ax.set_aspect(1)
-    sns.heatmap(data, annot=True, fmt='d', cmap = 'magma', cbar = True, ax = ax)
-    ax.set_title('Confusion Matrix')
+    sns.heatmap(data, annot=True, fmt="d", cmap="magma", cbar=True, ax=ax)
+    ax.set_title("Confusion Matrix")
     ax.set_yticks([i + 0.5 for i in range(len(label_names))])
-    ax.set_yticklabels(label_names, rotation = 0)
+    ax.set_yticklabels(label_names, rotation=0)
     ax.set_xticks([i + 0.5 for i in range(len(label_names))])
-    ax.set_xticklabels(label_names, rotation = -90)
-    ax.set_ylabel('Prediction')
-    ax.set_xlabel('Annotation')
+    ax.set_xticklabels(label_names, rotation=-90)
+    ax.set_ylabel("Prediction")
+    ax.set_xlabel("Annotation")
     plt.title(name)
 
     plt.savefig(os.path.join(target_dir, f"{name}_confusion_matrix.svg"))
