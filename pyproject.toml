@@ -1,6 +1,6 @@
 [project]
 name = "voxaboxen"
-version = "0.1.0"
+version = "0.2.0"
 description = "Framework for bioacoustic sound event detection that is robust to overlapping events."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,9 +22,31 @@ dependencies = [
     "tqdm>=4.67.0",
     "torchvision>=0.15.2",
     "pre-commit>=4.2.0",
-    "pytest>=8.3.5",
     "lightning>=2.5.1.post0",
 ]
+
+[dependency-groups]
+dev = [
+  "pre-commit<=4.2.0",
+  "pytest<=7.4.0",
+  "ruff<=0.11.2",
+  "click<=8.1.7",
+  "isort<=5.13.2",
+  "pytest<=7.4.0",
+  "yamllint<=1.35.1",
+  "deptry<=0.23.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/earthspecies/voxaboxen"
+Repository = "https://github.com/earthspecies/voxaboxen"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["voxaboxen"]
 
 [tool.pytest.ini_options]
 python_files = [
@@ -51,6 +73,14 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-line-length = "dynamic"
+
+
+[tool.ruff.lint.mccabe]
+# Flag errors (`C901`) whenever the complexity level exceeds 10.
+max-complexity = 10
+
+[tool.codespell]
+skip = "*.csv"
 
 [tool.ruff.lint.mccabe]
 # Flag errors (`C901`) whenever the complexity level exceeds 10.
