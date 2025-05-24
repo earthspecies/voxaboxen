@@ -16,8 +16,8 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def train_model(args):
     """
-    Full training and evaluation 
-    
+    Full training and evaluation
+
     Parameters
     ----------
     args : argparse.Namespace
@@ -58,7 +58,7 @@ def train_model(args):
 
     if args.previous_checkpoint_fp is not None:
         print(f"loading model weights from {args.previous_checkpoint_fp}")
-        cp = torch.load(args.previous_checkpoint_fp)
+        cp = torch.load(args.previous_checkpoint_fp, weights_only=True)
         if "model_state_dict" in cp.keys():
             model.load_state_dict(cp["model_state_dict"])
         else:
