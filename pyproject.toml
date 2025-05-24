@@ -25,3 +25,39 @@ dependencies = [
     "pytest>=8.3.5",
     "lightning>=2.5.1.post0",
 ]
+
+[tool.pytest.ini_options]
+python_files = [
+    "test_*.py",
+    "check_*.py",
+]
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+
+[tool.ruff.lint]
+# List of plugins and Rules
+# Pycodestyle all errors and warning, Pydoclint, Pyflakes, bugbear, annotations
+select = ["E4", "E7", "E9", "F", "I"] # Default rules
+extend-select = ["DOC", "B9", "B", "E", "W", "ANN"]
+fixable = ["ALL"]
+unfixable = []
+preview = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.mccabe]
+# Flag errors (`C901`) whenever the complexity level exceeds 10.
+max-complexity = 10
+
+[tool.codespell]
+skip = "*.csv"
+
+[tool.deptry]
+exclude = ["conftest.py", ".venv"]
