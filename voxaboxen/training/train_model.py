@@ -13,9 +13,11 @@ import torch
 import yaml
 
 from voxaboxen.data.data import get_test_dataloader, get_val_dataloader
-from voxaboxen.evaluation.evaluation import (evaluate_based_on_manifest,
-                                             mean_average_precision,
-                                             predict_and_generate_manifest)
+from voxaboxen.evaluation.evaluation import (
+    evaluate_based_on_manifest,
+    mean_average_precision,
+    predict_and_generate_manifest,
+)
 from voxaboxen.model.model import DetectionModel
 from voxaboxen.training.params import parse_args, save_params, set_seed
 from voxaboxen.training.train import train
@@ -35,7 +37,7 @@ def train_model(args):
     ----------
     """
 
-    ## Setup
+    # Setup
     args = parse_args(args)
 
     set_seed(args.seed)
@@ -64,8 +66,8 @@ def train_model(args):
     if not os.path.exists(experiment_output_dir):
         os.makedirs(experiment_output_dir)
 
-    setattr(args, "experiment_dir", str(experiment_dir))
-    setattr(args, "experiment_output_dir", experiment_output_dir)
+    args.experiment_dir = str(experiment_dir)
+    args.experiment_output_dir = experiment_output_dir
     save_params(args)
     model = DetectionModel(args).to(device)
 
@@ -77,7 +79,7 @@ def train_model(args):
         else:
             model.load_state_dict(cp)
 
-    ## Training
+    # Training
     if args.n_epochs > 0:
         model = train(model, args)
 
@@ -120,7 +122,7 @@ def train_model(args):
         f"Found best thresh on val set: f1={best_f1:.4f}, comb_discard={best_comb_discard:.3f}, comb_iou={best_comb_iou:.3f} in {time() - val_fit_starttime:.3f}s"
     )
 
-    ## Evaluation
+    # Evaluation
     val_fit_starttime = time()
     for split in ["val", "test"]:
         print(f"Evaluating on {split} set")

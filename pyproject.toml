@@ -24,6 +24,7 @@ dependencies = [
     "pre-commit>=4.2.0",
     "lightning>=2.5.1.post0",
 ]
+
 [dependency-groups]
 dev = [
   "pre-commit<=4.2.0",
@@ -35,22 +36,28 @@ dev = [
   "yamllint<=1.35.1",
   "deptry<=0.23.0",
 ]
+
 [project.urls]
 Homepage = "https://github.com/earthspecies/voxaboxen"
 Repository = "https://github.com/earthspecies/voxaboxen"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
 [tool.hatch.build.targets.wheel]
 packages = ["voxaboxen"]
+
 [tool.pytest.ini_options]
 python_files = [
     "test_*.py",
     "check_*.py",
 ]
+
 [tool.ruff]
 line-length = 88
 indent-width = 4
+
 [tool.ruff.lint]
 # List of plugins and Rules
 # Pycodestyle all errors and warning, Pydoclint, Pyflakes, bugbear, annotations
@@ -59,20 +66,20 @@ extend-select = ["DOC", "B9", "B", "E", "W", "ANN"]
 fixable = ["ALL"]
 unfixable = []
 preview = true
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-line-length = "dynamic"
+
 [tool.ruff.lint.mccabe]
 # Flag errors (`C901`) whenever the complexity level exceeds 10.
 max-complexity = 10
+
 [tool.codespell]
 skip = "*.csv"
-[tool.isort]
-profile = "black"
-line_length = 80
-filter_files = true
+
 [tool.deptry]
 exclude = ["conftest.py", ".venv"]

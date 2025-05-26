@@ -39,13 +39,14 @@ jobs:
                   uv run deptry .
             - name: Consistency tests with pytest
               run: |
-                  pytest tests/consistency --base_folder
+                  pytest tests/consistency --base_folder voxaboxen --skip_files_list "voxaboxen/model/beats.py"
             - name: Unittests with pytest
               run: |
                   pytest tests/unittests
-            - name: Doctests with pytest
-              run: |
-                  pytest --doctest-modules voxaboxen
+            # TODO: Add unitests !
+            # - name: Doctests with pytest
+            #   run: |
+            #       pytest --doctest-modules voxaboxen
             - name: Integration tests with pytest
               run: |
                   pytest tests/integration

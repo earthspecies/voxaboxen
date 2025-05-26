@@ -17,5 +17,4 @@ def test_docstrings_exist(base_folder: str, skip_files_list: list) -> None:
     skip_files_list: list[str], optional
         List of filename that should be skipped.
     """
-    print(skip_files_list)
     assert check_docstrings(base_folder, None, skip_files_list=skip_files_list)
