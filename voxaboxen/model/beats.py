@@ -1,4 +1,6 @@
 """
+Based on:
+
 BEATs: Audio Pre-Training with Acoustic Tokenizers (https://arxiv.org/abs/2212.09058)
 Github source: https://github.com/microsoft/unilm/tree/master/beats
 Copyright (c) 2022 Microsoft
@@ -9,8 +11,7 @@ https://github.com/pytorch/fairseq
 
 import logging
 import math
-import warnings
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -24,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 
 class BEATsConfig:
-    def __init__(self, cfg=None):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+
+    def __init__(self, cfg: dict = None) -> None:
         self.input_patch_size: int = -1  # path size of patch embedding
         self.embed_dim: int = 512  # patch embedding dimension
         self.conv_bias: bool = False  # include bias in conv encoder
@@ -80,7 +83,7 @@ class BEATsConfig:
         if cfg is not None:
             self.update(cfg)
 
-    def update(self, cfg: dict):
+    def update(self, cfg: dict) -> None:
         """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         self.__dict__.update(cfg)
 
@@ -130,7 +133,12 @@ class BEATs(nn.Module):
         features: torch.Tensor,
         padding_mask: torch.Tensor,
     ) -> torch.Tensor:
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         extra = padding_mask.size(1) % features.size(1)
         if extra > 0:
             padding_mask = padding_mask[:, :-extra]
@@ -144,7 +152,12 @@ class BEATs(nn.Module):
         fbank_mean: float = 15.41663,
         fbank_std: float = 6.55582,
     ) -> torch.Tensor:
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         fbanks = []
         for waveform in source:
             waveform = waveform.unsqueeze(0) * 2**15
@@ -162,13 +175,18 @@ class BEATs(nn.Module):
 
     def extract_features(
         self,
-        source: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
+        source: Tensor,
+        padding_mask: Optional[Tensor] = None,
         fbank_mean: float = 15.41663,
         fbank_std: float = 6.55582,
-        feature_only=False,
-    ):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+        feature_only: bool = False,
+    ) -> Tuple[Tensor, Optional[Tensor]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        Tuple[torch.Tensor, Optional[torch.Tensor]]
+        """
         fbank = self.preprocess(source, fbank_mean=fbank_mean, fbank_std=fbank_std).to(
             torch.float32
         )
@@ -218,7 +236,7 @@ class BEATs(nn.Module):
 class TransformerEncoder(nn.Module):
     """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
 
-    def __init__(self, args):
+    def __init__(self, args: object) -> None:
         super().__init__()
 
         self.dropout = args.dropout
@@ -300,8 +318,19 @@ class TransformerEncoder(nn.Module):
             args, "layer_wise_gradient_decay_ratio", 1
         )
 
-    def forward(self, x, padding_mask=None, layer=None):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    def forward(
+        self,
+        x: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+        layer: Optional[int] = None,
+    ) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor, Optional[torch.Tensor]]]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        x : torch.Tensor
+        layer_results : List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
+        """
         x, layer_results = self.extract_features(x, padding_mask, layer)
 
         if self.layer_norm_first and layer is None:
@@ -309,8 +338,19 @@ class TransformerEncoder(nn.Module):
 
         return x, layer_results
 
-    def extract_features(self, x, padding_mask=None, tgt_layer=None):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    def extract_features(
+        self,
+        x: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+        tgt_layer: Optional[int] = None,
+    ) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor, Optional[torch.Tensor]]]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        x : torch.Tensor
+        layer_results : List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
+        """
         if padding_mask is not None:
             x[padding_mask] = 0
 
@@ -426,9 +466,14 @@ class TransformerSentenceEncoderLayer(nn.Module):
         self_attn_mask: torch.Tensor = None,
         self_attn_padding_mask: torch.Tensor = None,
         need_weights: bool = False,
-        pos_bias=None,
-    ):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+        pos_bias: Optional[Tensor] = None,
+    ) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]
+        """
         residual = x
 
         if self.layer_norm_first:
@@ -493,24 +538,24 @@ class MultiheadAttention(nn.Module):
 
     def __init__(
         self,
-        embed_dim,
-        num_heads,
-        kdim=None,
-        vdim=None,
-        dropout=0.0,
-        bias=True,
-        add_bias_kv=False,
-        add_zero_attn=False,
-        self_attention=False,
-        encoder_decoder_attention=False,
-        q_noise=0.0,
-        qn_block_size=8,
-        has_relative_attention_bias=False,
-        num_buckets=32,
-        max_distance=128,
-        gru_rel_pos=False,
-        rescale_init=False,
-    ):
+        embed_dim: int,
+        num_heads: int,
+        kdim: Optional[int] = None,
+        vdim: Optional[int] = None,
+        dropout: float = 0.0,
+        bias: bool = True,
+        add_bias_kv: bool = False,
+        add_zero_attn: bool = False,
+        self_attention: bool = False,
+        encoder_decoder_attention: bool = False,
+        q_noise: float = 0.0,
+        qn_block_size: int = 8,
+        has_relative_attention_bias: bool = False,
+        num_buckets: int = 32,
+        max_distance: int = 128,
+        gru_rel_pos: bool = False,
+        rescale_init: bool = False,
+    ) -> None:
         super().__init__()
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
@@ -577,7 +622,7 @@ class MultiheadAttention(nn.Module):
 
         self.reset_parameters()
 
-    def reset_parameters(self):
+    def reset_parameters(self) -> None:
         """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         if self.qkv_same_dim:
             # Empirically observed the convergence to be much better with
@@ -600,8 +645,16 @@ class MultiheadAttention(nn.Module):
         if self.has_relative_attention_bias:
             nn.init.xavier_normal_(self.relative_attention_bias.weight)
 
-    def _relative_positions_bucket(self, relative_positions, bidirectional=True):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    def _relative_positions_bucket(
+        self, relative_positions: Tensor, bidirectional: bool = True
+    ) -> Tensor:
+        """
+        See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         num_buckets = self.num_buckets
         max_distance = self.max_distance
         relative_buckets = 0
@@ -633,8 +686,13 @@ class MultiheadAttention(nn.Module):
         )
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    def compute_bias(self, query_length: int, key_length: int) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         context_position = torch.arange(query_length, dtype=torch.long)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
         relative_position = memory_position - context_position
@@ -650,7 +708,7 @@ class MultiheadAttention(nn.Module):
 
     def forward(
         self,
-        query,
+        query: Tensor,
         key: Optional[Tensor],
         value: Optional[Tensor],
         key_padding_mask: Optional[Tensor] = None,
@@ -678,6 +736,11 @@ class MultiheadAttention(nn.Module):
             need_head_weights (bool, optional): return the attention
                 weights for each head. Implies *need_weights*. Default:
                 return the average attention weights over all heads.
+
+        Returns:
+            attn (torch.Tensor)
+            attn_weights (torch.Tensor)
+            position_bias (torch.Tensor)
         """
         if need_head_weights:
             need_weights = True
@@ -923,7 +986,11 @@ class MultiheadAttention(nn.Module):
         src_len: int,
         static_kv: bool,
     ) -> Optional[Tensor]:
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns:
+            torch.Tensor
+        """
         # saved key padding masks have shape (bsz, seq_len)
         if prev_key_padding_mask is not None and static_kv:
             new_key_padding_mask = prev_key_padding_mask
@@ -963,7 +1030,11 @@ class MultiheadAttention(nn.Module):
     def _get_input_buffer(
         self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]]
     ) -> Dict[str, Optional[Tensor]]:
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns:
+            Dict
+        """
         result = self.get_incremental_state(incremental_state, "attn_state")
         if result is not None:
             return result
@@ -975,16 +1046,27 @@ class MultiheadAttention(nn.Module):
         self,
         incremental_state: Dict[str, Dict[str, Optional[Tensor]]],
         buffer: Dict[str, Optional[Tensor]],
-    ):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    ) -> Dict:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns:
+            Dict
+        """
         return self.set_incremental_state(incremental_state, "attn_state", buffer)
 
-    def apply_sparse_mask(self, attn_weights, tgt_len: int, src_len: int, bsz: int):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    def apply_sparse_mask(
+        self, attn_weights: Tensor, tgt_len: int, src_len: int, bsz: int
+    ) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         return attn_weights
 
 
-def init_bert_params(module):
+def init_bert_params(module: nn.Module) -> None:
     """
     Initialize the weights specific to the BERT Model.
     This overrides the default initializations depending on the specified arguments.
@@ -998,7 +1080,7 @@ def init_bert_params(module):
            the normal distribution (to be validated).
     """
 
-    def normal_(data):
+    def normal_(data: Tensor) -> None:
         """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         # with FSDP, module params will be on CUDA, so we cast them back to CPU
         # so that the RNG is consistent with and without FSDP
@@ -1022,30 +1104,45 @@ class GradMultiply(torch.autograd.Function):
     """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
 
     @staticmethod
-    def forward(ctx, x, scale):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    def forward(ctx: object, x: Tensor, scale: float) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         ctx.scale = scale
         res = x.new(x)
         return res
 
     @staticmethod
-    def backward(ctx, grad):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    def backward(ctx: object, grad: Tensor) -> Tuple[Tensor, Optional[None]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        Tuple[torch.Tensor, None]
+        """
         return grad * ctx.scale, None
 
 
 class SamePad(nn.Module):
     """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
 
-    def __init__(self, kernel_size, causal=False):
+    def __init__(self, kernel_size: int, causal: bool = False) -> None:
         super().__init__()
         if causal:
             self.remove = kernel_size - 1
         else:
             self.remove = 1 if kernel_size % 2 == 0 else 0
 
-    def forward(self, x):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    def forward(self, x: Tensor) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         if self.remove > 0:
             x = x[:, :, : -self.remove]
         return x
@@ -1054,19 +1151,26 @@ class SamePad(nn.Module):
 class Swish(nn.Module):
     """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(Swish, self).__init__()
         self.act = torch.nn.Sigmoid()
 
-    def forward(self, x):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    def forward(self, x: Tensor) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         return x * self.act(x)
 
 
 class GLU_Linear(nn.Module):
     """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
 
-    def __init__(self, input_dim, output_dim, glu_type="sigmoid", bias_in_glu=True):
+    def __init__(
+        self, input_dim: int, output_dim: int, glu_type: str, bias_in_glu: bool = True
+    ) -> None:
         super(GLU_Linear, self).__init__()
 
         self.glu_type = glu_type
@@ -1086,9 +1190,16 @@ class GLU_Linear(nn.Module):
         else:
             self.linear = nn.Linear(input_dim, output_dim * 2, False)
 
-    def forward(self, x):
-        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
-        # to be consistent with GLU_Linear, we assume the input always has the #channel (#dim) in the last dimension of the tensor, so need to switch the dimension first for 1D-Conv case
+    def forward(self, x: Tensor) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
+        # to be consistent with GLU_Linear, we assume the input always has the
+        # #channel (#dim) in the last dimension of the tensor,
+        # so need to switch the dimension first for 1D-Conv case
         x = self.linear(x)
 
         if self.glu_type == "bilinear":
@@ -1104,8 +1215,13 @@ class GLU_Linear(nn.Module):
         return x
 
 
-def gelu_accurate(x):
-    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+def gelu_accurate(x: Tensor) -> Tensor:
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+    Returns
+    -------
+    torch.Tensor
+    """
     if not hasattr(gelu_accurate, "_a"):
         gelu_accurate._a = math.sqrt(2 / math.pi)
     return (
@@ -1114,19 +1230,35 @@ def gelu_accurate(x):
 
 
 def gelu(x: torch.Tensor) -> torch.Tensor:
-    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+    Returns
+    -------
+    torch.Tensor
+    """
     return torch.nn.functional.gelu(x.float()).type_as(x)
 
 
-def get_activation_fn(activation: str):
-    """Returns the activation function corresponding to `activation`"""
+def get_activation_fn(activation: str) -> Callable:
+    """Returns the activation function corresponding to `activation`
+
+    Returns
+    -------
+    Callable[[torch.Tensor], torch.Tensor]
+        A function that applies the activation to a tensor.
+
+    Raises
+    ------
+    RuntimeError
+        If the activation name is not supported.
+    """
 
     if activation == "relu":
         return F.relu
     elif activation == "gelu":
         return gelu
     elif activation == "gelu_fast":
-        warnings.warn("--activation-fn=gelu_fast has been renamed to gelu_accurate")
+        # warnings.warn("--activation-fn=gelu_fast has been renamed to gelu_accurate")
         return gelu_accurate
     elif activation == "gelu_accurate":
         return gelu_accurate
@@ -1140,7 +1272,7 @@ def get_activation_fn(activation: str):
         raise RuntimeError("--activation-fn {} not supported".format(activation))
 
 
-def quant_noise(module, p, block_size):
+def quant_noise(module: nn.Module, p: float, block_size: int) -> nn.Module:
     """
     Wraps modules and applies quantization noise to the weights for
     subsequent quantization with Iterative Product Quantization as
@@ -1158,6 +1290,10 @@ def quant_noise(module, p, block_size):
           see "And the Bit Goes Down: Revisiting the Quantization of Neural Networks"
         - We implement the simplest form of noise here as stated in the paper
           which consists in randomly dropping blocks
+
+    Returns
+    -------
+    nn.Module
     """
 
     # if no quantization noise, don't register hook
@@ -1188,7 +1324,7 @@ def quant_noise(module, p, block_size):
             k = module.kernel_size[0] * module.kernel_size[1]
             assert k % block_size == 0, "Kernel size must be a multiple of block size"
 
-    def _forward_pre_hook(mod, input):
+    def _forward_pre_hook(mod: nn.Module, input: Tuple[Tensor, ...]) -> None:
         # no noise for evaluation
         if mod.training:
             if not is_conv:
