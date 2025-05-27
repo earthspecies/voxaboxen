@@ -15,6 +15,7 @@ dependencies = [
     "pyyaml>=6.0",
     "scipy>=1.10.1",
     "seaborn>=0.12.2",
+    "soundfile>=0.12.1",
     "torch>=2.0.1",
     "torchaudio>=2.0.1",
     "tqdm>=4.67.0",
