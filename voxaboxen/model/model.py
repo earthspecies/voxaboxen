@@ -2,11 +2,13 @@
 Main class for sound event detection model
 """
 
+import argparse
 import math
+from typing import Optional, Tuple
 
 import torch
 from einops import rearrange
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import functional as F
 
 from voxaboxen.model.encoders import get_encoder
@@ -32,7 +34,7 @@ class DetectionModel(nn.Module):
         Dimension of encoder embeddings, inferred from encoder if not provided
     """
 
-    def __init__(self, args, embedding_dim=None):
+    def __init__(self, args: argparse.Namespace, embedding_dim: int = None) -> None:
         super().__init__()
         self.is_bidirectional = (
             args.bidirectional if hasattr(args, "bidirectional") else False
@@ -50,7 +52,16 @@ class DetectionModel(nn.Module):
         if self.is_bidirectional:
             self.rev_detection_head = DetectionHead(args, embedding_dim=embedding_dim)
 
-    def forward(self, x):
+    def forward(
+        self, x: Tensor
+    ) -> Tuple[
+        Tensor,  # detection_probs
+        Tensor,  # regression
+        Tensor,  # class_logits
+        Optional[Tensor],  # rev_detection_probs
+        Optional[Tensor],  # rev_regression
+        Optional[Tensor],  # rev_class_logits
+    ]:
         """Forward pass of the detection model.
 
         Parameters
@@ -118,11 +129,11 @@ class DetectionModel(nn.Module):
             rev_class_logits,
         )
 
-    def freeze_encoder(self):
+    def freeze_encoder(self) -> None:
         """Freeze encoder parameters to prevent updates during training."""
         self.encoder.freeze()
 
-    def unfreeze_encoder(self):
+    def unfreeze_encoder(self) -> None:
         """Unfreeze encoder parameters to allow updates during training."""
         self.encoder.unfreeze()
 
@@ -139,13 +150,13 @@ class DetectionHead(nn.Module):
         Dimension of input embeddings
     """
 
-    def __init__(self, args, embedding_dim=None):
+    def __init__(self, args: argparse.Namespace, embedding_dim: int = None) -> None:
         super().__init__()
         self.n_classes = len(args.label_set)
         self.head = nn.Conv1d(embedding_dim, 2 + self.n_classes, 1, stride=1, padding=0)
         self.args = args
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         """Forward pass of detection head.
 
         Parameters
@@ -173,7 +184,9 @@ class DetectionHead(nn.Module):
         return detection_logits, reg, class_logits
 
 
-def rms_and_mixup(X, d, r, y, train, args):
+def rms_and_mixup(
+    X: Tensor, d: Tensor, r: Tensor, y: Tensor, train: bool, args: argparse.Namespace
+) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Apply optional RMS normalization and optional mixup augmentation.
 
     Parameters
