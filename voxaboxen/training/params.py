@@ -6,19 +6,22 @@ import argparse
 import logging
 import os
 import random
+from typing import List, Union
 
 import numpy as np
 import torch
 import yaml
 
 
-def parse_args(args, allow_unknown=False):
+def parse_args(
+    args: Union[argparse.Namespace, List[str]], allow_unknown: bool = False
+) -> argparse.Namespace:
     """
     Parse args
 
     Parameters
     ----------
-    args : str
+    args : list of str
     allow_unknown : bool (Optional)
         Whether to allow unknown args to be passed
     Returns
@@ -54,7 +57,9 @@ def parse_args(args, allow_unknown=False):
         "--clip-hop",
         type=float,
         default=None,
-        help="clip hop, in seconds. If None, automatically set to be half clip duration. Used only during training; clip hop is automatically set to be 1/2 clip duration for inference",
+        help="""clip hop, in seconds. If None, automatically set to be
+             half clip duration. Used only during training; clip hop
+             is automatically set to be 1/2 clip duration for inference""",
     )
     parser.add_argument(
         "--train-info-fp",
@@ -106,22 +111,25 @@ def parse_args(args, allow_unknown=False):
     parser.add_argument(
         "--multichannel",
         action="store_true",
-        help="If passed, will encode each audio channel separately, then add together the encoded audio before final layer",
+        help="""If passed, will encode each audio channel separately,
+        then add together the encoded audio before final layer""",
     )
     parser.add_argument(
         "--segmentation-based",
         action="store_true",
-        help="If passed, will make predictions based on frame-wise segmentations rather than box starts",
+        help="If passed, will make predictions based on "
+        "frame-wise segmentations rather than box starts",
     )
     parser.add_argument(
         "--comb-discard-thresh",
         type=float,
         default=0.75,
-        help="If bidirectional, sets threshold for combining forward and backward predictions. Only used in val epochs",
+        help="If bidirectional, sets threshold for combining forward"
+        " and backward predictions. Only used in val epochs",
     )
 
     # Encoder-specific
-    ## AVES
+    # AVES
     parser.add_argument(
         "--aves-config-fp",
         type=str,
@@ -132,17 +140,17 @@ def parse_args(args, allow_unknown=False):
         type=str,
         default="https://storage.googleapis.com/esp-public-files/birdaves/birdaves-biox-base.torchaudio.pt",
     )
-    ## Frame-ATST
+    # Frame-ATST
     parser.add_argument(
         "--frame-atst-weight-fp", type=str, default="weights/atstframe_base.ckpt"
     )
-    ## BEATs
+    # BEATs
     parser.add_argument(
         "--beats-checkpoint-fp",
         type=str,
         default="weights/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt",
     )
-    ## CRNN
+    # CRNN
     parser.add_argument("--rnn-hidden-size", type=int, default=2048)
 
     # Training
@@ -160,20 +168,23 @@ def parse_args(args, allow_unknown=False):
         "--display-pbar",
         type=int,
         default=15,
-        help="higher displays info less frequently but is faster, set to -1 for no display and max speed",
+        help="higher displays info less frequently but is faster, "
+        "set to -1 for no display and max speed",
     )
     parser.add_argument("--unfreeze-encoder-epoch", type=int, default=3)
     parser.add_argument(
         "--end-mask-perc",
         type=float,
         default=0.1,
-        help="During training, mask loss from a percentage of the frames on each end of the clip",
+        help="During training, mask loss from a percentage "
+        "of the frames on each end of the clip",
     )
     parser.add_argument(
         "--omit-empty-clip-prob",
         type=float,
         default=0,
-        help="if a clip has no annotations, do not use for training with this probability",
+        help="if a clip has no annotations, do not use for"
+        " training with this probability",
     )
     parser.add_argument(
         "--lamb",
@@ -227,7 +238,8 @@ def parse_args(args, allow_unknown=False):
         "--peak-distance",
         type=float,
         default=5,
-        help="for finding peaks in detection probability, what radius to use for detecting local maxima. In output frame rate.",
+        help="for finding peaks in detection probability, what radius "
+        "to use for detecting local maxima. In output frame rate.",
     )
     parser.add_argument(
         "--nms",
@@ -243,31 +255,36 @@ def parse_args(args, allow_unknown=False):
         "--delete-short-dur-sec",
         type=float,
         default=0,
-        help="if using segmentation based model, delete vox shorter than this as a post-processing step",
+        help="if using segmentation based model, delete vox "
+        "shorter than this as a post-processing step",
     )
     parser.add_argument(
         "--fill-holes-dur-sec",
         type=float,
         default=0,
-        help="if using segmentation based model, fill holes shorter than this as a post-processing step",
+        help="if using segmentation based model, fill holes "
+        "shorter than this as a post-processing step",
     )
     parser.add_argument(
         "--n-val-fit",
         type=int,
         default=19,
-        help="number of thresholds to try when fitting comb_discard_thresh and comb_iou_thresh on the val set",
+        help="number of thresholds to try when fitting "
+        "comb_discard_thresh and comb_iou_thresh on the val set",
     )
     parser.add_argument(
         "--n-map",
         type=int,
         default=30,
-        help="number of detection_thresholds to sweep when calculating mean average precision",
+        help="number of detection_thresholds to sweep "
+        "when calculating mean average precision",
     )
     parser.add_argument(
         "--median-filter-width",
         type=int,
         default=1,
-        help="if using segmentation based model, do median filtering with this filter width",
+        help="if using segmentation based model, do "
+        "median filtering with this filter width",
     )
 
     if allow_unknown:
@@ -285,7 +302,7 @@ def parse_args(args, allow_unknown=False):
     check_config(args)
 
     if args.clip_hop is None:
-        setattr(args, "clip_hop", args.clip_duration / 2)
+        args.clip_hop = args.clip_duration / 2
 
     args.device = "cuda" if torch.cuda.is_available() and not args.cpu else "cpu"
     if allow_unknown:
@@ -294,7 +311,7 @@ def parse_args(args, allow_unknown=False):
         return args
 
 
-def read_config(args):
+def read_config(args: argparse.Namespace) -> argparse.Namespace:
     """
     Load project-level config and incorporate into args
     Parameters
@@ -315,29 +332,25 @@ def read_config(args):
     return args
 
 
-def set_seed(seed):
+def set_seed(seed: int) -> None:
     """
     Set random seed
     Parameters
     ----------
     seed : int
-    Returns
-    ----------
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
 
-def save_params(args):
+def save_params(args: argparse.Namespace) -> None:
     """
     Save a copy of the params used for this experiment
     Parameters
     ----------
     args : argparse.Namespace
         Configuration arguments
-    Returns
-    ----------
     """
     logging.info("Params:")
     params_file = os.path.join(args.experiment_dir, "params.yaml")
@@ -352,7 +365,7 @@ def save_params(args):
         yaml.dump(args_dict, f)
 
 
-def load_params(fp):
+def load_params(fp: str) -> argparse.Namespace:
     """
     Checks args to make sure values are allowed.
     Parameters
@@ -375,15 +388,18 @@ def load_params(fp):
     return args
 
 
-def check_config(args):
+def check_config(args: argparse.Namespace) -> None:
     """
     Checks args to make sure values are allowed.
     Parameters
     ----------
     args : argparse.Namespace
         Configuration arguments
-    Returns
+
+    Raises
     ----------
+    ValueError
+        If bidirectional and segmentation settings are both passed
     """
     assert args.end_mask_perc < 0.25, (
         "Masking above 25% of each end during training will interfere with inference"
@@ -395,7 +411,8 @@ def check_config(args):
         import warnings
 
         warnings.warn(
-            "when using segmentation-based framework, recommend setting args.rho=1"
+            "when using segmentation-based framework, recommend setting args.rho=1",
+            stacklevel=2,
         )
     if args.bidirectional and args.segmentation_based:
         raise ValueError(
@@ -410,7 +427,9 @@ def check_config(args):
         if args.clip_duration != 10:
             import warnings
 
-            warnings.warn("frame_atst expects clip duration of 10 seconds")
+            warnings.warn(
+                "frame_atst expects clip duration of 10 seconds", stacklevel=2
+            )
     elif args.encoder_type == "beats":
         assert args.scale_factor == 320, "beats requires scale-factor == 320"
     elif args.encoder_type == "crnn":
@@ -418,4 +437,6 @@ def check_config(args):
     else:
         import warnings
 
-        warnings.warn("Did not confirm correct scale factor for chosen encoder type")
+        warnings.warn(
+            "Did not confirm correct scale factor for chosen encoder type", stacklevel=2
+        )
