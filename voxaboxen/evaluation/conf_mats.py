@@ -2,7 +2,9 @@
 Functions for creating confusion matrices
 """
 
+import argparse
 import os
+from typing import Dict, List, Tuple
 
 import numpy as np
 import seaborn as sns
@@ -11,7 +13,13 @@ from matplotlib import pyplot as plt
 from voxaboxen.evaluation.raven_utils import Clip
 
 
-def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_threshold):
+def get_confusion_matrix(
+    predictions_fp: str,
+    annotations_fp: str,
+    args: argparse.Namespace,
+    iou: float,
+    class_threshold: float,
+) -> Tuple[np.ndarray, List[str]]:
     """
     Produces a confusion matrix for predictions on one audio file
     Parameters
@@ -46,13 +54,16 @@ def get_confusion_matrix(predictions_fp, annotations_fp, args, iou, class_thresh
     return confusion_matrix, confusion_matrix_labels
 
 
-def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
+def summarize_confusion_matrix(
+    confusion_matrix: Dict[str, np.ndarray], confusion_matrix_labels: List[str]
+) -> Tuple[np.ndarray, List[str]]:
     """
     Aggregates multiple per-file confusion matrices
     Parameters
     ----------
     confusion_matrix : dict
-        dict of the form {fp : fp_cm}, where fp_cm is numpy array giving the confusion matrix
+        dict of the form {fp : fp_cm}, where
+        fp_cm is numpy array giving the confusion matrix
     confusion_matrix_labels : list
     Returns
     -------
@@ -71,7 +82,9 @@ def summarize_confusion_matrix(confusion_matrix, confusion_matrix_labels):
     return overall, confusion_matrix_labels
 
 
-def plot_confusion_matrix(data, label_names, target_dir, name=""):
+def plot_confusion_matrix(
+    data: np.ndarray, label_names: List[str], target_dir: str, name: str = ""
+) -> None:
     """
     Plots confusion matrix
     """

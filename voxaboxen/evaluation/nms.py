@@ -2,10 +2,19 @@
 Functions for non-maximal suppression
 """
 
+from typing import Tuple
+
 import numpy as np
 
 
-def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh=0.001):
+def soft_nms(
+    bbox_preds: np.ndarray,
+    bbox_scores: np.ndarray,
+    class_idxs: np.ndarray,
+    class_probs: np.ndarray,
+    sigma: float = 0.5,
+    thresh: float = 0.001,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Modified from https://github.com/DocF/Soft-NMS/blob/master/softnms_pytorch.py
 
@@ -13,7 +22,8 @@ def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh
     https://arxiv.org/abs/1704.04503
 
     Build a Soft NMS algorithm.
-    # Arguments
+    Arguments
+    -------
         bbox_preds: numpy array
             shape=(num_bboxes, 2)
 
@@ -30,7 +40,8 @@ def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh
 
         thresh:      score thresh
 
-    # Return
+    Returns
+    -------
         the index of the selected boxes
     """
 
@@ -100,31 +111,38 @@ def soft_nms(bbox_preds, bbox_scores, class_idxs, class_probs, sigma=0.5, thresh
     return new_bbox_preds, new_bbox_scores, new_class_idxs, new_class_probs
 
 
-def nms(bbox_preds, bbox_scores, class_idxs, class_probs, iou_thresh=0.5):
+def nms(
+    bbox_preds: np.ndarray,
+    bbox_scores: np.ndarray,
+    class_idxs: np.ndarray,
+    class_probs: np.ndarray,
+    iou_thresh: float = 0.5,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Modified from https://github.com/DocF/Soft-NMS/blob/master/softnms_pytorch.py
 
     Reference
     https://arxiv.org/abs/1704.04503
 
-    Build a Soft NMS algorithm.
-    # Arguments
-        bbox_preds: numpy array
-            shape=(num_bboxes, 2)
+    Perform Non-Maximum Suppression (NMS) on bounding boxes.
 
-        bbox_scores: numpy array
-            shape=(num_bboxes,)
+    Parameters
+    ----------
+    bbox_preds : np.ndarray
+        Bounding boxes, shape (num_bboxes, 2)
+    bbox_scores : np.ndarray
+        Scores for each bounding box, shape (num_bboxes,)
+    class_idxs : np.ndarray
+        Predicted class indices for each box, shape (num_bboxes,)
+    class_probs : np.ndarray
+        Predicted class probabilities, shape (num_bboxes,)
+    iou_thresh : float, optional
+        IoU threshold for suppression, by default 0.5
 
-        class_idxs: numpy array
-            shape=(num_bboxes,)
-
-        class_probs: numpy array
-            shape=(num_bboxes,)
-
-        thresh:      score thresh
-
-    # Return
-        the index of the selected boxes
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+        Filtered (bbox_preds, bbox_scores, class_idxs, class_probs)
     """
 
     bbox_preds0 = bbox_preds

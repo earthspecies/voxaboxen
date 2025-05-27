@@ -2,8 +2,10 @@
 Functions for evaluating model performance
 """
 
+import argparse
 import csv
 import os
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -16,9 +18,10 @@ from voxaboxen.evaluation.raven_utils import Clip
 from voxaboxen.model.model import rms_and_mixup
 
 
-def f1_from_counts(tp, fp, fn):
+def f1_from_counts(tp: int, fp: int, fn: int) -> Dict:
     """
-    Calculate precision, recall and F1 score from true positives, false positives and false negatives.
+    Calculate precision, recall and F1 score from true positives,
+    false positives and false negatives.
 
     Parameters
     ----------
@@ -41,14 +44,17 @@ def f1_from_counts(tp, fp, fn):
     return {"prec": prec, "rec": rec, "f1": f1}
 
 
-def macro_micro_f1_metrics(summary, unknown_label="Unknown"):
+def macro_micro_f1_metrics(
+    summary: Dict, unknown_label: str = "Unknown"
+) -> Tuple[Dict, Dict]:
     """
     Calculate macro and micro averaged  from per-class summary statistics.
 
     Parameters
     ----------
     summary : dict
-        Dictionary of the sort output by summarize_metrics(), containing per-class metrics and counts
+        Dictionary of the sort output by summarize_metrics(), containing per-class
+        metrics and counts
     unknown_label : str, optional
         Label to exclude from macro averaging, by default "Unknown"
 
@@ -85,14 +91,14 @@ def macro_micro_f1_metrics(summary, unknown_label="Unknown"):
 
 
 def get_metrics(
-    predictions_fp,
-    annotations_fp,
-    iou,
-    class_threshold,
-    duration,
-    label_mapping,
-    unknown_label,
-):
+    predictions_fp: str,
+    annotations_fp: str,
+    iou: float,
+    class_threshold: float,
+    duration: float,
+    label_mapping: Dict[str, str],
+    unknown_label: str,
+) -> Dict[str, Dict[str, int]]:
     """
     Compare the predicted boxes in `prediction_fp` to the true boxes as given in
     annotations_fp, and use graph matching to compute TP, FP and FN counts by
@@ -137,9 +143,10 @@ def get_metrics(
     return tfpn_counts_by_class
 
 
-def summarize_metrics(tpfn_counts):
+def summarize_metrics(tpfn_counts: Dict) -> Dict:
     """
-    Aggregate true/false positive/negative counts across files and compute precision, recall, and F1 scores.
+    Aggregate true/false positive/negative counts across files and compute
+    precision, recall, and F1 scores.
 
     Parameters
     ----------
@@ -251,7 +258,19 @@ def summarize_metrics(tpfn_counts):
     return overall
 
 
-def generate_predictions(model, single_clip_dataloader, args, verbose=True):
+def generate_predictions(
+    model: torch.nn.Module,
+    single_clip_dataloader: torch.utils.data.DataLoader,
+    args: argparse.Namespace,
+    verbose: bool = True,
+) -> Tuple[
+    np.ndarray,  # assembled_dets
+    np.ndarray,  # assembled_regs
+    np.ndarray,  # assembled_classifs
+    Optional[np.ndarray],  # assembled_rev_dets
+    Optional[np.ndarray],  # assembled_rev_regs
+    Optional[np.ndarray],  # assembled_rev_classifs
+]:
     """
     Generate predictions for a single audio clip using the model.
 
@@ -269,7 +288,8 @@ def generate_predictions(model, single_clip_dataloader, args, verbose=True):
     Returns
     -------
     tuple
-        Tuple containing forward and backward predictions (detections, regressions, classifications)
+        Tuple containing forward and backward predictions
+        (detections, regressions, classifications)
     """
 
     assert single_clip_dataloader.dataset.clip_hop == args.clip_duration / 2, (
@@ -328,16 +348,38 @@ def generate_predictions(model, single_clip_dataloader, args, verbose=True):
             all_rev_regressions = torch.cat(all_rev_regressions)
             all_rev_classifs = torch.cat(all_rev_classifs)
 
-        ######## Todo: Need better checking that preds are the correct dur
+        # Todo: Need better checking that preds are the correct dur
         assert all_detections.size(dim=1) % 2 == 0
         first_quarter_window_dur_samples = all_detections.size(dim=1) // 4
         last_quarter_window_dur_samples = (
             all_detections.size(dim=1) // 2
         ) - first_quarter_window_dur_samples
 
-        def assemble(d, r, c):
-            """We use half overlapping windows, need to throw away boundary predictions.
-            See get_val_dataloader and get_test_dataloader in data.py"""
+        def assemble(
+            d: torch.Tensor, r: torch.Tensor, c: torch.Tensor
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+            """
+            Assemble predictions from overlapping windows by discarding boundary
+            predictions. We use half overlapping windows.
+            See get_val_dataloader and get_test_dataloader in data.py
+
+            Parameters
+            ----------
+            d : torch.Tensor
+                Detection scores tensor of shape (windows, window_length)
+            r : torch.Tensor
+                Regression outputs tensor of shape (windows, window_length)
+            c : torch.Tensor
+                Classification logits of shape (windows, window_length, num_classes)
+
+            Returns
+            -------
+            Tuple[np.ndarray, np.ndarray, np.ndarray]
+                Tuple containing:
+                - assembled detections (1D numpy array)
+                - assembled regressions (1D numpy array)
+                - assembled classifications (2D numpy array)
+            """
             # assemble detections
             beginning_d_bit = d[0, :first_quarter_window_dur_samples]
             end_d_bit = d[-1, -last_quarter_window_dur_samples:]
@@ -391,14 +433,14 @@ def generate_predictions(model, single_clip_dataloader, args, verbose=True):
 
 
 def pred2bbox(
-    detection_peaks,
-    detection_probs,
-    durations,
-    class_idxs,
-    class_probs,
-    pred_sr,
-    is_rev,
-):
+    detection_peaks: Union[np.ndarray, Sequence[float]],
+    detection_probs: Union[np.ndarray, Sequence[float]],
+    durations: Union[np.ndarray, Sequence[float]],
+    class_idxs: Union[np.ndarray, Sequence[int]],
+    class_probs: Union[np.ndarray, Sequence[float]],
+    pred_sr: int,
+    is_rev: bool,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Convert detection peaks and durations to bounding box format.
 
@@ -458,8 +500,13 @@ def pred2bbox(
 
 
 def bbox2raven(
-    bboxes, class_idxs, label_set, detection_probs, class_probs, unknown_label
-):
+    bboxes: Union[np.ndarray, Sequence[Sequence[float]], None],
+    class_idxs: Union[np.ndarray, Sequence[int]],
+    label_set: List[str],
+    detection_probs: Union[np.ndarray, Sequence[float]],
+    class_probs: Union[np.ndarray, Sequence[float]],
+    unknown_label: str,
+) -> List[List[Union[str, float]]]:
     """
     Convert bounding boxes to Raven selection table format.
 
@@ -503,9 +550,13 @@ def bbox2raven(
         "Class Prob",
     ]
 
-    def label_idx_to_label(i):
+    def label_idx_to_label(i: int) -> str:
         """
         Convert label index (integer) to label (string)
+
+        Returns
+        -----
+        label : str
         """
         if i == -1:
             return unknown_label
@@ -514,7 +565,9 @@ def bbox2raven(
 
     out_data = [
         [bbox[0], bbox[1], label_idx_to_label(int(c)), dp, cp]
-        for bbox, c, dp, cp in zip(bboxes, class_idxs, detection_probs, class_probs)
+        for bbox, c, dp, cp in zip(
+            bboxes, class_idxs, detection_probs, class_probs, strict=False
+        )
     ]
     out_data = sorted(out_data, key=lambda x: x[:2])
 
@@ -523,7 +576,7 @@ def bbox2raven(
     return out
 
 
-def fill_holes(m, min_hole):
+def fill_holes(m: Union[np.ndarray, Sequence[bool]], min_hole: int) -> np.ndarray:
     """
     Fill small gaps in binary mask.
 
@@ -553,7 +606,7 @@ def fill_holes(m, min_hole):
     return m
 
 
-def delete_short(m, min_pos):
+def delete_short(m: Union[np.ndarray, Sequence[bool]], min_pos: int) -> np.ndarray:
     """
     Delete short sequences of True's in binary mask.
 
@@ -593,7 +646,7 @@ def delete_short(m, min_pos):
     return m
 
 
-def write_tsv(out_fp, data):
+def write_tsv(out_fp: str, data: List) -> None:
     """
     Write data to TSV file.
 
@@ -612,7 +665,9 @@ def write_tsv(out_fp, data):
             tsv_output.writerow(row)
 
 
-def select_from_neg_idxs(df, neg_idxs):
+def select_from_neg_idxs(
+    df: pd.DataFrame, neg_idxs: Union[Sequence[int], pd.Index]
+) -> pd.DataFrame:
     """
     Select rows not in given indices from DataFrame.
 
@@ -633,8 +688,12 @@ def select_from_neg_idxs(df, neg_idxs):
 
 
 def combine_fwd_bck_preds(
-    target_dir, fn, comb_discard_threshold, comb_iou_thresh, det_thresh
-):
+    target_dir: str,
+    fn: str,
+    comb_discard_threshold: float,
+    comb_iou_thresh: float,
+    det_thresh: float,
+) -> Tuple[str, str]:
     """
     Combine forward and backward predictions using graph matching.
 
@@ -691,8 +750,11 @@ def combine_fwd_bck_preds(
     os.makedirs(f"{target_dir}/tmp-cache", exist_ok=True)
     if (
         os.path.exists(
-            match_cache_fp
-            := f"{target_dir}/tmp-cache/match_cache_{fn}-detthresh{det_thresh}-cit{comb_iou_thresh}.npy"
+            match_cache_fp := (
+                f"{target_dir}/tmp-cache/match_cache_{fn}"
+                f"-detthresh{det_thresh}"
+                f"-cit{comb_iou_thresh}.npy"
+            )
         )
         and False
     ):
@@ -714,7 +776,6 @@ def combine_fwd_bck_preds(
         ben = bck_matches["End Time (s)"].to_numpy()
         starts = fbn
         ends = ben
-        # ious = ((fen + ben) - (fbn + bbn)) / (2*(np.maximum(fen, ben) - np.minimum(fbn, bbn)))
         ious = (np.minimum(fen, ben) - np.maximum(fbn, bbn)) / (
             np.maximum(fen, ben) - np.minimum(fbn, bbn)
         )
@@ -744,7 +805,8 @@ def combine_fwd_bck_preds(
     comb_preds = pd.concat(to_concat) if len(to_concat) > 0 else fwd_preds
     assert len(comb_preds) == len(fwd_preds) + len(bck_preds) - len(matching)
 
-    # Finally, keep only predictions above a threshold, this will include almost all matches
+    # Finally, keep only predictions above a threshold,
+    # this will include almost all matches
     comb_preds = comb_preds.loc[comb_preds["Detection Prob"] > comb_discard_threshold]
     comb_preds.sort_values("Begin Time (s)")
     comb_preds.index = list(range(len(comb_preds)))
@@ -755,17 +817,17 @@ def combine_fwd_bck_preds(
 
 
 def export_to_selection_table(
-    detections,
-    regressions,
-    classifications,
-    fn,
-    args,
-    is_bck,
-    verbose=True,
-    target_dir=None,
-    detection_threshold=0.5,
-    classification_threshold=0,
-):
+    detections: Union[np.ndarray, Sequence[float]],
+    regressions: Union[np.ndarray, Sequence[float]],
+    classifications: Union[np.ndarray, Sequence[Sequence[float]]],
+    fn: str,
+    args: argparse.Namespace,
+    is_bck: bool,
+    verbose: bool = True,
+    target_dir: Optional[str] = None,
+    detection_threshold: float = 0.5,
+    classification_threshold: float = 0.0,
+) -> str:
     """
     Convert a set of model outputs (detections, regressions, classifications)
     into a set of predicted bounding boxes, and write as a Raven-style selection
@@ -856,13 +918,13 @@ def export_to_selection_table(
         class_probs = np.array(class_probs)
 
     else:
-        ## peaks
+        # peaks
         detection_peaks, properties = find_peaks(
             detections, height=detection_threshold, distance=args.peak_distance
         )
         det_probs = properties["peak_heights"]
 
-        ## regressions and classifications
+        # regressions and classifications
         durations = []
         class_idxs = []
         class_probs = []
@@ -924,8 +986,12 @@ def export_to_selection_table(
 
 
 def predict_and_generate_manifest(
-    model, dataloader_dict, args, detection_thresholds=None, verbose=True
-):
+    model: torch.nn.Module,
+    dataloader_dict: Dict[str, torch.utils.data.DataLoader],
+    args: argparse.Namespace,
+    detection_thresholds: Optional[List[float]] = None,
+    verbose: bool = True,
+) -> Dict[float, pd.DataFrame]:
     """
     Generate predictions for multiple files and create manifest of results.
 
@@ -1039,18 +1105,18 @@ def predict_and_generate_manifest(
 
 
 def evaluate_based_on_manifest(
-    manifest,
-    output_dir,
-    iou,
-    class_threshold,
-    label_mapping,
-    unknown_label,
-    det_thresh,
-    comb_discard_threshold=0,
-    comb_iou_thresh=0.5,
-    bidirectional=False,
-    pred_types=None,
-):
+    manifest: pd.DataFrame,
+    output_dir: str,
+    iou: float,
+    class_threshold: float,
+    label_mapping: Dict[str, str],
+    unknown_label: str,
+    det_thresh: float,
+    comb_discard_threshold: float = 0,
+    comb_iou_thresh: float = 0.5,
+    bidirectional: bool = False,
+    pred_types: Optional[Union[Tuple[str, ...], Sequence[str]]] = None,
+) -> Tuple[Dict[str, Dict], None]:
     """
     Evaluate predictions using manifest file.
 
@@ -1094,7 +1160,7 @@ def evaluate_based_on_manifest(
         pred_types = ("fwd", "bck", "comb", "match") if bidirectional else ("fwd",)
     metrics = {p: {} for p in pred_types}
 
-    for i, row in manifest.iterrows():
+    for _i, row in manifest.iterrows():
         fn = row["filename"]
         annots_fp = row["annotations_fp"]
         duration = row["duration_sec"]
@@ -1132,16 +1198,16 @@ def evaluate_based_on_manifest(
 
 
 def mean_average_precision(
-    manifests_by_thresh,
-    label_mapping,
-    exp_dir,
-    iou=0.5,
-    pred_type="fwd",
-    unknown_label="Unknown",
-    bidirectional=False,
-    comb_iou_thresh=0,
-    is_test=False,
-):
+    manifests_by_thresh: Dict[float, pd.DataFrame],
+    label_mapping: Dict[str, str],
+    exp_dir: str,
+    iou: float = 0.5,
+    pred_type: str = "fwd",
+    unknown_label: str = "Unknown",
+    bidirectional: bool = False,
+    comb_iou_thresh: float = 0.0,
+    is_test: bool = False,
+) -> Tuple[float, Dict[str, list], Dict[str, float]]:
     """
     Calculate mean average precision across detection thresholds.
 
@@ -1220,7 +1286,7 @@ def mean_average_precision(
         precs = [0.0] + precs + [1.0]
         recs = [1.0] + recs + [0.0]
         prec_by_rec = {}
-        for r, p in zip(recs, precs):
+        for r, p in zip(recs, precs, strict=False):
             if r in prec_by_rec.keys():
                 prec_by_rec[r] = max(p, prec_by_rec[r])
             else:

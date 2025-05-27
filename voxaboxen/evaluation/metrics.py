@@ -4,12 +4,14 @@ https://github.com/c4dm/dcase-few-shot-bioacoustic
 MIT License
 """
 
+from typing import List, Tuple
+
 import mir_eval
 import numpy as np
 import scipy
 
 
-def fast_intersect(ref, est):
+def fast_intersect(ref: np.ndarray, est: np.ndarray) -> List:
     """Find all intersections between reference events and estimated events (fast).
     Best-case complexity: O(N log N + M log M) where N=length(ref) and M=length(est)
     Parameters
@@ -51,12 +53,14 @@ def fast_intersect(ref, est):
         estref_match = est_on_argsort[: (1 + est_on_maxindex)]
         estref_matches[ref_off_argsort[-1 - ref_id]] = set(estref_match)
 
-    zip_iterator = zip(refest_matches, estref_matches)
+    zip_iterator = zip(refest_matches, estref_matches, strict=False)
     matches = [x.intersection(y) for (x, y) in zip_iterator]
     return matches
 
 
-def iou(ref, est, method="fast"):
+def iou(
+    ref: np.ndarray, est: np.ndarray, method: str = "fast"
+) -> scipy.sparse.dok_matrix:
     """Compute pairwise "intersection over union" (IOU) metric between reference
     events and estimated events.
     Let us denote by a_i and b_i the onset and offset of reference event i.
@@ -108,7 +112,9 @@ def iou(ref, est, method="fast"):
     return S
 
 
-def compute_intersection(ref, est, method="fast"):
+def compute_intersection(
+    ref: np.ndarray, est: np.ndarray, method: str = "fast"
+) -> scipy.sparse.dok_matrix:
     """Compute pairwise intersection between reference
     events and estimated events.
     Let us denote by a_i and b_i the onset and offset of reference event i.
@@ -160,7 +166,9 @@ def compute_intersection(ref, est, method="fast"):
     return S
 
 
-def match_events(ref, est, min_iou=0.0, method="fast"):
+def match_events(
+    ref: np.ndarray, est: np.ndarray, min_iou: float = 0.0, method: str = "fast"
+) -> List[Tuple[int, int]]:
     """
     Compute a maximum matching between reference and estimated event times,
     subject to a criterion of minimum intersection-over-union (IOU).
@@ -219,7 +227,7 @@ def match_events(ref, est, min_iou=0.0, method="fast"):
     return matching
 
 
-def slow_intersect(ref, est):
+def slow_intersect(ref: np.ndarray, est: np.ndarray) -> List:
     """Find all intersections between reference events and estimated events (slow).
     Best-case complexity: O(N*M) where N=ref.shape[1] and M=est.shape[1]
     Parameters
@@ -247,4 +255,4 @@ def slow_intersect(ref, est):
                 ]
             )
         )
-    return
+    return matches
