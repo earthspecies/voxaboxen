@@ -4,11 +4,12 @@ Parameters for project setup
 
 import argparse
 import os
+from typing import List, Union
 
 import yaml
 
 
-def save_params(args):
+def save_params(args: argparse.Namespace) -> None:
     """Save a copy of the params used for this experiment"""
     params_file = os.path.join(args.project_dir, "project_config.yaml")
 
@@ -21,12 +22,28 @@ def save_params(args):
         yaml.dump(args_dict, f)
 
     print(
-        f"Saved config to {params_file}. You may now edit this file if you want some classes to be omitted or treated as Unknown"
+        f"Saved config to {params_file}. "
+        "You may now edit this file if you want some classes "
+        "to be omitted or treated as Unknown"
     )
 
 
-def parse_project_args(args):
-    """Parse project-level params"""
+def parse_project_args(
+    args: Union[argparse.Namespace, List[str]],
+) -> argparse.Namespace:
+    """
+    Parse project-level parameters from command-line arguments or a namespace.
+
+    Parameters
+    ----------
+    args : Union[argparse.Namespace, List[str]]
+        Either a pre-existing argparse.Namespace or a list of command-line arguments.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed arguments with project configuration.
+    """
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
