@@ -6,13 +6,14 @@ import argparse
 import math
 import warnings
 from functools import partial
+from typing import List, Optional, Tuple, Type, Union
 
 import numpy as np
 import torch
 import torchaudio
 from einops.layers.torch import Rearrange
 from pytorch_lightning import LightningModule
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import functional as F
 from torchvision import transforms
 
@@ -20,152 +21,171 @@ from torchvision import transforms
 
 N_BLOCKS = 12
 
+
 class CustomAudioTransform:
     """
     See original frame-atst package for documentation
     """
-    def __repr__(self):
+
+    def __repr__(self) -> str:
+        """
+        Returns
+        ------
+        str
+        """
         return self.__class__.__name__ + "()"
 
 
-class Identity(CustomAudioTransform):
-    """
-    See original frame-atst package for documentation
-    """
-    def __call__(self, signal):
-        return signal
+# class Identity(CustomAudioTransform):
+#     """
+#     See original frame-atst package for documentation
+#     """
+
+#     def __call__(self, signal):
+#         return signal
 
 
-class GaussianNoise(CustomAudioTransform):
-    """
-    See original frame-atst package for documentation
-    """
-    def __init__(self, g):
-        self.g = g
+# class GaussianNoise(CustomAudioTransform):
+#     """
+#     See original frame-atst package for documentation
+#     """
 
-    def __call__(self, signal):
-        """
-        See original frame-atst package for documentation
-        """
-        return signal + self.g * torch.randn_like(signal)
+#     def __init__(self, g) -> None:
+#         self.g = g
 
-
-class PadToSize(CustomAudioTransform):
-    """
-    See original frame-atst package for documentation
-    """
-    def __init__(self, size: int):
-        self.size = size
-
-    def __call__(self, signal):
-        """
-        See original frame-atst package for documentation
-        """
-        if signal.shape[1] < self.size:
-            signal = F.pad(signal, (0, self.size - signal.shape[1]))
-        return signal
+#     def __call__(self, signal):
+#         """
+#         See original frame-atst package for documentation
+#         """
+#         return signal + self.g * torch.randn_like(signal)
 
 
-class ToSizeN(CustomAudioTransform):
-    """
-    See original frame-atst package for documentation
-    """
-    def __init__(self, size: int):
-        self.size = size
+# class PadToSize(CustomAudioTransform):
+#     """
+#     See original frame-atst package for documentation
+#     """
 
-    def __call__(self, signal):
-        """
-        See original frame-atst package for documentation
-        """
-        n = signal.shape[1] // self.size
-        m = signal.shape[1] % self.size
-        if m > self.size // 2 or n == 0:
-            signal = F.pad(signal, (0, self.size * (n + 1) - signal.shape[1]))
-        else:
-            signal = F.pad(signal, (0, self.size * n - signal.shape[1]))
-        return signal
+#     def __init__(self, size: int):
+#         self.size = size
+
+#     def __call__(self, signal):
+#         """
+#         See original frame-atst package for documentation
+#         """
+#         if signal.shape[1] < self.size:
+#             signal = F.pad(signal, (0, self.size - signal.shape[1]))
+#         return signal
 
 
-class CentralCrop(CustomAudioTransform):
-    """
-    See original frame-atst package for documentation
-    """
-    def __init__(self, size: int, pad: bool = True):
-        self.size = size
-        self.pad = pad
+# class ToSizeN(CustomAudioTransform):
+#     """
+#     See original frame-atst package for documentation
+#     """
 
-    def __call__(self, signal):
-        """
-        See original frame-atst package for documentation
-        """
-        if signal.shape[-1] < self.size:
-            if self.pad:
-                signal = F.pad(signal, (0, self.size - signal.shape[-1]))
-            return signal
+#     def __init__(self, size: int):
+#         self.size = size
 
-        start = (signal.shape[-1] - self.size) // 2
-        if len(signal.shape) > 1:
-            return signal[:, start : start + self.size]
-        else:
-            return signal[start : start + self.size]
+#     def __call__(self, signal):
+#         """
+#         See original frame-atst package for documentation
+#         """
+#         n = signal.shape[1] // self.size
+#         m = signal.shape[1] % self.size
+#         if m > self.size // 2 or n == 0:
+#             signal = F.pad(signal, (0, self.size * (n + 1) - signal.shape[1]))
+#         else:
+#             signal = F.pad(signal, (0, self.size * n - signal.shape[1]))
+#         return signal
 
 
-class RandomCrop(CustomAudioTransform):
-    """
-    See original frame-atst package for documentation
-    """
-    def __init__(self, size: int, pad: bool = True):
-        self.size = size
-        self.pad = pad
+# class CentralCrop(CustomAudioTransform):
+#     """
+#     See original frame-atst package for documentation
+#     """
 
-    def __call__(self, signal):
-        """
-        See original frame-atst package for documentation
-        """
-        if signal.shape[1] < self.size:
-            if self.pad:
-                signal = F.pad(signal, (0, self.size - signal.shape[-1]))
-            return signal
-        start = np.random.randint(0, signal.shape[-1] - self.size + 1)
-        return signal[:, start : start + self.size]
+#     def __init__(self, size: int, pad: bool = True):
+#         self.size = size
+#         self.pad = pad
+
+#     def __call__(self, signal):
+#         """
+#         See original frame-atst package for documentation
+#         """
+#         if signal.shape[-1] < self.size:
+#             if self.pad:
+#                 signal = F.pad(signal, (0, self.size - signal.shape[-1]))
+#             return signal
+
+#         start = (signal.shape[-1] - self.size) // 2
+#         if len(signal.shape) > 1:
+#             return signal[:, start : start + self.size]
+#         else:
+#             return signal[start : start + self.size]
 
 
-class Normalize(CustomAudioTransform):
-    """
-    See original frame-atst package for documentation
-    """
-    def __init__(self, std_mean=None, reduce_dim=None):
-        self.std_mean = std_mean
-        self.reduce_dim = reduce_dim
+# class RandomCrop(CustomAudioTransform):
+#     """
+#     See original frame-atst package for documentation
+#     """
 
-    def __call__(self, input):
-        """
-        assuming input has shape [batch,nmels,time]
-        """
-        std, mean = None, None
-        if self.std_mean is None:
-            if self.reduce_dim is not None:
-                std, mean = torch.std_mean(input, dim=self.reduce_dim, keepdim=True)
-            else:
-                std, mean = torch.std_mean(input)
-        else:
-            std, mean = self.std_mean
-        output = input - mean
-        output = output / (std + 1e-6)
-        return output
+#     def __init__(self, size: int, pad: bool = True):
+#         self.size = size
+#         self.pad = pad
+
+#     def __call__(self, signal):
+#         """
+#         See original frame-atst package for documentation
+#         """
+#         if signal.shape[1] < self.size:
+#             if self.pad:
+#                 signal = F.pad(signal, (0, self.size - signal.shape[-1]))
+#             return signal
+#         start = np.random.randint(0, signal.shape[-1] - self.size + 1)
+#         return signal[:, start : start + self.size]
+
+
+# class Normalize(CustomAudioTransform):
+#     """
+#     See original frame-atst package for documentation
+#     """
+
+#     def __init__(self, std_mean=None, reduce_dim=None):
+#         self.std_mean = std_mean
+#         self.reduce_dim = reduce_dim
+
+#     def __call__(self, input):
+#         """
+#         assuming input has shape [batch,nmels,time]
+#         """
+#         std, mean = None, None
+#         if self.std_mean is None:
+#             if self.reduce_dim is not None:
+#                 std, mean = torch.std_mean(input, dim=self.reduce_dim, keepdim=True)
+#             else:
+#                 std, mean = torch.std_mean(input)
+#         else:
+#             std, mean = self.std_mean
+#         output = input - mean
+#         output = output / (std + 1e-6)
+#         return output
 
 
 class MinMax(CustomAudioTransform):
     """
     See original frame-atst package for documentation
     """
-    def __init__(self, min, max):
+
+    def __init__(self, min: float, max: float) -> None:
         self.min = min
         self.max = max
 
-    def __call__(self, input):
+    def __call__(self, input: torch.Tensor) -> torch.Tensor:
         """
         See original frame-atst package for documentation
+
+        Returns
+        ------
+        torch.Tensor
         """
         min_, max_ = None, None
         if self.min is None:
@@ -178,24 +198,31 @@ class MinMax(CustomAudioTransform):
         return input
 
 
-class div(CustomAudioTransform):
+# class div(CustomAudioTransform):
+#     """
+#     See original frame-atst package for documentation
+#     """
+
+#     def __init__(self, value=100):
+#         self.value = value
+
+#     def __call__(self, input):
+#         """
+#         See original frame-atst package for documentation
+#         """
+#         input /= 100
+#         return input
+
+
+def drop_path(
+    x: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     See original frame-atst package for documentation
-    """
-    def __init__(self, value=100):
-        self.value = value
 
-    def __call__(self, input):
-        """
-        See original frame-atst package for documentation
-        """
-        input /= 100
-        return input
-
-
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
-    """
-    See original frame-atst package for documentation
+    Returns
+    ------
+    torch.Tensor
     """
     if drop_prob == 0.0 or not training:
         return x
@@ -210,15 +237,19 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
 
 
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+    """Drop paths (Stochastic Depth) per sample"""
 
-    def __init__(self, drop_prob=None):
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
         super(DropPath, self).__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         See original frame-atst package for documentation
+
+        Returns
+        --------
+        torch.Tensor
         """
         return drop_path(x, self.drop_prob, self.training)
 
@@ -227,14 +258,15 @@ class Mlp(nn.Module):
     """
     See original frame-atst package for documentation
     """
+
     def __init__(
         self,
-        in_features,
-        hidden_features=None,
-        out_features=None,
-        act_layer=nn.GELU,
-        drop=0.0,
-    ):
+        in_features: int,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
+        act_layer: Type[nn.Module] = nn.GELU,
+        drop: float = 0.0,
+    ) -> None:
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -243,9 +275,13 @@ class Mlp(nn.Module):
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         See original frame-atst package for documentation
+
+        Returns
+        -------
+        Tensor
         """
         x = self.fc1(x)
         x = self.act(x)
@@ -259,15 +295,16 @@ class Attention(nn.Module):
     """
     See original frame-atst package for documentation
     """
+
     def __init__(
         self,
-        dim,
-        num_heads=8,
-        qkv_bias=False,
-        qk_scale=None,
-        attn_drop=0.0,
-        proj_drop=0.0,
-    ):
+        dim: int,
+        num_heads: int = 8,
+        qkv_bias: bool = False,
+        qk_scale: Optional[float] = None,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
+    ) -> None:
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -278,8 +315,25 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x, mask):
-        """See original frame-atst package for documentation"""
+    def forward(
+        self, x: torch.Tensor, mask: Optional[torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (batch_size, num_tokens, embed_dim).
+        mask : Optional[torch.Tensor]
+            Optional attention mask
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor]
+            - Output tensor after multi-head attention and projection
+            - Attention weights
+        """
         B, N, C = x.shape
         qkv = (
             self.qkv(x)
@@ -302,19 +356,20 @@ class Attention(nn.Module):
 
 class Block(nn.Module):
     """See original frame-atst package for documentation"""
+
     def __init__(
         self,
-        dim,
-        num_heads,
-        mlp_ratio=4.0,
-        qkv_bias=False,
-        qk_scale=None,
-        drop=0.0,
-        attn_drop=0.0,
-        drop_path=0.0,
-        act_layer=nn.GELU,
-        norm_layer=nn.LayerNorm,
-    ):
+        dim: int,
+        num_heads: int,
+        mlp_ratio: float = 4.0,
+        qkv_bias: bool = False,
+        qk_scale: Optional[float] = None,
+        drop: float = 0.0,
+        attn_drop: float = 0.0,
+        drop_path: float = 0.0,
+        act_layer: Type[nn.Module] = nn.GELU,
+        norm_layer: Type[nn.Module] = nn.LayerNorm,
+    ) -> None:
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
@@ -335,8 +390,24 @@ class Block(nn.Module):
             drop=drop,
         )
 
-    def forward(self, x, length=None, return_attention=False):
-        """See original frame-atst package for documentation"""
+    def forward(
+        self, x: Tensor, length: Optional[Tensor] = None, return_attention: bool = False
+    ) -> Union[Tensor, Tuple[Tensor, Tensor]]:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        x : torch.Tensor
+        length : Optional[torch.Tensor], optional
+            Optional tensor of sequence lengths (used to construct attention masks).
+        return_attention : bool, optional
+            Whether to return attention weights in addition to the output tensor.
+
+        Returns
+        -------
+        Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]
+        """
         if length is not None:
             mask_att = get_attention_mask(x, length)
         else:
@@ -351,8 +422,16 @@ class Block(nn.Module):
             return x
 
 
-def get_attention_mask(x, length):
-    """See original frame-atst package for documentation"""
+def get_attention_mask(x: torch.Tensor, length: torch.Tensor) -> torch.Tensor:
+    """
+    See original frame-atst package for documentation
+
+    Returns
+    -------
+    torch.Tensor
+        Attention mask tensor of shape (batch_size, 1, seq_len, seq_len),
+        with large negative values in padded positions.
+    """
     batch_size, max_len, _ = x.shape
     # create mask for padded elements and zero-out them
     mask = (
@@ -365,12 +444,42 @@ def get_attention_mask(x, length):
     return mask
 
 
-def _no_grad_trunc_normal_(tensor, mean, std, a, b):
-    """See original frame-atst package for documentation"""
-    # Cut & paste from PyTorch official master until it's in a few official releases - RW
-    # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
-    def norm_cdf(x):
-        """Computes standard normal cumulative distribution function"""
+def _no_grad_trunc_normal_(
+    tensor: torch.Tensor, mean: float, std: float, a: float, b: float
+) -> torch.Tensor:
+    """
+    See original frame-atst package for documentation
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        The tensor to fill with truncated normal values.
+    mean : float
+        Mean of the normal distribution.
+    std : float
+        Standard deviation of the normal distribution.
+    a : float
+        Minimum cutoff value.
+    b : float
+        Maximum cutoff value.
+
+    Returns
+    -------
+    torch.Tensor
+        The input tensor filled with truncated normal values.
+    """
+
+    # Cut & paste from PyTorch official master
+    # until it's in a few official releases - RW
+    # Method based on
+    # https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+    def norm_cdf(x: float) -> float:
+        """Computes standard normal cumulative distribution function
+
+        Returns
+        -------
+        float
+        """
         return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
     if (mean < a - 2 * std) or (mean > b + 2 * std):
@@ -404,19 +513,57 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         return tensor
 
 
-def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
-    """type: (Tensor, float, float, float, float) -> Tensor"""
+def trunc_normal_(
+    tensor: Tensor, mean: float = 0.0, std: float = 1.0, a: float = -2.0, b: float = 2.0
+) -> Tensor:
+    """
+    Fills the input tensor with values drawn from a truncated normal distribution.
+
+    Returns
+    -------
+    Tensor
+        The tensor filled with values from the truncated normal distribution.
+    """
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
 
-def get_num_patches(height=64, width=1001, patch_height=16, patch_width=16):
-    """See original frame-atst package for documentation"""
+def get_num_patches(
+    height: int = 64, width: int = 1001, patch_height: int = 16, patch_width: int = 16
+) -> int:
+    """
+    Computes the number of non-overlapping patches that fit into a 2D input.
+
+    Returns
+    -------
+    int
+    """
     return (height // patch_height) * (width // patch_width)
 
 
 class PatchEmbed(nn.Module):
     """See original frame-atst package for documentation"""
-    def __init__(self, patch_height=64, patch_width=4, embed_dim=768, input_dim=1):
+
+    def __init__(
+        self,
+        patch_height: int = 64,
+        patch_width: int = 4,
+        embed_dim: int = 768,
+        input_dim: int = 1,
+    ) -> None:
+        """
+        Initializes the patch embedding layer using a 2D convolution.
+
+        Parameters
+        ----------
+        patch_height : int, optional
+            Height of each patch. Default is 64.
+        patch_width : int, optional
+            Width of each patch. Default is 4.
+        embed_dim : int, optional
+            Dimension of the output embeddings. Default is 768.
+        input_dim : int, optional
+            Number of input channels (e.g., 1 for grayscale spectrograms). Default is 1.
+        """
         super().__init__()
         self.patch_height = patch_height
         self.patch_width = patch_width
@@ -427,8 +574,24 @@ class PatchEmbed(nn.Module):
             stride=(patch_height, patch_width),
         )
 
-    def forward(self, melspec, length=None):
-        """See original frame-atst package for documentation"""
+    def forward(
+        self, melspec: torch.Tensor, length: Optional[torch.Tensor] = None
+    ) -> Tuple[None, Tensor, Optional[Tensor]]:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        melspec : torch.Tensor
+        length : Optional[torch.Tensor], optional
+
+        Returns
+        -------
+        Tuple[None, torch.Tensor, Optional[torch.Tensor]]
+            - None (placeholder for compatibility)
+            - Patch embeddings of shape (batch_size, num_patches, embed_dim)
+            - Patch lengths tensor if `length` is provided, otherwise None
+        """
         height = melspec.shape[2] - melspec.shape[2] % self.patch_height
         # width = melspec.shape[3] - melspec.shape[3] % self.patch_width
         patch_embed = self.proj(melspec).squeeze(2).permute(0, 2, 1)
@@ -445,7 +608,14 @@ class PatchEmbed(nn.Module):
 
 class PatchEmbed_v2(nn.Module):
     """See original frame-atst package for documentation"""
-    def __init__(self, patch_height=64, patch_width=4, embed_dim=768, input_dim=1):
+
+    def __init__(
+        self,
+        patch_height: int = 64,
+        patch_width: int = 4,
+        embed_dim: int = 768,
+        input_dim: int = 1,
+    ) -> None:
         super().__init__()
         self.patch_height = patch_height
         self.patch_width = patch_width
@@ -454,8 +624,24 @@ class PatchEmbed_v2(nn.Module):
         )
         self.patch_embed = nn.Linear(patch_height * patch_width * input_dim, embed_dim)
 
-    def forward(self, melspec, length=None):
-        """See original frame-atst package for documentation"""
+    def forward(
+        self, melspec: torch.Tensor, length: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        melspec : torch.Tensor
+        length : Optional[torch.Tensor], optional
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]
+            - patch : Tensor of shape (batch_size, num_patches, flattened_patch_dim)
+            - patch_embed : Tensor of shape (batch_size, num_patches, embed_dim)
+            - patch_length : Optional tensor of shape (batch_size,), or None
+        """
         height = melspec.shape[2] - melspec.shape[2] % self.patch_height
         width = melspec.shape[3] - melspec.shape[3] % self.patch_width
         patch = self.patch_maker(melspec[:, :, :height, :width])
@@ -476,28 +662,28 @@ class FrameAST(nn.Module):
 
     def __init__(
         self,
-        nprompt=0,
-        spec_h=64,
-        spec_w=1001,
-        patch_w=16,
-        patch_h=16,
-        pos_type="cut",
-        avg_blocks=0,
-        in_chans=1,
-        num_classes=0,
-        embed_dim=768,
-        depth=12,
-        num_heads=12,
-        mlp_ratio=4.0,
-        qkv_bias=False,
-        qk_scale=None,
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
-        drop_path_rate=0.1,
-        norm_layer=nn.LayerNorm,
-        patch_embed="Linear",
-        **kwargs,
-    ):
+        nprompt: int = 0,
+        spec_h: int = 64,
+        spec_w: int = 1001,
+        patch_w: int = 16,
+        patch_h: int = 16,
+        pos_type: str = "cut",
+        avg_blocks: int = 0,
+        in_chans: int = 1,
+        num_classes: int = 0,
+        embed_dim: int = 768,
+        depth: int = 12,
+        num_heads: int = 12,
+        mlp_ratio: float = 4.0,
+        qkv_bias: bool = False,
+        qk_scale: Optional[float] = None,
+        drop_rate: float = 0.0,
+        attn_drop_rate: float = 0.0,
+        drop_path_rate: float = 0.1,
+        norm_layer: Type[nn.Module] = nn.LayerNorm,
+        patch_embed: str = "Linear",
+        **kwargs: object,
+    ) -> None:
         super().__init__()
         self.num_features = self.embed_dim = embed_dim
         self.spec_w = spec_w
@@ -559,7 +745,7 @@ class FrameAST(nn.Module):
         trunc_normal_(self.mask_embed, std=0.02)
         self.apply(self._init_weights)
 
-    def _init_weights(self, m):
+    def _init_weights(self, m: nn.Module) -> None:
         """See original frame-atst package for documentation"""
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=0.02)
@@ -569,8 +755,33 @@ class FrameAST(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def prepare_tokens(self, x, mask_index, length, mask=True):
-        """See original frame-atst package for documentation"""
+    def prepare_tokens(
+        self,
+        x: Tensor,
+        mask_index: Optional[Tensor],
+        length: Optional[Tensor],
+        mask: bool = True,
+    ) -> Tuple[Tensor, Tensor, Tensor, int, int, Optional[Tensor]]:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        x : torch.Tensor
+        mask_index : Optional[torch.Tensor]
+        length : Optional[torch.Tensor]
+        mask : bool, optional
+
+        Returns
+        -------
+        Tuple[Tensor,Tensor, Tensor, int, int, Optional[Tensor]]
+            - Token sequence with positional encoding applied, shape (B, T, C)
+            - Positional encoding tensor, shape (B, T, C)
+            - Raw patch tokens before embedding
+            - Original height of spectrogram
+            - Original width of spectrogram
+            - Patch lengths, or None
+        """
         B, nc, h, w = x.shape
         mel_patches, x, patch_length = self.patch_embed(
             x, length
@@ -598,18 +809,39 @@ class FrameAST(nn.Module):
 
         return self.pos_drop(x), pos, mel_patches, h, w, patch_length
 
-    def freeze(self):
+    def freeze(self) -> None:
         """See original frame-atst package for documentation"""
         for param in self.parameters():
             param.requires_grad = False
 
-    def unfreeze(self):
+    def unfreeze(self) -> None:
         """See original frame-atst package for documentation"""
         for param in self.parameters():
             param.requires_grad = True
 
-    def forward(self, x, mask_index=None, mask_input=True, length=None):
-        """See original frame-atst package for documentation"""
+    def forward(
+        self,
+        x: Tensor,
+        mask_index: Optional[Tensor] = None,
+        mask_input: bool = True,
+        length: Optional[Tensor] = None,
+    ) -> Tensor:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        x : torch.Tensor
+        mask_index : Optional[torch.Tensor], optional
+        mask_input : bool, optional
+        length : Optional[torch.Tensor], optional
+
+        Returns
+        -------
+        torch.Tensor
+            The masked frame-level representations after transformer processing,
+            shape depends on the number of masked positions.
+        """
         x, pos, mel_patches, h, w, patch_length = self.prepare_tokens(
             x, mask_index, length, mask_input
         )
@@ -636,8 +868,19 @@ class FrameAST(nn.Module):
 
         return frame_repr[:, self.nprompt :][mask_index]
 
-    def get_cls(self, x, length=None):
-        """See original frame-atst package for documentation"""
+    def get_cls(self, x: Tensor, length: Optional[Tensor] = None) -> Tensor:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        x : torch.Tensor
+        length : Optional[torch.Tensor], optional
+
+        Returns
+        -------
+        torch.Tensor
+        """
         x, pos, mel_patches, h, w, patch_length = self.prepare_tokens(
             x, None, length, False
         )
@@ -645,15 +888,28 @@ class FrameAST(nn.Module):
         if self.nprompt > 0:
             x = torch.cat([self.prompt_embed.expand(x.shape[0], -1, -1), x], dim=1)
 
-        for i, blk in enumerate(self.blocks):
+        for _, blk in enumerate(self.blocks):
             x = blk(x, patch_length + self.nprompt)
 
         frame_repr = self.norm_frame(x)
 
         return torch.mean(frame_repr[:, : self.nprompt], dim=1)
 
-    def interpolate_pos_encoding(self, x, h, w):
-        """See original frame-atst package for documentation"""
+    def interpolate_pos_encoding(self, x: Tensor, h: int, w: int) -> Tensor:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        x : torch.Tensor
+        h : int
+        w : int
+
+        Returns
+        -------
+        torch.Tensor
+            Positional encoding tensor interpolated to match input shape.
+        """
         npatch = x.shape[1] - 1
         N = self.pos_embed.shape[1] - 1
         if npatch == N and w == self.spec_w and h == self.spec_h:
@@ -683,8 +939,19 @@ class FrameAST(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    def get_last_selfattention(self, x):
-        """See original frame-atst package for documentation"""
+    def get_last_selfattention(self, x: Tensor) -> List[Tensor]:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        x : torch.Tensor
+
+        Returns
+        -------
+        List[torch.Tensor]
+            A list of attention maps (one per transformer block),
+        """
         x, _, _, _, _, _ = self.prepare_tokens(
             x, mask_index=None, length=None, mask=False
         )
@@ -699,8 +966,23 @@ class FrameAST(nn.Module):
                 return atts
                 # return attention of the last block
 
-    def get_intermediate_layers(self, x, length, n=1, scene=True):
-        """See original frame-atst package for documentation"""
+    def get_intermediate_layers(
+        self, x: Tensor, length: Optional[Tensor], n: int = 1, scene: bool = True
+    ) -> Tensor:
+        """
+        See original frame-atst package for documentation
+
+        Parameters
+        ----------
+        x : torch.Tensor
+        length : Optional[torch.Tensor]
+        n : int, optional
+        scene : bool, optional
+
+        Returns
+        -------
+        torch.Tensor
+        """
         x, _, _, _, _, patch_length = self.prepare_tokens(
             x, mask_index=None, length=length, mask=False
         )
@@ -721,7 +1003,8 @@ class FrameAST(nn.Module):
                         norm_x[:, self.nprompt :] * length_mask.unsqueeze(-1), dim=1
                     ) / (patch_length.unsqueeze(-1) + 1e-6)
                     # negative = (~length_mask) * -1e10
-                    # max = torch.max(norm_x[:,self.nprompt:]+negative.unsqueeze(-1),1).values
+                    # max = torch.max(norm_x[:,self.nprompt:]
+                    #   +negative.unsqueeze(-1),1).values
                     output.append(avg)
                     if self.nprompt > 0:
                         output.append(torch.mean(x[:, : self.nprompt], dim=1))
@@ -730,8 +1013,25 @@ class FrameAST(nn.Module):
 
         return torch.cat(output, dim=-1)
 
-def build_mlp(num_layers, input_dim, mlp_dim, output_dim, last_bn=True):
-    """See original frame-atst package for documentation"""
+
+def build_mlp(
+    num_layers: int, input_dim: int, mlp_dim: int, output_dim: int, last_bn: bool = True
+) -> nn.Sequential:
+    """
+    Build a multi-layer perceptron (MLP) with optional final BatchNorm.
+
+    Parameters
+    ----------
+    num_layers : int
+    input_dim : int
+    mlp_dim : int
+    output_dim : int
+    last_bn : bool, optional
+
+    Returns
+    -------
+    nn.Sequential
+    """
     mlp = []
     for ll in range(num_layers):
         dim1 = input_dim if ll == 0 else mlp_dim
@@ -749,9 +1049,10 @@ def build_mlp(num_layers, input_dim, mlp_dim, output_dim, last_bn=True):
 
     return nn.Sequential(*mlp)
 
-def byol_loss_func(p: torch.Tensor, z: torch.Tensor, simplified: bool = True):
+
+def byol_loss_func(p: torch.Tensor, z: torch.Tensor, simplified: bool = True) -> Tensor:
     """
-    Computes BYOL's loss given batch of predicted features p and projected momentum features z.
+    Computes BYOL loss
     Args:
         p (torch.Tensor): NxD Tensor containing predicted features from view 1
         z (torch.Tensor): NxD Tensor containing projected momentum features from view 2
@@ -768,8 +1069,14 @@ def byol_loss_func(p: torch.Tensor, z: torch.Tensor, simplified: bool = True):
 
     return 2 - 2 * (p * z).sum(dim=1).mean()
 
-def compute_var(y):
-    """See original frame-atst package for documentation"""
+
+def compute_var(y: Tensor) -> Tensor:
+    """See original frame-atst package for documentation
+
+    Returns
+    ----------
+    Tensor
+    """
     y = y.view(-1, y.size(-1))
     zc = torch.tensor(y.size(0)).cuda()
     zs = y.sum(dim=0)
@@ -785,12 +1092,36 @@ def compute_var(y):
 
 class ByolLoss(nn.Module):
     """See original frame-atst package for documentation"""
-    def __init__(self, symmetric):
+
+    def __init__(self, symmetric: bool) -> None:
         super().__init__()
         self.symmetric = symmetric
 
-    def forward(self, student, teacher):
-        """See original frame-atst package for documentation"""
+    def forward(
+        self, student: nn.Module, teacher: nn.Module
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """
+        Computes the BYOL-style loss between student and teacher model outputs,
+        along with standard deviation metrics for the normalized outputs.
+
+        Parameters
+        ----------
+        student : nn.Module
+            The student network output tensor.
+        teacher : nn.Module
+            The teacher network output tensor.
+
+        Returns
+        -------
+        tuple of Tensor
+            A tuple containing:
+            - total_loss_frm : Tensor
+                The computed BYOL loss between student and teacher.
+            - std_frm_stu : Tensor
+                The mean standard deviation of the normalized student output.
+            - std_frm_tea : Tensor
+                The mean standard deviation of the normalized teacher output.
+        """
         stu_frm = student
         tea_frm = teacher
 
@@ -826,7 +1157,16 @@ class MultiCropWrapper(nn.Module):
     concatenated features.
     """
 
-    def __init__(self, encoder, embed_dim, projector="mlp", predictor=True):
+    def __init__(
+        self,
+        encoder: nn.Module,
+        embed_dim: int,
+        projector: str = "mlp",
+        predictor: bool = True,
+    ) -> None:
+        """
+        Initializes the MultiCropWrapper
+        """
         super(MultiCropWrapper, self).__init__()
         # disable layers dedicated to ImageNet labels classification
 
@@ -843,8 +1183,31 @@ class MultiCropWrapper(nn.Module):
         else:
             self.predictor = nn.Identity()
 
-    def forward(self, x, length, mask, mask_input):
-        """See original frame-atst package for documentation"""
+    def forward(
+        self,
+        x: Union[Tensor, List[Tensor]],
+        length: List[Tensor],
+        mask: List[Tensor],
+        mask_input: Tensor,
+    ) -> Tensor:
+        """
+        Applies the encoder and projection/prediction head to input.
+
+        Parameters
+        ----------
+        x : Union[Tensor, List[Tensor]]
+            Input tensor or list of tensors corresponding to multiple crops.
+        length : List[Tensor]
+            List of tensors representing the valid lengths of input sequences.
+        mask : List[Tensor]
+            List of tensors representing masking indices for the encoder.
+        mask_input : Tensor
+            Tensor representing additional masking information for the encoder.
+
+        Returns
+        -------
+        Tensor
+        """
         # convert to list
         if not isinstance(x, list):
             x = [x]
@@ -877,15 +1240,24 @@ class MultiCropWrapper(nn.Module):
 
 class FrameATST(nn.Module):
     """See original frame-atst package for documentation"""
+
     def __init__(
         self,
-        arch="small",
-        symmetric=True,
-        pos_type="cut",
-        avg_blocks=0,
-        patch_embed="Linear",
-        **kwargs,
-    ):
+        arch: str = "small",
+        symmetric: bool = True,
+        pos_type: str = "cut",
+        avg_blocks: int = 0,
+        patch_embed: str = "Linear",
+        **kwargs: object,
+    ) -> None:
+        """
+        Initializes the BYOL-based model with student and teacher encoders.
+
+        Raises
+        ------
+        RuntimeError
+            If `arch` is not one of {"small", "base"}.
+        """
         super().__init__()
         if arch == "small":
             encoder_fn = FrameAST_small
@@ -944,8 +1316,16 @@ class FrameATST(nn.Module):
 
         self.loss_fn = ByolLoss(symmetric=symmetric)
 
-    def forward(self, x, length, mask):
-        """See original frame-atst package for documentation"""
+    def forward(
+        self, x: Union[Tensor, List[Tensor]], length: List[Tensor], mask: List[Tensor]
+    ) -> Tensor:
+        """
+        Computes the BYOL loss between student and teacher model outputs
+
+        Returns
+        -------
+        Tensor
+        """
         if self.symmetric:
             tea = self.teacher(x, length, mask, False)
             stu = self.student(x, length, mask, True)
@@ -955,19 +1335,23 @@ class FrameATST(nn.Module):
             stu = self.student(x[1:], length[1:], mask[1:], True)
             return self.loss_fn(stu, tea)
 
-    def update_teacher(self, m):
+    def update_teacher(self, m: Union[np.ndarray, float]) -> None:
         """See original frame-atst package for documentation"""
         with torch.no_grad():
             for param_q, param_k in zip(
-                self.student.encoder.parameters(), self.teacher.encoder.parameters()
+                self.student.encoder.parameters(),
+                self.teacher.encoder.parameters(),
+                strict=False,
             ):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
             for param_q, param_k in zip(
-                self.student.projector.parameters(), self.teacher.projector.parameters()
+                self.student.projector.parameters(),
+                self.teacher.projector.parameters(),
+                strict=False,
             ):
                 param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
 
-    def _init_teacher(self):
+    def _init_teacher(self) -> None:
         """See original frame-atst package for documentation"""
         self.teacher.load_state_dict(
             {k: v for k, v in self.student.state_dict().items() if "predictor" not in k}
@@ -975,9 +1359,20 @@ class FrameATST(nn.Module):
 
 
 def cosine_scheduler_step(
-    base_value, final_value, max_steps, warmup_steps=0, start_warmup_value=0
-):
-    """See original frame-atst package for documentation"""
+    base_value: float,
+    final_value: float,
+    max_steps: int,
+    warmup_steps: int = 0,
+    start_warmup_value: float = 0.0,
+) -> np.ndarray:
+    """
+    Generates a cosine learning rate schedule with optional warmup phase.
+
+    Returns
+    -------
+    np.ndarray
+        Array of length `max_steps` containing the scheduled learning rates.
+    """
     warmup_schedule = np.array([])
     if warmup_steps > 0:
         warmup_schedule = np.linspace(start_warmup_value, base_value, warmup_steps)
@@ -992,8 +1387,13 @@ def cosine_scheduler_step(
     return schedule
 
 
-def get_params_groups(model):
-    """See original frame-atst package for documentation"""
+def get_params_groups(model: nn.Module) -> List:
+    """See original frame-atst package for documentation
+
+    Returns
+    -----------
+    List
+    """
     regularized = []
     not_regularized = []
     for name, param in model.named_parameters():
@@ -1007,9 +1407,17 @@ def get_params_groups(model):
     return [{"params": regularized}, {"params": not_regularized, "weight_decay": 0.0}]
 
 
-def bool_flag(s):
+def bool_flag(s: str) -> bool:
     """
     Parse boolean arguments from the command line.
+
+    Returns
+    -------
+    bool
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
     """
     FALSY_STRINGS = {"off", "false", "0"}
     TRUTHY_STRINGS = {"on", "true", "1"}
@@ -1023,19 +1431,20 @@ def bool_flag(s):
 
 class FrameATSTLightningModule(LightningModule):
     """See original frame-atst package for documentation"""
+
     def __init__(
         self,
-        arch="small",
+        arch: str = "small",
         learning_rate: float = 5e-4,
-        warmup_steps=1300,
-        max_steps=39000,
-        ema=0.99,
-        symmetric=True,
-        pos_type="cut",
-        avg_blocks=0,
-        patch_embed="Linear",
-        **kwargs,
-    ):
+        warmup_steps: int = 1300,
+        max_steps: int = 39000,
+        ema: float = 0.99,
+        symmetric: bool = True,
+        pos_type: str = "cut",
+        avg_blocks: int = 0,
+        patch_embed: str = "Linear",
+        **kwargs: object,
+    ) -> None:
         super().__init__()
         self.model = FrameATST(
             arch=arch,
@@ -1056,8 +1465,13 @@ class FrameATSTLightningModule(LightningModule):
         )
         self.save_hyperparameters()
 
-    def training_step(self, batch, batch_idx):
-        """See original frame-atst package for documentation"""
+    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
+        """See original frame-atst package for documentation
+
+        Returns
+        ---------
+        torch.Tensor
+        """
         self.schedule()
         (melspecs, lengths, masks), _ = batch
         total_loss_frm, std_frm_stu, std_frm_tea = self.model(melspecs, lengths, masks)
@@ -1081,7 +1495,7 @@ class FrameATSTLightningModule(LightningModule):
         """See original frame-atst package for documentation"""
         return super().unfreeze()
 
-    def schedule(self):
+    def schedule(self) -> None:
         """See original frame-atst package for documentation"""
         for i, param_group in enumerate(self.trainer.optimizers[0].param_groups):
             param_group["lr"] = self.mylr_scheduler[self.global_step]
@@ -1091,7 +1505,7 @@ class FrameATSTLightningModule(LightningModule):
         self.log("wd", self.wd_scheduler[self.global_step], prog_bar=True, logger=True)
         self.log("lr", param_group["lr"], prog_bar=True, logger=True)
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> None:
         """See original frame-atst package for documentation"""
         pass
         # optimizer = AdamW(get_params_groups(self.model.student),
@@ -1100,15 +1514,26 @@ class FrameATSTLightningModule(LightningModule):
         # return [optimizer]
 
     def on_train_batch_end(
-        self, outputs, batch, batch_idx: int, unused: int = 0
+        self,
+        outputs: torch.Tensor,
+        batch: torch.Tensor,
+        batch_idx: int,
+        unused: int = 0,
     ) -> None:
         """See original frame-atst package for documentation"""
         m = self.ema_scheduler[self.global_step]
         self.model.update_teacher(m)
 
     @staticmethod
-    def add_model_specific_args(parent_parser):
-        """See original frame-atst package for documentation"""
+    def add_model_specific_args(
+        parent_parser: argparse.ArgumentParser,
+    ) -> argparse.ArgumentParser:
+        """See original frame-atst package for documentation
+
+        Returns
+        ------
+        argparse.ArgumentParser
+        """
         parser = parent_parser.add_argument_group("FrameATSTModel")
         parser.add_argument("--arch", type=str, default="small")
         parser.add_argument(
@@ -1128,15 +1553,18 @@ class FrameATSTLightningModule(LightningModule):
             default=0.0005,
             type=float,
             help="""Learning rate at the end of
-            linear warmup (highest LR used during training). The learning rate is linearly scaled
-            with the batch size, and specified here for a reference batch size of 256.""",
+            linear warmup (highest LR used during training).
+            The learning rate is linearly scaled
+            with the batch size, and specified here for a
+            reference batch size of 256.""",
         )
         parser.add_argument(
             "--ema",
             default=0.99,
             type=float,
             help="""Base EMA
-            parameter for teacher update. The value is increased to 1 during training with cosine schedule.
+            parameter for teacher update. The value is
+              increased to 1 during training with cosine schedule.
             """,
         )
         parser.add_argument("--warmup_steps", default=1300, type=int)
@@ -1145,7 +1573,9 @@ class FrameATSTLightningModule(LightningModule):
             "--pos_type",
             default="cut",
             type=str,
-            help='"cut" denotes absolute psitional embedding, "interpolate" denotes 2D positional embedding used in SSAST',
+            help="""
+            'cut' denotes absolute positional embedding,
+            'interpolate' denotes 2D positional embedding used in SSAST""",
         )
         parser.add_argument(
             "--avg_blocks",
@@ -1162,8 +1592,13 @@ class FrameATSTLightningModule(LightningModule):
         return parent_parser
 
 
-def FrameAST_small(patch_h=64, patch_w=4, **kwargs):
-    """See original frame-atst package for documentation"""
+def FrameAST_small(patch_h: int = 64, patch_w: int = 4, **kwargs: object) -> nn.Module:
+    """See original frame-atst package for documentation
+
+    Returns
+    -------
+    nn.Module
+    """
     return FrameAST(
         patch_h=patch_h,
         patch_w=patch_w,
@@ -1176,8 +1611,13 @@ def FrameAST_small(patch_h=64, patch_w=4, **kwargs):
     )
 
 
-def FrameAST_base(patch_h=64, patch_w=4, **kwargs):
-    """See original frame-atst package for documentation"""
+def FrameAST_base(patch_h: int = 64, patch_w: int = 4, **kwargs: object) -> nn.Module:
+    """See original frame-atst package for documentation
+
+    Returns
+    ---------
+    nn.Module
+    """
     return FrameAST(
         patch_h=patch_h,
         patch_w=patch_w,
@@ -1190,8 +1630,13 @@ def FrameAST_base(patch_h=64, patch_w=4, **kwargs):
     )
 
 
-def FrameAST_large(patch_h, patch_w, **kwargs):
-    """See original frame-atst package for documentation"""
+def FrameAST_large(patch_h: int, patch_w: int, **kwargs: object) -> nn.Module:
+    """See original frame-atst package for documentation
+
+    Returns
+    ---------
+    nn.Module
+    """
     return FrameAST(
         patch_h=patch_h,
         patch_w=patch_w,
@@ -1204,8 +1649,13 @@ def FrameAST_large(patch_h, patch_w, **kwargs):
     )
 
 
-def load_model(model_path):
-    """See original frame-atst package for documentation"""
+def load_model(model_path: str) -> LightningModule:
+    """See original frame-atst package for documentation
+
+    Returns
+    --------
+        LightningModule
+    """
     melspec_t = torchaudio.transforms.MelSpectrogram(
         16000,
         f_min=60,
@@ -1238,15 +1688,18 @@ def load_model(model_path):
     return pretrained_encoder
 
 
-def get_scene_embedding(audio, model):
+def get_scene_embedding(audio: torch.Tensor, model: LightningModule) -> torch.Tensor:
     """
     extract scene (clip-level) embedding from an audio clip
     =======================================
     args:
         audio: torch.tensor in the shape of [1,N] or [B,1,N]
         model: the pretrained encoder returned by load_model
-    return:
-        emb: returned embedding in the shape of [1,N_BLOCKS*emb_size] or [B,N_BLOCKS*emb_size], where emb_size is 768 for base model and 384 for small model.
+    Returns
+    ---------
+        emb: returned embedding in the shape of [1,N_BLOCKS*emb_size]
+        or [B,N_BLOCKS*emb_size], where emb_size is 768 for base model
+        and 384 for small model.
 
     """
     if len(audio.shape) == 2:
@@ -1282,15 +1735,20 @@ def get_scene_embedding(audio, model):
     return output
 
 
-def get_timestamp_embedding(audio, model):
+def get_timestamp_embedding(
+    audio: torch.Tensor, model: LightningModule
+) -> torch.Tensor:
     """
     Extract frame-level embeddings from an audio clip
     ==================================================
     args:
         audio: torch.tensor in the shape of [1,N] or [B,1,N]
         model: the pretrained encoder returned by load_model
-    return:
-        emb: returned embedding in the shape of [1,T,N_BLOCKS*emb_size] or [B,T,N_BLOCKS,emb_size], where emb_size is 768 for base model and 384 for small model.
+    Returns
+    -----------
+        emb: returned embedding in the shape of
+            [1,T,N_BLOCKS*emb_size] or [B,T,N_BLOCKS,emb_size],
+            where emb_size is 768 for base model and 384 for small model.
     """
     if len(audio.shape) == 2:
         audio = audio.unsqueeze(1)
