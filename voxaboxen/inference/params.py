@@ -3,10 +3,25 @@ Params for inference using trained model
 """
 
 import argparse
+from typing import List, Union
 
 
-def parse_inference_args(inference_args):
-    """Parse params for inference"""
+def parse_inference_args(
+    inference_args: Union[argparse.Namespace, List[str]],
+) -> argparse.Namespace:
+    """
+    Parse inference parameters from command-line arguments or a namespace.
+
+    Parameters
+    ----------
+    args : Union[argparse.Namespace, List[str]]
+        Either a pre-existing argparse.Namespace or a list of command-line arguments.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed arguments with project configuration.
+    """
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -25,25 +40,29 @@ def parse_inference_args(inference_args):
         "--file-info-for-inference",
         type=str,
         required=True,
-        help="filepath of info csv listing filenames and filepaths of audio for inference",
+        help="filepath of info csv listing filenames and "
+        "filepaths of audio for inference",
     )
     parser.add_argument(
         "--detection-threshold",
         type=float,
         default=0.5,
-        help="detection peaks need to be at or above this threshold to make it into the exported selection table",
+        help="detection peaks need to be at or above this threshold "
+        "to make it into the exported selection table",
     )
     parser.add_argument(
         "--classification-threshold",
         type=float,
         default=0.5,
-        help="classification probability needs to be at or above this threshold to not be labeled as Unknown",
+        help="classification probability needs to be at or "
+        "above this threshold to not be labeled as Unknown",
     )
     parser.add_argument(
         "--comb-iou-threshold",
         type=float,
         default=0.5,
-        help="iou threshold for combining fwd and bck predictions, when bidirectional==True",
+        help="iou threshold for combining fwd and bck "
+        "predictions, when bidirectional==True",
     )
     parser.add_argument(
         "--comb-discard-threshold",
