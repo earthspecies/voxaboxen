@@ -4,9 +4,10 @@
 # 3. 'inference'
 
 import sys
+from typing import List
 
 
-def main(mode, args):
+def main(mode: str, args: List) -> None:
     if mode == "project-setup":
         from voxaboxen.project.project_setup import project_setup
 
@@ -17,20 +18,10 @@ def main(mode, args):
 
         train_model(args)
 
-    elif mode == "train-comparison":
-        from voxaboxen.comparisons.train import train
-
-        train(args)
-
     elif mode == "inference":
         from voxaboxen.inference.inference import inference
 
         inference(args)
-
-    elif mode == "train-comparison":
-        from voxaboxen.comparisons.train import train
-
-        train(args)
 
 
 if __name__ == "__main__":
