@@ -2,10 +2,12 @@
 Convolutional-recurrent neural network for extracting audio features
 """
 
+import argparse
+
 import torch
 import torchaudio
 from einops import rearrange
-from torch import nn
+from torch import Tensor, nn
 
 
 class CRNN(nn.Module):
@@ -13,7 +15,7 @@ class CRNN(nn.Module):
     Convolutional-recurrent neural network for extracting audio features
     """
 
-    def __init__(self, args):
+    def __init__(self, args: argparse.Namespace) -> None:
         super().__init__()
         self.args = args
         self.downsample_factor = self.args.scale_factor
@@ -104,7 +106,7 @@ class CRNN(nn.Module):
 
         self.pool3 = nn.AdaptiveAvgPool2d((n_mels // 8, None)).to(device)
 
-        self.pool3b = nn.AvgPool1d(2).to(device)  ###
+        self.pool3b = nn.AvgPool1d(2).to(device)  #
 
         self.head = nn.LSTM(
             hidden_size * (n_mels // 8),
@@ -114,31 +116,33 @@ class CRNN(nn.Module):
             bidirectional=True,
         ).to(device)
 
-    def freeze(self):
+    def freeze(self) -> None:
         """
         Freeze audio encoder
         """
         for param in self.parameters():
             param.requires_grad = False
 
-    def unfreeze(self):
+    def unfreeze(self) -> None:
         """
         Unfreeze audio encoder
         """
         for param in self.parameters():
             param.requires_grad = True
 
-    def forward(self, audio):
+    def forward(self, audio: Tensor) -> Tensor:
         """
         Forward pass
+
         Parameters
         ----------
         audio : torch.Tensor
-            audio of shape [batch, time]
+            Input audio tensor of shape [batch, time].
+
         Returns
         -------
         torch.Tensor
-            features of shape [batch, time, channels]
+            Extracted feature tensor of shape [batch, time, channels].
         """
         expected_output_dur = audio.size(1) // self.downsample_factor
 

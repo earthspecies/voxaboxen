@@ -3,6 +3,7 @@ Code for working with audio and Raven selection table annotations together
 """
 
 import warnings
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import librosa
 import numpy as np
@@ -13,7 +14,8 @@ import voxaboxen.evaluation.metrics as metrics
 
 class Clip:
     """
-    A class representing an audio clip and its associated metadata, annotations, and predictions.
+    A class representing an audio clip and its associated
+    metadata, annotations, and predictions.
 
     Parameters
     ----------
@@ -42,11 +44,15 @@ class Clip:
         Subset of predictions that have been matched to annotations.
     label_set : set or list or None
         The set of valid labels used for annotations and predictions.
-    unknown_label : str or any
+    unknown_label : str or None
         The label used to represent unknown or missing categories.
     """
 
-    def __init__(self, label_set=None, unknown_label=None):
+    def __init__(
+        self,
+        label_set: Optional[Union[Set[str], List[str]]] = None,
+        unknown_label: Optional[str] = None,
+    ) -> None:
         self.sr = None
         self.samples = None
         self.duration = None
@@ -58,9 +64,30 @@ class Clip:
         self.label_set = label_set
         self.unknown_label = unknown_label
 
-    def load_selection_table(self, fp, view=None, label_mapping=None):
-        """view (str) : If applicable, Waveform or Spectrogram to avoid double counting
-        label_mapping : dict {old label : new label}. If not None, will drop annotations not in keys of label_mapping
+    def load_selection_table(
+        self,
+        fp: str,
+        view: Optional[str] = None,
+        label_mapping: Optional[Dict[str, str]] = None,
+    ) -> pd.DataFrame:
+        """
+        Load a Raven selection table from a file.
+
+        Parameters
+        ----------
+        fp : str
+            Filepath to the selection table.
+        view : str, optional
+            View to filter by (e.g., "Waveform" or "Spectrogram").
+            If not provided and multiple views are present, a warning is issued.
+        label_mapping : dict, optional
+            Dictionary mapping old labels to new labels. If provided, annotations not
+            in the mapping keys are dropped.
+
+        Returns
+        -------
+        pd.DataFrame
+            Filtered and/or mapped selection table annotations.
         """
 
         annotations = pd.read_csv(fp, delimiter="\t")
@@ -68,7 +95,11 @@ class Clip:
             views = annotations["View"].unique()
             if len(views) > 1:
                 warnings.warn(
-                    f"I found more than one view in selection table. To avoid double counting, pass view as a parameter. Views found: {view}"
+                    (
+                        "I found more than one view in selection table. To avoid double"
+                        f" counting, pass view as a parameter. Views found: {view}"
+                    ),
+                    stacklevel=2,
                 )
 
         if view is not None:
@@ -82,14 +113,19 @@ class Clip:
 
         return annotations
 
-    def load_audio(self, fp):
+    def load_audio(self, fp: str) -> None:
         """
         Load audio from file
         """
         self.samples, self.sr = librosa.load(fp, sr=None)
         self.duration = len(self.samples) / self.sr
 
-    def load_annotations(self, fp, view=None, label_mapping=None):
+    def load_annotations(
+        self,
+        fp: str,
+        view: Optional[str] = None,
+        label_mapping: Optional[Dict[str, str]] = None,
+    ) -> None:
         """
         load annotation selection table from file
         """
@@ -98,7 +134,7 @@ class Clip:
         )
         self.annotations["index"] = self.annotations.index
 
-    def threshold_class_predictions(self, class_threshold):
+    def threshold_class_predictions(self, class_threshold: float) -> None:
         """
         If class probability is below a threshold, switch label to unknown
         """
@@ -108,7 +144,12 @@ class Clip:
             self.predictions["Class Prob"] < class_threshold, "Annotation"
         ] = self.unknown_label
 
-    def load_predictions(self, fp, view=None, label_mapping=None):
+    def load_predictions(
+        self,
+        fp: str,
+        view: Optional[str] = None,
+        label_mapping: Optional[Dict[str, str]] = None,
+    ) -> None:
         """
         load prediction selection table from file
         """
@@ -117,7 +158,7 @@ class Clip:
         )
         self.predictions["index"] = self.predictions.index
 
-    def compute_matching(self, IoU_minimum=0.5):
+    def compute_matching(self, IoU_minimum: float = 0.5) -> None:
         """Bipartite graph matching between predictions and annotations
         Maximizes the number of matchings with IoU > IoU_minimum
         Saves a list of indexes of matched pairs
@@ -130,9 +171,13 @@ class Clip:
         self.matched_annotations = [p[0] for p in self.matching]
         self.matched_predictions = [p[1] for p in self.matching]
 
-    def evaluate(self):
+    def evaluate(self) -> Dict:
         """
         Count true positive, false positive, and false negative predictions
+
+        Returns
+        ------
+        Dict containing counts of tp, fp, and fn's for the audio file
         """
         eval_sr = 50
         dur_samples = int(self.duration * eval_sr)  # compute frame-wise metrics at 50Hz
@@ -146,12 +191,12 @@ class Clip:
             seg_annotations = np.zeros((dur_samples,))
             seg_predictions = np.zeros((dur_samples,))
 
-            for i, row in self.annotations.iterrows():
+            for _i, row in self.annotations.iterrows():
                 start_sample = int(row["Begin Time (s)"] * eval_sr)
                 end_sample = min(int(row["End Time (s)"] * eval_sr), dur_samples)
                 seg_annotations[start_sample:end_sample] = 1
 
-            for i, row in self.predictions.iterrows():
+            for _i, row in self.predictions.iterrows():
                 start_sample = int(row["Begin Time (s)"] * eval_sr)
                 end_sample = min(int(row["End Time (s)"] * eval_sr), dur_samples)
                 seg_predictions[start_sample:end_sample] = 1
@@ -213,12 +258,12 @@ class Clip:
 
                 begins = (annot_sub["Begin Time (s)"] * eval_sr).astype(int)
                 ends = (annot_sub["End Time (s)"] * eval_sr).astype(int)
-                for b, e in zip(begins, ends):
+                for b, e in zip(begins, ends, strict=False):
                     seg_annotations[b:e] = 1
 
                 begins = (pred_sub["Begin Time (s)"] * eval_sr).astype(int)
                 ends = (pred_sub["End Time (s)"] * eval_sr).astype(int)
-                for b, e in zip(begins, ends):
+                for b, e in zip(begins, ends, strict=False):
                     seg_predictions[b:e] = 1
 
                 TP_seg = int((seg_predictions * seg_annotations).sum())
@@ -230,9 +275,18 @@ class Clip:
 
             return out
 
-    def confusion_matrix(self):
+    def confusion_matrix(self) -> Optional[Tuple[np.ndarray, List[str]]]:
         """
-        Compute confusion matrix for predictions vs. annotations
+        Compute confusion matrix for predictions vs. annotations.
+
+        Returns
+        -------
+        Optional[Tuple[np.ndarray, List[str]]]
+            A tuple containing:
+                - confusion_matrix: np.ndarray of shape (num_classes+1, num_classes+1)
+                - confusion_matrix_labels: list of label names
+                including 'None' and optionally the unknown label
+            Returns None if self.label_set is None.
         """
         if self.label_set is None:
             return None
@@ -260,7 +314,7 @@ class Clip:
                 if label == "None":
                     continue
 
-                # count false positive and false negative detections, regardless of class
+                # count false positive and false negative dets, regardless of class
                 cm_label_idx = confusion_matrix_labels.index(label)
 
                 # fp

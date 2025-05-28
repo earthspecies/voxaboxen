@@ -2,15 +2,18 @@
 Perform inference using a trained model, and save predictions as selection tables.
 """
 
+import argparse
 import os
 
 import pandas as pd
 import torch
 
 from voxaboxen.data.data import get_single_clip_data
-from voxaboxen.evaluation.evaluation import (combine_fwd_bck_preds,
-                                             export_to_selection_table,
-                                             generate_predictions)
+from voxaboxen.evaluation.evaluation import (
+    combine_fwd_bck_preds,
+    export_to_selection_table,
+    generate_predictions,
+)
 from voxaboxen.inference.params import parse_inference_args
 from voxaboxen.model.model import DetectionModel  # , DetectionModelStereo
 from voxaboxen.training.params import load_params
@@ -18,15 +21,13 @@ from voxaboxen.training.params import load_params
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def inference(inference_args):
+def inference(inference_args: argparse.Namespace) -> None:
     """
     Perform inference using a trained model, and save predictions as selection tables.
     Parameters
     ----------
     inference_args : argparse.Namespace
         Configuration arguments; see params.py
-    Returns
-    ----------
     """
     inference_args = parse_inference_args(inference_args)
     args = load_params(inference_args.model_args_fp)
@@ -51,7 +52,7 @@ def inference(inference_args):
         model.load_state_dict(cp)
     model = model.to(device)
 
-    for i, row in files_to_infer.iterrows():
+    for _i, row in files_to_infer.iterrows():
         audio_fp = row["audio_fp"]
         fn = row["fn"]
 
@@ -59,11 +60,10 @@ def inference(inference_args):
             print(f"Could not locate file {audio_fp}")
             continue
 
-        dataloader = None
         try:
             dataloader = get_single_clip_data(audio_fp, args.clip_duration / 2, args)
-        except dataloader is None:
-            print(f"Could not load file {audio_fp}")
+        except Exception as e:
+            print(f"Error loading file {audio_fp}: {e}")
             continue
 
         if len(dataloader) == 0:
@@ -72,7 +72,8 @@ def inference(inference_args):
 
         if inference_args.disable_bidirectional and not model.is_bidirectional:
             print(
-                "Warning: you have passed the disable-bidirectional arg but model is not is_bidirectional"
+                "Warning: you have passed the disable-bidirectional"
+                " arg but model is not is_bidirectional"
             )
         (
             detections,

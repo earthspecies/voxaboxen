@@ -2,24 +2,17 @@
 Function to set up project-level metadata
 """
 
+import argparse
 import os
 import sys
+from typing import List, Union
 
 import pandas as pd
 
 from voxaboxen.project.params import parse_project_args, save_params
 
 
-def project_setup(args):
-    """
-    Set up project files prior to training
-    Parameters
-    ----------
-    args : argparse.Namespace
-        Configuration arguments; see params.py
-    Returns
-    ----------
-    """
+def project_setup(args: Union[argparse.Namespace, List[str]]) -> None:
     args = parse_project_args(args)
 
     if not os.path.exists(args.project_dir):
@@ -47,9 +40,9 @@ def project_setup(args):
     if unknown_label in label_set:
         label_set.remove(unknown_label)
 
-    setattr(args, "label_set", label_set)
-    setattr(args, "label_mapping", label_mapping)
-    setattr(args, "unknown_label", unknown_label)
+    args.label_set = label_set
+    args.label_mapping = label_mapping
+    args.unknown_label = unknown_label
 
     save_params(args)
 

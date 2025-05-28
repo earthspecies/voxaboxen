@@ -12,7 +12,6 @@ dependencies = [
     "mir-eval>=0.7",
     "numpy>=1.24.3",
     "pandas>=2.0.2",
-    "plumbum>=1.8.2",
     "pyyaml>=6.0",
     "scipy>=1.10.1",
     "seaborn>=0.12.2",
@@ -21,8 +20,7 @@ dependencies = [
     "torchaudio>=2.0.1",
     "tqdm>=4.67.0",
     "torchvision>=0.15.2",
-    "pre-commit>=4.2.0",
-    "lightning>=2.5.1.post0",
+    "pytorch-lightning>=2.5.1.post0",
 ]
 
 [dependency-groups]

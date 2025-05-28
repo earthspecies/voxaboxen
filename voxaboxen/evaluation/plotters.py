@@ -2,18 +2,27 @@
 Function to plot train progress
 """
 
+import argparse
 import os
+from typing import Dict, List, Optional
 
 from matplotlib import pyplot as plt
 
 
-def plot_eval(train_evals, learning_rates, args, val_evals=[{}]):
+def plot_eval(
+    train_evals: List[Dict[str, float]],
+    learning_rates: List[float],
+    args: argparse.Namespace,
+    val_evals: Optional[List[Dict[str, float]]] = None,
+) -> None:
     """
     Plot train progress
     """
 
     # train_evals : list of dicts, one dict per epoch
     # val_evals : list of dicts, one dict per epoch
+    if val_evals is None:
+        val_evals = [{}]
     plot_fp = os.path.join(args.experiment_dir, "train_progress.svg")
     train_keys = train_evals[0].keys()
     val_keys = val_evals[0].keys()

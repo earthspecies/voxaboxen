@@ -2,11 +2,13 @@
 Main function for model training and evaluation
 """
 
+import argparse
 import json
 import os
 import shutil
 import sys
 from time import time
+from typing import List, Union
 
 import numpy as np
 import torch
@@ -25,16 +27,14 @@ from voxaboxen.training.train import train
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def train_model(args):
+def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
     """
     Full training and evaluation
 
     Parameters
     ----------
-    args : argparse.Namespace
+    args : list of str or argparse.Namespace
         Configuration arguments
-    Returns
-    ----------
     """
 
     # Setup
@@ -52,7 +52,8 @@ def train_model(args):
             n_epochs_ran_for = len(x)
             args.n_epochs -= n_epochs_ran_for
             print(
-                f"resuming previous run which ran for {n_epochs_ran_for} epochs, now training for the remaining {args.n_epochs}"
+                f"resuming previous run which ran for {n_epochs_ran_for}"
+                f" epochs, now training for the remaining {args.n_epochs}"
             )
             assert max(x.keys()) == n_epochs_ran_for - 1
             args.unfreeze_encoder_epoch = max(
@@ -119,7 +120,10 @@ def train_model(args):
         best_comb_discard = -1
         best_comb_iou = -1
     print(
-        f"Found best thresh on val set: f1={best_f1:.4f}, comb_discard={best_comb_discard:.3f}, comb_iou={best_comb_iou:.3f} in {time() - val_fit_starttime:.3f}s"
+        f"Found best thresh on val set: f1={best_f1:.4f}, "
+        f"comb_discard={best_comb_discard:.3f}, "
+        f"comb_iou={best_comb_iou:.3f} in "
+        f"{time() - val_fit_starttime:.3f}s"
     )
 
     # Evaluation
@@ -163,12 +167,14 @@ def train_model(args):
         if args.is_test:
             det_thresh_range = [0.5]
         elif args.bidirectional:
+            # to make sure the lower range is covered,
+            # sweep fewer overall cus sweep other threshes too
             det_thresh_range = np.concatenate(
                 [
                     np.linspace(0.001, 0.2, args.n_map // 3),
                     np.linspace(0.21, 0.7, args.n_map // 3),
                 ]
-            )  # to make sure the lower range is covered, sweep fewer overall cus sweep other threshes too
+            )
         else:
             det_thresh_range = np.linspace(0.01, 0.99, args.n_map)
         manifests_by_thresh = predict_and_generate_manifest(

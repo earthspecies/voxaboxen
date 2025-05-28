@@ -2,7 +2,9 @@
 Dataloaders for training and evaluation
 """
 
+import argparse
 import math
+from typing import Dict, List, Tuple
 
 import librosa
 import numpy as np
@@ -11,11 +13,12 @@ import torch
 import torchaudio
 from intervaltree import IntervalTree
 from numpy.random import default_rng
+from torch import Tensor
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 
 
-def normalize_sig_np(sig, eps=1e-8):
+def normalize_sig_np(sig: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     """
     Normalize a signal to [-1, 1] range.
 
@@ -36,7 +39,7 @@ def normalize_sig_np(sig, eps=1e-8):
     return sig
 
 
-def crop_and_pad(wav, sr, dur_sec):
+def crop_and_pad(wav: Tensor, sr: int, dur_sec: float) -> Tensor:
     """
     Crop or pad waveform to match target duration and sample rate.
 
@@ -98,7 +101,13 @@ class DetectionDataset(Dataset):
         Additional seed offset, by default 0
     """
 
-    def __init__(self, info_df, train, args, random_seed_shift=0):
+    def __init__(
+        self,
+        info_df: pd.DataFrame,
+        train: bool,
+        args: argparse.Namespace,
+        random_seed_shift: int = 0,
+    ) -> None:
         self.info_df = info_df
         self.label_set = args.label_set
         if hasattr(args, "unknown_label"):
@@ -136,7 +145,7 @@ class DetectionDataset(Dataset):
         # make metadata
         self.make_metadata()
 
-    def process_selection_table(self, selection_table_fp):
+    def process_selection_table(self, selection_table_fp: str) -> IntervalTree:
         """
         Process annotation file into interval tree format.
 
@@ -154,7 +163,7 @@ class DetectionDataset(Dataset):
         selection_table = pd.read_csv(selection_table_fp, sep="\t")
         tree = IntervalTree()
 
-        for ii, row in selection_table.iterrows():
+        for _ii, row in selection_table.iterrows():
             start = row["Begin Time (s)"]
             end = row["End Time (s)"]
             label = row["Annotation"]
@@ -175,13 +184,13 @@ class DetectionDataset(Dataset):
 
         return tree
 
-    def make_metadata(self):
+    def make_metadata(self) -> None:
         """Generate dataset metadata including clip boundaries."""
 
         selection_table_dict = dict()
         metadata = []
 
-        for ii, row in self.info_df.iterrows():
+        for _ii, row in self.info_df.iterrows():
             fn = row["fn"]
             audio_fp = row["audio_fp"]
 
@@ -216,7 +225,9 @@ class DetectionDataset(Dataset):
         self.selection_table_dict = selection_table_dict
         self.metadata = metadata
 
-    def get_pos_intervals(self, fn, start, end):
+    def get_pos_intervals(
+        self, fn: str, start: float, end: float
+    ) -> List[Tuple[float, float, int]]:
         """
         Get annotated intervals within specified time range.
 
@@ -245,7 +256,7 @@ class DetectionDataset(Dataset):
 
         return intervals
 
-    def get_class_proportions(self):
+    def get_class_proportions(self) -> np.ndarray:
         """
         Calculate class distribution in dataset.
 
@@ -271,7 +282,16 @@ class DetectionDataset(Dataset):
 
         return proportions
 
-    def get_annotation(self, pos_intervals, audio):
+    def get_annotation(
+        self, pos_intervals: List[Tuple[float, float, int]], audio: Tensor
+    ) -> Tuple[
+        np.ndarray,  # anchor_annos
+        np.ndarray,  # regression_annos
+        np.ndarray,  # class_annos
+        np.ndarray,  # rev_anchor_annos
+        np.ndarray,  # rev_regression_annos
+        np.ndarray,  # rev_class_annos
+    ]:
         """
         Generate target annotations from positive intervals.
 
@@ -368,7 +388,9 @@ class DetectionDataset(Dataset):
             rev_class_annos,
         )
 
-    def __getitem__(self, index):
+    def __getitem__(
+        self, index: int
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
         """
         Get dataset item by index.
 
@@ -423,11 +445,18 @@ class DetectionDataset(Dataset):
             torch.from_numpy(rev_class_anno),
         )
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """
+        Returns
+        -----
+        int : length of dataset
+        """
         return len(self.metadata)
 
 
-def get_train_dataloader(args, random_seed_shift=0):
+def get_train_dataloader(
+    args: argparse.Namespace, random_seed_shift: int = 0
+) -> torch.utils.data.DataLoader:
     """
     Create training DataLoader.
 
@@ -479,14 +508,18 @@ class SingleClipDataset(Dataset):
         Path to annotation file, by default None
     """
 
-    def __init__(self, audio_fp, clip_hop, args, annot_fp=None):
+    def __init__(
+        self,
+        audio_fp: str,
+        clip_hop: float,
+        args: argparse.Namespace,
+        annot_fp: str = None,
+    ) -> None:
         # waveform (samples,)
         super().__init__()
         self.duration = librosa.get_duration(path=audio_fp)
         self.clip_hop = clip_hop
-        self.num_clips = int(
-            np.ceil(self.duration / self.clip_hop)
-        )  # max(0, int(np.floor(self.duration / self.clip_hop)+1)) #int(np.floor((self.duration - args.clip_duration) // clip_hop))
+        self.num_clips = int(np.ceil(self.duration / self.clip_hop))
         self.audio_fp = audio_fp
         self.clip_duration = args.clip_duration
         self.annot_fp = annot_fp  # attribute that is accessed elsewhere
@@ -498,11 +531,21 @@ class SingleClipDataset(Dataset):
         else:
             self.mono = True
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """
+        Returns
+        ------
+        dataset length : int
+        """
         return self.num_clips
 
-    def __getitem__(self, idx):
-        """Get audio clip by index and return as torch.tensor."""
+    def __getitem__(self, idx: int) -> Tensor:
+        """Get audio clip by index and return as torch.tensor.
+
+        Returns
+        -----
+        audio : torch.Tensor
+        """
         start = idx * self.clip_hop
 
         audio, file_sr = librosa.load(
@@ -523,7 +566,9 @@ class SingleClipDataset(Dataset):
         return audio
 
 
-def get_single_clip_data(audio_fp, clip_hop, args, annot_fp=None):
+def get_single_clip_data(
+    audio_fp: str, clip_hop: float, args: argparse.Namespace, annot_fp: str = None
+) -> DataLoader:
     """
     Create DataLoader for single audio file.
 
@@ -554,7 +599,7 @@ def get_single_clip_data(audio_fp, clip_hop, args, annot_fp=None):
     )
 
 
-def get_val_dataloader(args):
+def get_val_dataloader(args: argparse.Namespace) -> Dict:
     """
     Create validation DataLoaders.
 
@@ -585,7 +630,7 @@ def get_val_dataloader(args):
     return val_dataloaders
 
 
-def get_test_dataloader(args):
+def get_test_dataloader(args: argparse.Namespace) -> Dict:
     """
     Create test DataLoaders.
 
@@ -616,7 +661,7 @@ def get_test_dataloader(args):
     return test_dataloaders
 
 
-def get_anchor_anno(start_idx, dur_samples, seq_len):
+def get_anchor_anno(start_idx: int, dur_samples: int, seq_len: int) -> np.ndarray:
     """
     Represent start idx as a Gaussian blurred onehot encoding.
 

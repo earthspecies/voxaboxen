@@ -2,8 +2,10 @@
 Functions required to train model
 """
 
+import argparse
 import os
 from functools import partial
+from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -12,10 +14,13 @@ import torchvision
 import tqdm
 import yaml
 from einops import rearrange
+from torch import Tensor
 
 from voxaboxen.data.data import get_train_dataloader, get_val_dataloader
-from voxaboxen.evaluation.evaluation import (evaluate_based_on_manifest,
-                                             predict_and_generate_manifest)
+from voxaboxen.evaluation.evaluation import (
+    evaluate_based_on_manifest,
+    predict_and_generate_manifest,
+)
 from voxaboxen.evaluation.plotters import plot_eval
 from voxaboxen.model.model import rms_and_mixup
 
@@ -25,10 +30,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 if device == "cpu":
     import warnings
 
-    warnings.warn("Only using CPU! Check CUDA")
+    warnings.warn("Only using CPU! Check CUDA", stacklevel=2)
 
 
-def train(model, args):
+def train(model: torch.nn.Module, args: argparse.Namespace) -> torch.nn.Module:
     """Train a model with the given arguments.
 
     Parameters
@@ -178,17 +183,17 @@ def train(model, args):
 
 
 def lf(
-    dets,
-    det_preds,
-    regs,
-    reg_preds,
-    y,
-    y_preds,
-    args,
-    det_loss_fn,
-    reg_loss_fn,
-    class_loss_fn,
-):
+    dets: Tensor,
+    det_preds: Tensor,
+    regs: Tensor,
+    reg_preds: Tensor,
+    y: Tensor,
+    y_preds: Tensor,
+    args: argparse.Namespace,
+    det_loss_fn: Callable[[Tensor, Tensor], Tensor],
+    reg_loss_fn: Callable[[Tensor, Tensor, Tensor, Tensor], Tensor],
+    class_loss_fn: Callable[[Tensor, Tensor, Tensor], Tensor],
+) -> Tuple[Tensor, Tensor, Tensor]:
     """Calculate loss function with end masking.
 
     Parameters
@@ -255,8 +260,15 @@ def lf(
 
 
 def train_epoch(
-    model, t, dataloader, detection_loss_fn, reg_loss_fn, class_loss_fn, optimizer, args
-):
+    model: torch.nn.Module,
+    t: int,
+    dataloader: torch.utils.data.DataLoader,
+    detection_loss_fn: Callable[[Tensor, Tensor], Tensor],
+    reg_loss_fn: Callable[[Tensor, Tensor, Tensor, Tensor], Tensor],
+    class_loss_fn: Callable[[Tensor, Tensor, Tensor], Tensor],
+    optimizer: torch.optim.Optimizer,
+    args: argparse.Namespace,
+) -> Tuple[torch.nn.Module, Dict]:
     """Train model for one epoch.
 
     Parameters
@@ -339,7 +351,10 @@ def train_epoch(
         class_losses.append(args.rho * class_loss)
 
         if (i + 1) % args.display_pbar == 0:
-            pbar_str = f"loss {torch.tensor(losses).mean():.5f}, det {torch.tensor(detection_losses).mean():.5f}, reg {torch.tensor(regression_losses).mean():.5f}, class {torch.tensor(class_losses).mean():.5f}"
+            pbar_str = f"loss {torch.tensor(losses).mean():.5f}, "
+            pbar_str += f"det {torch.tensor(detection_losses).mean():.5f}, "
+            pbar_str += f"reg {torch.tensor(regression_losses).mean():.5f}, "
+            pbar_str += f"class {torch.tensor(class_losses).mean():.5f}"
             losses = []
             detection_losses = []
             regression_losses = []
@@ -377,7 +392,10 @@ def train_epoch(
             loss = (loss + rev_loss) / 2
 
             if (i + 1) % args.display_pbar == 0:
-                pbar_str += f" revloss {torch.tensor(rev_losses).mean():.5f}, revdet {torch.tensor(rev_detection_losses).mean():.5f}, revreg {torch.tensor(rev_regression_losses).mean():.5f}, revclass {torch.tensor(rev_class_losses).mean():.5f}"
+                pbar_str += f" revloss {torch.tensor(rev_losses).mean():.5f}, "
+                pbar_str += f"revdet {torch.tensor(rev_detection_losses).mean():.5f}, "
+                pbar_str += f"revreg {torch.tensor(rev_regression_losses).mean():.5f}, "
+                pbar_str += f"revclass {torch.tensor(rev_class_losses).mean():.5f}"
                 rev_train_loss = 0
                 rev_losses = []
                 rev_detection_losses = []
@@ -403,7 +421,12 @@ def train_epoch(
     return model, evals
 
 
-def val_epoch(model, t, dataloader, args):
+def val_epoch(
+    model: torch.nn.Module,
+    t: int,
+    dataloader: torch.utils.data.DataLoader,
+    args: argparse.Namespace,
+) -> Dict[str, Dict[str, float]]:
     """Compute metrics on model for one epoch on the given dataloader.
 
     Parameters
@@ -473,7 +496,9 @@ def val_epoch(model, t, dataloader, args):
     return evals
 
 
-def modified_focal_loss(pred, gt, pos_loss_weight=1):
+def modified_focal_loss(
+    pred: Tensor, gt: Tensor, pos_loss_weight: float = 1.0
+) -> Tensor:
     """Modified focal loss for detection.
 
     Parameters
@@ -511,7 +536,13 @@ def modified_focal_loss(pred, gt, pos_loss_weight=1):
     return loss
 
 
-def masked_reg_loss(regression, r, d, y, class_weights=None):
+def masked_reg_loss(
+    regression: Tensor,
+    r: Tensor,
+    d: Tensor,
+    y: Tensor,
+    class_weights: Optional[Tensor] = None,
+) -> Tensor:
     """Masked regression loss.
 
     Parameters
@@ -567,7 +598,9 @@ def masked_reg_loss(regression, r, d, y, class_weights=None):
     return reg_loss
 
 
-def masked_classification_loss(class_logits, y, d, class_weights=None):
+def masked_classification_loss(
+    class_logits: Tensor, y: Tensor, d: Tensor, class_weights: Optional[Tensor] = None
+) -> Tensor:
     """Masked classification loss.
 
     Parameters
@@ -585,13 +618,6 @@ def masked_classification_loss(class_logits, y, d, class_weights=None):
     -------
     torch.Tensor
         Scalar loss value
-    """
-
-    """
-    class_logits (Tensor): [batch, time,n_classes]
-    y (Tensor): [batch, time,n_classes]
-    d (Tensor) : [batch, time,], float tensor
-    class_weight : [n_classes,], float tensor
     """
 
     class_logits = rearrange(class_logits, "b t c -> b c t")
@@ -625,7 +651,9 @@ def masked_classification_loss(class_logits, y, d, class_weights=None):
     return class_loss
 
 
-def segmentation_loss(class_logits, y, d, class_weights=None):
+def segmentation_loss(
+    class_logits: Tensor, y: Tensor, d: Tensor, class_weights: Optional[Tensor] = None
+) -> Tensor:
     """Segmentation loss using focal loss.
 
     Parameters
@@ -651,7 +679,7 @@ def segmentation_loss(class_logits, y, d, class_weights=None):
     return default_focal_loss
 
 
-def get_class_loss_fn(args):
+def get_class_loss_fn(args: argparse.Namespace) -> Callable:
     """Get classification loss function based on args.
 
     Parameters
@@ -692,7 +720,7 @@ def get_class_loss_fn(args):
     return partial(masked_classification_loss, class_weights=class_weights)
 
 
-def get_reg_loss_fn(args):
+def get_reg_loss_fn(args: argparse.Namespace) -> Callable:
     """Get regression loss function based on args.
 
     Parameters
@@ -711,9 +739,19 @@ def get_reg_loss_fn(args):
 
     if hasattr(args, "segmentation_based") and args.segmentation_based:
 
-        def zrl(regression, r, d, y, class_weights=None):
+        def zrl(
+            regression: Tensor,
+            r: Tensor,
+            d: Tensor,
+            y: Tensor,
+            class_weights: Optional[Tensor] = None,
+        ) -> Tensor:
             """
             zero regression loss placeholder
+
+            Returns
+            ------
+            Tensor which is just zero
             """
             return torch.tensor(0.0)
 
@@ -741,7 +779,7 @@ def get_reg_loss_fn(args):
     return partial(masked_reg_loss, class_weights=class_weights)
 
 
-def get_detection_loss_fn(args):
+def get_detection_loss_fn(args: argparse.Namespace) -> Callable:
     """Get detection loss function based on args.
 
     Parameters
@@ -757,9 +795,12 @@ def get_detection_loss_fn(args):
     """
     if hasattr(args, "segmentation_based") and args.segmentation_based:
 
-        def zdl(pred, gt, pos_loss_weight=1):
+        def zdl(pred: Tensor, gt: Tensor, pos_loss_weight: float = 1.0) -> Tensor:
             """
             zero detection loss placeholder
+            Returns
+            --------
+            Tensor which is just zero
             """
             return torch.tensor(0.0)
 
