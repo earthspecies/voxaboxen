@@ -1,28 +1,33 @@
-# --------------------------------------------------------
-# BEATs: Audio Pre-Training with Acoustic Tokenizers (https://arxiv.org/abs/2212.09058)
-# Github source: https://github.com/microsoft/unilm/tree/master/beats
-# Copyright (c) 2022 Microsoft
-# Licensed under The MIT License [see LICENSE for details]
-# Based on fairseq code bases
-# https://github.com/pytorch/fairseq
-# --------------------------------------------------------
+"""
+Based on:
 
+BEATs: Audio Pre-Training with Acoustic Tokenizers (https://arxiv.org/abs/2212.09058)
+Github source: https://github.com/microsoft/unilm/tree/master/beats
+Copyright (c) 2022 Microsoft
+Licensed under The MIT License [see LICENSE for details]
+Based on fairseq code bases
+https://github.com/pytorch/fairseq
+"""
 
+import logging
+import math
+from typing import Callable, Dict, List, Optional, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
-from torch import Tensor
 import torch.nn.functional as F
-from torch.nn import LayerNorm, Parameter
 import torchaudio.compliance.kaldi as ta_kaldi
-import numpy as np
-import logging
+from torch import Tensor
+from torch.nn import LayerNorm, Parameter
+
 logger = logging.getLogger(__name__)
-import math
-import warnings
-from typing import Dict, Optional, Tuple
+
 
 class BEATsConfig:
-    def __init__(self, cfg=None):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+
+    def __init__(self, cfg: dict = None) -> None:
         self.input_patch_size: int = -1  # path size of patch embedding
         self.embed_dim: int = 512  # patch embedding dimension
         self.conv_bias: bool = False  # include bias in conv encoder
@@ -33,25 +38,41 @@ class BEATsConfig:
         self.encoder_attention_heads: int = 12  # num encoder attention heads
         self.activation_fn: str = "gelu"  # activation function to use
 
-        self.layer_wise_gradient_decay_ratio: float = 1.0  # ratio for layer-wise gradient decay
+        self.layer_wise_gradient_decay_ratio: float = (
+            1.0  # ratio for layer-wise gradient decay
+        )
         self.layer_norm_first: bool = False  # apply layernorm first in the transformer
         self.deep_norm: bool = False  # apply deep_norm first in the transformer
 
         # dropouts
         self.dropout: float = 0.1  # dropout probability for the transformer
         self.attention_dropout: float = 0.1  # dropout probability for attention weights
-        self.activation_dropout: float = 0.0  # dropout probability after activation in FFN
-        self.encoder_layerdrop: float = 0.0  # probability of dropping a tarnsformer layer
-        self.dropout_input: float = 0.0  # dropout to apply to the input (after feat extr)
+        self.activation_dropout: float = (
+            0.0  # dropout probability after activation in FFN
+        )
+        self.encoder_layerdrop: float = (
+            0.0  # probability of dropping a tarnsformer layer
+        )
+        self.dropout_input: float = (
+            0.0  # dropout to apply to the input (after feat extr)
+        )
 
         # positional embeddings
-        self.conv_pos: int = 128  # number of filters for convolutional positional embeddings
-        self.conv_pos_groups: int = 16  # number of groups for convolutional positional embedding
+        self.conv_pos: int = (
+            128  # number of filters for convolutional positional embeddings
+        )
+        self.conv_pos_groups: int = (
+            16  # number of groups for convolutional positional embedding
+        )
 
         # relative position embedding
-        self.relative_position_embedding: bool = False  # apply relative position embedding
+        self.relative_position_embedding: bool = (
+            False  # apply relative position embedding
+        )
         self.num_buckets: int = 320  # number of buckets for relative position embedding
-        self.max_distance: int = 1280  # maximum distance for relative position embedding
+        self.max_distance: int = (
+            1280  # maximum distance for relative position embedding
+        )
         self.gru_rel_pos: bool = False  # apply gated relative position embedding
 
         # label predictor
@@ -62,14 +83,17 @@ class BEATsConfig:
         if cfg is not None:
             self.update(cfg)
 
-    def update(self, cfg: dict):
+    def update(self, cfg: dict) -> None:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         self.__dict__.update(cfg)
 
 
 class BEATs(nn.Module):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+
     def __init__(
-            self,
-            cfg: BEATsConfig,
+        self,
+        cfg: BEATsConfig,
     ) -> None:
         super().__init__()
         logger.info(f"BEATs Config: {cfg.__dict__}")
@@ -84,8 +108,13 @@ class BEATs(nn.Module):
         )
 
         self.input_patch_size = cfg.input_patch_size
-        self.patch_embedding = nn.Conv2d(1, self.embed, kernel_size=self.input_patch_size, stride=self.input_patch_size,
-                                         bias=cfg.conv_bias)
+        self.patch_embedding = nn.Conv2d(
+            1,
+            self.embed,
+            kernel_size=self.input_patch_size,
+            stride=self.input_patch_size,
+            bias=cfg.conv_bias,
+        )
 
         self.dropout_input = nn.Dropout(cfg.dropout_input)
 
@@ -100,43 +129,67 @@ class BEATs(nn.Module):
             self.predictor = None
 
     def forward_padding_mask(
-            self,
-            features: torch.Tensor,
-            padding_mask: torch.Tensor,
+        self,
+        features: torch.Tensor,
+        padding_mask: torch.Tensor,
     ) -> torch.Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         extra = padding_mask.size(1) % features.size(1)
         if extra > 0:
             padding_mask = padding_mask[:, :-extra]
-        padding_mask = padding_mask.view(
-            padding_mask.size(0), features.size(1), -1
-        )
+        padding_mask = padding_mask.view(padding_mask.size(0), features.size(1), -1)
         padding_mask = padding_mask.all(-1)
         return padding_mask
 
     def preprocess(
-            self,
-            source: torch.Tensor,
-            fbank_mean: float = 15.41663,
-            fbank_std: float = 6.55582,
+        self,
+        source: torch.Tensor,
+        fbank_mean: float = 15.41663,
+        fbank_std: float = 6.55582,
     ) -> torch.Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         fbanks = []
         for waveform in source:
-            waveform = waveform.unsqueeze(0) * 2 ** 15
-            fbank = ta_kaldi.fbank(waveform, num_mel_bins=128, sample_frequency=16000, frame_length=25, frame_shift=10)
+            waveform = waveform.unsqueeze(0) * 2**15
+            fbank = ta_kaldi.fbank(
+                waveform,
+                num_mel_bins=128,
+                sample_frequency=16000,
+                frame_length=25,
+                frame_shift=10,
+            )
             fbanks.append(fbank)
         fbank = torch.stack(fbanks, dim=0)
         fbank = (fbank - fbank_mean) / (2 * fbank_std)
         return fbank
 
     def extract_features(
-            self,
-            source: torch.Tensor,
-            padding_mask: Optional[torch.Tensor] = None,
-            fbank_mean: float = 15.41663,
-            fbank_std: float = 6.55582,
-            feature_only=False,
-    ):
-        fbank = self.preprocess(source, fbank_mean=fbank_mean, fbank_std=fbank_std).to(torch.float32)
+        self,
+        source: Tensor,
+        padding_mask: Optional[Tensor] = None,
+        fbank_mean: float = 15.41663,
+        fbank_std: float = 6.55582,
+        feature_only: bool = False,
+    ) -> Tuple[Tensor, Optional[Tensor]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        Tuple[torch.Tensor, Optional[torch.Tensor]]
+        """
+        fbank = self.preprocess(source, fbank_mean=fbank_mean, fbank_std=fbank_std).to(
+            torch.float32
+        )
 
         if padding_mask is not None:
             padding_mask = self.forward_padding_mask(fbank, padding_mask)
@@ -167,7 +220,9 @@ class BEATs(nn.Module):
             if padding_mask is not None and padding_mask.any():
                 logits[padding_mask] = 0
                 logits = logits.sum(dim=1)
-                logits = logits / (~padding_mask).sum(dim=1).unsqueeze(-1).expand_as(logits)
+                logits = logits / (~padding_mask).sum(dim=1).unsqueeze(-1).expand_as(
+                    logits
+                )
             else:
                 logits = logits.mean(dim=1)
 
@@ -176,11 +231,12 @@ class BEATs(nn.Module):
             return lprobs, padding_mask
         else:
             return x, padding_mask
-          
 
 
 class TransformerEncoder(nn.Module):
-    def __init__(self, args):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+
+    def __init__(self, args: object) -> None:
         super().__init__()
 
         self.dropout = args.dropout
@@ -234,7 +290,9 @@ class TransformerEncoder(nn.Module):
         if self.relative_position_embedding:
             for i in range(1, args.encoder_layers):
                 del self.layers[i].self_attn.relative_attention_bias
-                self.layers[i].self_attn.relative_attention_bias = self.layers[0].self_attn.relative_attention_bias
+                self.layers[i].self_attn.relative_attention_bias = self.layers[
+                    0
+                ].self_attn.relative_attention_bias
 
         self.layer_norm_first = args.layer_norm_first
         self.layer_norm = LayerNorm(self.embedding_dim)
@@ -246,15 +304,33 @@ class TransformerEncoder(nn.Module):
             deep_norm_beta = math.pow(8 * args.encoder_layers, -1 / 4)
             for i in range(args.encoder_layers):
                 nn.init.xavier_normal_(self.layers[i].self_attn.k_proj.weight, gain=1)
-                nn.init.xavier_normal_(self.layers[i].self_attn.v_proj.weight, gain=deep_norm_beta)
+                nn.init.xavier_normal_(
+                    self.layers[i].self_attn.v_proj.weight, gain=deep_norm_beta
+                )
                 nn.init.xavier_normal_(self.layers[i].self_attn.q_proj.weight, gain=1)
-                nn.init.xavier_normal_(self.layers[i].self_attn.out_proj.weight, gain=deep_norm_beta)
+                nn.init.xavier_normal_(
+                    self.layers[i].self_attn.out_proj.weight, gain=deep_norm_beta
+                )
                 nn.init.xavier_normal_(self.layers[i].fc1.weight, gain=deep_norm_beta)
                 nn.init.xavier_normal_(self.layers[i].fc2.weight, gain=deep_norm_beta)
 
-        self.layer_wise_gradient_decay_ratio = getattr(args, "layer_wise_gradient_decay_ratio", 1)
+        self.layer_wise_gradient_decay_ratio = getattr(
+            args, "layer_wise_gradient_decay_ratio", 1
+        )
 
-    def forward(self, x, padding_mask=None, layer=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+        layer: Optional[int] = None,
+    ) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor, Optional[torch.Tensor]]]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        x : torch.Tensor
+        layer_results : List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
+        """
         x, layer_results = self.extract_features(x, padding_mask, layer)
 
         if self.layer_norm_first and layer is None:
@@ -262,8 +338,19 @@ class TransformerEncoder(nn.Module):
 
         return x, layer_results
 
-    def extract_features(self, x, padding_mask=None, tgt_layer=None):
+    def extract_features(
+        self,
+        x: torch.Tensor,
+        padding_mask: Optional[torch.Tensor] = None,
+        tgt_layer: Optional[int] = None,
+    ) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor, Optional[torch.Tensor]]]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
 
+        Returns
+        -------
+        x : torch.Tensor
+        layer_results : List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
+        """
         if padding_mask is not None:
             x[padding_mask] = 0
 
@@ -290,7 +377,12 @@ class TransformerEncoder(nn.Module):
                 x = GradMultiply.apply(x, self.layer_wise_gradient_decay_ratio)
             dropout_probability = np.random.random()
             if not self.training or (dropout_probability > self.layerdrop):
-                x, z, pos_bias = layer(x, self_attn_padding_mask=padding_mask, need_weights=False, pos_bias=pos_bias)
+                x, z, pos_bias = layer(
+                    x,
+                    self_attn_padding_mask=padding_mask,
+                    need_weights=False,
+                    pos_bias=pos_bias,
+                )
             if tgt_layer is not None:
                 layer_results.append((x, z))
             if i == tgt_layer:
@@ -307,25 +399,26 @@ class TransformerEncoder(nn.Module):
 
 
 class TransformerSentenceEncoderLayer(nn.Module):
-    def __init__(
-            self,
-            embedding_dim: float = 768,
-            ffn_embedding_dim: float = 3072,
-            num_attention_heads: float = 8,
-            dropout: float = 0.1,
-            attention_dropout: float = 0.1,
-            activation_dropout: float = 0.1,
-            activation_fn: str = "relu",
-            layer_norm_first: bool = False,
-            deep_norm: bool = False,
-            has_relative_attention_bias: bool = False,
-            num_buckets: int = 0,
-            max_distance: int = 0,
-            rescale_init: bool = False,
-            gru_rel_pos: bool = False,
-            encoder_layers: int = 0,
-    ) -> None:
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
 
+    def __init__(
+        self,
+        embedding_dim: float = 768,
+        ffn_embedding_dim: float = 3072,
+        num_attention_heads: float = 8,
+        dropout: float = 0.1,
+        attention_dropout: float = 0.1,
+        activation_dropout: float = 0.1,
+        activation_fn: str = "relu",
+        layer_norm_first: bool = False,
+        deep_norm: bool = False,
+        has_relative_attention_bias: bool = False,
+        num_buckets: int = 0,
+        max_distance: int = 0,
+        rescale_init: bool = False,
+        gru_rel_pos: bool = False,
+        encoder_layers: int = 0,
+    ) -> None:
         super().__init__()
         self.embedding_dim = embedding_dim
         self.dropout = dropout
@@ -368,13 +461,19 @@ class TransformerSentenceEncoderLayer(nn.Module):
             self.deep_norm_alpha = 1
 
     def forward(
-            self,
-            x: torch.Tensor,
-            self_attn_mask: torch.Tensor = None,
-            self_attn_padding_mask: torch.Tensor = None,
-            need_weights: bool = False,
-            pos_bias=None
-    ):
+        self,
+        x: torch.Tensor,
+        self_attn_mask: torch.Tensor = None,
+        self_attn_padding_mask: torch.Tensor = None,
+        need_weights: bool = False,
+        pos_bias: Optional[Tensor] = None,
+    ) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]
+        """
         residual = x
 
         if self.layer_norm_first:
@@ -386,7 +485,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 key_padding_mask=self_attn_padding_mask,
                 need_weights=False,
                 attn_mask=self_attn_mask,
-                position_bias=pos_bias
+                position_bias=pos_bias,
             )
             x = self.dropout1(x)
             x = residual + x
@@ -409,7 +508,7 @@ class TransformerSentenceEncoderLayer(nn.Module):
                 key_padding_mask=self_attn_padding_mask,
                 need_weights=need_weights,
                 attn_mask=self_attn_mask,
-                position_bias=pos_bias
+                position_bias=pos_bias,
             )
 
             x = self.dropout1(x)
@@ -438,25 +537,25 @@ class MultiheadAttention(nn.Module):
     """
 
     def __init__(
-            self,
-            embed_dim,
-            num_heads,
-            kdim=None,
-            vdim=None,
-            dropout=0.0,
-            bias=True,
-            add_bias_kv=False,
-            add_zero_attn=False,
-            self_attention=False,
-            encoder_decoder_attention=False,
-            q_noise=0.0,
-            qn_block_size=8,
-            has_relative_attention_bias=False,
-            num_buckets=32,
-            max_distance=128,
-            gru_rel_pos=False,
-            rescale_init=False,
-    ):
+        self,
+        embed_dim: int,
+        num_heads: int,
+        kdim: Optional[int] = None,
+        vdim: Optional[int] = None,
+        dropout: float = 0.0,
+        bias: bool = True,
+        add_bias_kv: bool = False,
+        add_zero_attn: bool = False,
+        self_attention: bool = False,
+        encoder_decoder_attention: bool = False,
+        q_noise: float = 0.0,
+        qn_block_size: int = 8,
+        has_relative_attention_bias: bool = False,
+        num_buckets: int = 32,
+        max_distance: int = 128,
+        gru_rel_pos: bool = False,
+        rescale_init: bool = False,
+    ) -> None:
         super().__init__()
         self.embed_dim = embed_dim
         self.kdim = kdim if kdim is not None else embed_dim
@@ -475,16 +574,16 @@ class MultiheadAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         self.q_head_dim = self.head_dim
         self.k_head_dim = self.head_dim
-        assert (
-                self.head_dim * num_heads == self.embed_dim
-        ), "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
+        assert self.head_dim * num_heads == self.embed_dim, (
+            "embed_dim must be divisible by num_heads"
+        )
+        self.scaling = self.head_dim**-0.5
 
         self.self_attention = self_attention
         self.encoder_decoder_attention = encoder_decoder_attention
 
         assert not self.self_attention or self.qkv_same_dim, (
-            "Self-attention requires query, key and " "value to be of the same size"
+            "Self-attention requires query, key and value to be of the same size"
         )
 
         k_bias = True
@@ -523,7 +622,8 @@ class MultiheadAttention(nn.Module):
 
         self.reset_parameters()
 
-    def reset_parameters(self):
+    def reset_parameters(self) -> None:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         if self.qkv_same_dim:
             # Empirically observed the convergence to be much better with
             # the scaled initialization
@@ -545,7 +645,16 @@ class MultiheadAttention(nn.Module):
         if self.has_relative_attention_bias:
             nn.init.xavier_normal_(self.relative_attention_bias.weight)
 
-    def _relative_positions_bucket(self, relative_positions, bidirectional=True):
+    def _relative_positions_bucket(
+        self, relative_positions: Tensor, bidirectional: bool = True
+    ) -> Tensor:
+        """
+        See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         num_buckets = self.num_buckets
         max_distance = self.max_distance
         relative_buckets = 0
@@ -555,49 +664,61 @@ class MultiheadAttention(nn.Module):
             relative_buckets += (relative_positions > 0).to(torch.long) * num_buckets
             relative_positions = torch.abs(relative_positions)
         else:
-            relative_positions = -torch.min(relative_positions, torch.zeros_like(relative_positions))
+            relative_positions = -torch.min(
+                relative_positions, torch.zeros_like(relative_positions)
+            )
 
         max_exact = num_buckets // 2
         is_small = relative_positions < max_exact
 
         relative_postion_if_large = max_exact + (
-                torch.log(relative_positions.float() / max_exact)
-                / math.log(max_distance / max_exact)
-                * (num_buckets - max_exact)
+            torch.log(relative_positions.float() / max_exact)
+            / math.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
         ).to(torch.long)
         relative_postion_if_large = torch.min(
-            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
+            relative_postion_if_large,
+            torch.full_like(relative_postion_if_large, num_buckets - 1),
         )
 
-        relative_buckets += torch.where(is_small, relative_positions, relative_postion_if_large)
+        relative_buckets += torch.where(
+            is_small, relative_positions, relative_postion_if_large
+        )
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length):
+    def compute_bias(self, query_length: int, key_length: int) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         context_position = torch.arange(query_length, dtype=torch.long)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
         relative_position = memory_position - context_position
         relative_position_bucket = self._relative_positions_bucket(
-            relative_position,
-            bidirectional=True
+            relative_position, bidirectional=True
         )
-        relative_position_bucket = relative_position_bucket.to(self.relative_attention_bias.weight.device)
+        relative_position_bucket = relative_position_bucket.to(
+            self.relative_attention_bias.weight.device
+        )
         values = self.relative_attention_bias(relative_position_bucket)
         values = values.permute([2, 0, 1])
         return values
 
     def forward(
-            self,
-            query,
-            key: Optional[Tensor],
-            value: Optional[Tensor],
-            key_padding_mask: Optional[Tensor] = None,
-            incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
-            need_weights: bool = True,
-            static_kv: bool = False,
-            attn_mask: Optional[Tensor] = None,
-            before_softmax: bool = False,
-            need_head_weights: bool = False,
-            position_bias: Optional[Tensor] = None
+        self,
+        query: Tensor,
+        key: Optional[Tensor],
+        value: Optional[Tensor],
+        key_padding_mask: Optional[Tensor] = None,
+        incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
+        need_weights: bool = True,
+        static_kv: bool = False,
+        attn_mask: Optional[Tensor] = None,
+        before_softmax: bool = False,
+        need_head_weights: bool = False,
+        position_bias: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
         """Input shape: Time x Batch x Channel
 
@@ -615,6 +736,11 @@ class MultiheadAttention(nn.Module):
             need_head_weights (bool, optional): return the attention
                 weights for each head. Implies *need_weights*. Default:
                 return the average attention weights over all heads.
+
+        Returns:
+            attn (torch.Tensor)
+            attn_weights (torch.Tensor)
+            position_bias (torch.Tensor)
         """
         if need_head_weights:
             need_weights = True
@@ -634,7 +760,11 @@ class MultiheadAttention(nn.Module):
 
         if self.has_relative_attention_bias and position_bias is None:
             position_bias = self.compute_bias(tgt_len, src_len)
-            position_bias = position_bias.unsqueeze(0).repeat(bsz, 1, 1, 1).view(bsz * self.num_heads, tgt_len, src_len)
+            position_bias = (
+                position_bias.unsqueeze(0)
+                .repeat(bsz, 1, 1, 1)
+                .view(bsz * self.num_heads, tgt_len, src_len)
+            )
 
         if incremental_state is not None:
             saved_state = self._get_input_buffer(incremental_state)
@@ -689,20 +819,20 @@ class MultiheadAttention(nn.Module):
 
         q = (
             q.contiguous()
-                .view(tgt_len, bsz * self.num_heads, self.q_head_dim)
-                .transpose(0, 1)
+            .view(tgt_len, bsz * self.num_heads, self.q_head_dim)
+            .transpose(0, 1)
         )
         if k is not None:
             k = (
                 k.contiguous()
-                    .view(-1, bsz * self.num_heads, self.k_head_dim)
-                    .transpose(0, 1)
+                .view(-1, bsz * self.num_heads, self.k_head_dim)
+                .transpose(0, 1)
             )
         if v is not None:
             v = (
                 v.contiguous()
-                    .view(-1, bsz * self.num_heads, self.head_dim)
-                    .transpose(0, 1)
+                .view(-1, bsz * self.num_heads, self.head_dim)
+                .transpose(0, 1)
             )
 
         if saved_state is not None:
@@ -777,7 +907,9 @@ class MultiheadAttention(nn.Module):
                 )
 
         attn_weights = torch.bmm(q, k.transpose(1, 2))
-        attn_weights = (attn_weights - attn_weights.max(dim=-1, keepdim=True)[0]) * alpha
+        attn_weights = (
+            attn_weights - attn_weights.max(dim=-1, keepdim=True)[0]
+        ) * alpha
         attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
@@ -806,20 +938,27 @@ class MultiheadAttention(nn.Module):
         if position_bias is not None:
             attn_mask_rel_pos = position_bias
             if self.gru_rel_pos == 1:
-                query_layer = q.view(bsz, self.num_heads, tgt_len, self.q_head_dim) * alpha / self.scaling
+                query_layer = (
+                    q.view(bsz, self.num_heads, tgt_len, self.q_head_dim)
+                    * alpha
+                    / self.scaling
+                )
                 _B, _H, _L, __ = query_layer.size()
-                gate_a, gate_b = torch.sigmoid(self.grep_linear(query_layer).view(
-                    _B, _H, _L, 2, 4).sum(-1, keepdim=False)).chunk(2, dim=-1)
+                gate_a, gate_b = torch.sigmoid(
+                    self.grep_linear(query_layer)
+                    .view(_B, _H, _L, 2, 4)
+                    .sum(-1, keepdim=False)
+                ).chunk(2, dim=-1)
                 gate_a_1 = gate_a * (gate_b * self.grep_a - 1.0) + 2.0
-                attn_mask_rel_pos = gate_a_1.view(bsz * self.num_heads, tgt_len, 1) * position_bias
+                attn_mask_rel_pos = (
+                    gate_a_1.view(bsz * self.num_heads, tgt_len, 1) * position_bias
+                )
 
             attn_mask_rel_pos = attn_mask_rel_pos.view(attn_weights.size())
 
             attn_weights = attn_weights + attn_mask_rel_pos
 
-        attn_weights_float = F.softmax(
-            attn_weights, dim=-1
-        )
+        attn_weights_float = F.softmax(attn_weights, dim=-1)
         attn_weights = attn_weights_float.type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
 
@@ -841,12 +980,17 @@ class MultiheadAttention(nn.Module):
 
     @staticmethod
     def _append_prev_key_padding_mask(
-            key_padding_mask: Optional[Tensor],
-            prev_key_padding_mask: Optional[Tensor],
-            batch_size: int,
-            src_len: int,
-            static_kv: bool,
+        key_padding_mask: Optional[Tensor],
+        prev_key_padding_mask: Optional[Tensor],
+        batch_size: int,
+        src_len: int,
+        static_kv: bool,
     ) -> Optional[Tensor]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns:
+            torch.Tensor
+        """
         # saved key padding masks have shape (bsz, seq_len)
         if prev_key_padding_mask is not None and static_kv:
             new_key_padding_mask = prev_key_padding_mask
@@ -884,8 +1028,13 @@ class MultiheadAttention(nn.Module):
         return new_key_padding_mask
 
     def _get_input_buffer(
-            self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]]
+        self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]]
     ) -> Dict[str, Optional[Tensor]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns:
+            Dict
+        """
         result = self.get_incremental_state(incremental_state, "attn_state")
         if result is not None:
             return result
@@ -894,23 +1043,36 @@ class MultiheadAttention(nn.Module):
             return empty_result
 
     def _set_input_buffer(
-            self,
-            incremental_state: Dict[str, Dict[str, Optional[Tensor]]],
-            buffer: Dict[str, Optional[Tensor]],
-    ):
+        self,
+        incremental_state: Dict[str, Dict[str, Optional[Tensor]]],
+        buffer: Dict[str, Optional[Tensor]],
+    ) -> Dict:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns:
+            Dict
+        """
         return self.set_incremental_state(incremental_state, "attn_state", buffer)
 
-    def apply_sparse_mask(self, attn_weights, tgt_len: int, src_len: int, bsz: int):
+    def apply_sparse_mask(
+        self, attn_weights: Tensor, tgt_len: int, src_len: int, bsz: int
+    ) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         return attn_weights
 
 
-def init_bert_params(module):
+def init_bert_params(module: nn.Module) -> None:
     """
     Initialize the weights specific to the BERT Model.
     This overrides the default initializations depending on the specified arguments.
         1. If normal_init_linear_weights is set then weights of linear
            layer will be initialized using the normal distribution and
-           bais will be set to the specified value.
+           bias will be set to the specified value.
         2. If normal_init_embed_weights is set then weights of embedding
            layer will be initialized using the normal distribution.
         3. If normal_init_proj_weights is set then weights of
@@ -918,12 +1080,11 @@ def init_bert_params(module):
            the normal distribution (to be validated).
     """
 
-    def normal_(data):
+    def normal_(data: Tensor) -> None:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
         # with FSDP, module params will be on CUDA, so we cast them back to CPU
         # so that the RNG is consistent with and without FSDP
-        data.copy_(
-            data.cpu().normal_(mean=0.0, std=0.02).to(data.device)
-        )
+        data.copy_(data.cpu().normal_(mean=0.0, std=0.02).to(data.device))
 
     if isinstance(module, nn.Linear):
         normal_(module.weight.data)
@@ -937,44 +1098,79 @@ def init_bert_params(module):
         normal_(module.q_proj.weight.data)
         normal_(module.k_proj.weight.data)
         normal_(module.v_proj.weight.data)
-        
+
+
 class GradMultiply(torch.autograd.Function):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+
     @staticmethod
-    def forward(ctx, x, scale):
+    def forward(ctx: object, x: Tensor, scale: float) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         ctx.scale = scale
         res = x.new(x)
         return res
 
     @staticmethod
-    def backward(ctx, grad):
+    def backward(ctx: object, grad: Tensor) -> Tuple[Tensor, Optional[None]]:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        Tuple[torch.Tensor, None]
+        """
         return grad * ctx.scale, None
 
 
 class SamePad(nn.Module):
-    def __init__(self, kernel_size, causal=False):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+
+    def __init__(self, kernel_size: int, causal: bool = False) -> None:
         super().__init__()
         if causal:
             self.remove = kernel_size - 1
         else:
             self.remove = 1 if kernel_size % 2 == 0 else 0
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         if self.remove > 0:
             x = x[:, :, : -self.remove]
         return x
 
 
 class Swish(nn.Module):
-    def __init__(self):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+
+    def __init__(self) -> None:
         super(Swish, self).__init__()
         self.act = torch.nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
         return x * self.act(x)
 
 
 class GLU_Linear(nn.Module):
-    def __init__(self, input_dim, output_dim, glu_type="sigmoid", bias_in_glu=True):
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation"""
+
+    def __init__(
+        self, input_dim: int, output_dim: int, glu_type: str, bias_in_glu: bool = True
+    ) -> None:
         super(GLU_Linear, self).__init__()
 
         self.glu_type = glu_type
@@ -994,19 +1190,38 @@ class GLU_Linear(nn.Module):
         else:
             self.linear = nn.Linear(input_dim, output_dim * 2, False)
 
-    def forward(self, x):
-        # to be consistent with GLU_Linear, we assume the input always has the #channel (#dim) in the last dimension of the tensor, so need to switch the dimension first for 1D-Conv case
+    def forward(self, x: Tensor) -> Tensor:
+        """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+        Returns
+        -------
+        torch.Tensor
+        """
+        # to be consistent with GLU_Linear, we assume the input always has the
+        # #channel (#dim) in the last dimension of the tensor,
+        # so need to switch the dimension first for 1D-Conv case
         x = self.linear(x)
 
         if self.glu_type == "bilinear":
-            x = (x[:, :, 0:self.output_dim] * x[:, :, self.output_dim:self.output_dim * 2])
+            x = (
+                x[:, :, 0 : self.output_dim]
+                * x[:, :, self.output_dim : self.output_dim * 2]
+            )
         else:
-            x = (x[:, :, 0:self.output_dim] * self.glu_act(x[:, :, self.output_dim:self.output_dim * 2]))
+            x = x[:, :, 0 : self.output_dim] * self.glu_act(
+                x[:, :, self.output_dim : self.output_dim * 2]
+            )
 
         return x
 
 
-def gelu_accurate(x):
+def gelu_accurate(x: Tensor) -> Tensor:
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+    Returns
+    -------
+    torch.Tensor
+    """
     if not hasattr(gelu_accurate, "_a"):
         gelu_accurate._a = math.sqrt(2 / math.pi)
     return (
@@ -1015,20 +1230,35 @@ def gelu_accurate(x):
 
 
 def gelu(x: torch.Tensor) -> torch.Tensor:
+    """See https://github.com/microsoft/unilm/tree/master/beats for documentation
+
+    Returns
+    -------
+    torch.Tensor
+    """
     return torch.nn.functional.gelu(x.float()).type_as(x)
 
 
-def get_activation_fn(activation: str):
-    """Returns the activation function corresponding to `activation`"""
+def get_activation_fn(activation: str) -> Callable:
+    """Returns the activation function corresponding to `activation`
+
+    Returns
+    -------
+    Callable[[torch.Tensor], torch.Tensor]
+        A function that applies the activation to a tensor.
+
+    Raises
+    ------
+    RuntimeError
+        If the activation name is not supported.
+    """
 
     if activation == "relu":
         return F.relu
     elif activation == "gelu":
         return gelu
     elif activation == "gelu_fast":
-        warnings.warn(
-            "--activation-fn=gelu_fast has been renamed to gelu_accurate"
-        )
+        # warnings.warn("--activation-fn=gelu_fast has been renamed to gelu_accurate")
         return gelu_accurate
     elif activation == "gelu_accurate":
         return gelu_accurate
@@ -1042,7 +1272,7 @@ def get_activation_fn(activation: str):
         raise RuntimeError("--activation-fn {} not supported".format(activation))
 
 
-def quant_noise(module, p, block_size):
+def quant_noise(module: nn.Module, p: float, block_size: int) -> nn.Module:
     """
     Wraps modules and applies quantization noise to the weights for
     subsequent quantization with Iterative Product Quantization as
@@ -1060,6 +1290,10 @@ def quant_noise(module, p, block_size):
           see "And the Bit Goes Down: Revisiting the Quantization of Neural Networks"
         - We implement the simplest form of noise here as stated in the paper
           which consists in randomly dropping blocks
+
+    Returns
+    -------
+    nn.Module
     """
 
     # if no quantization noise, don't register hook
@@ -1074,23 +1308,23 @@ def quant_noise(module, p, block_size):
 
     # 2D matrix
     if not is_conv:
-        assert (
-            module.weight.size(1) % block_size == 0
-        ), "Input features must be a multiple of block sizes"
+        assert module.weight.size(1) % block_size == 0, (
+            "Input features must be a multiple of block sizes"
+        )
 
     # 4D matrix
     else:
         # 1x1 convolutions
         if module.kernel_size == (1, 1):
-            assert (
-                module.in_channels % block_size == 0
-            ), "Input channels must be a multiple of block sizes"
+            assert module.in_channels % block_size == 0, (
+                "Input channels must be a multiple of block sizes"
+            )
         # regular convolutions
         else:
             k = module.kernel_size[0] * module.kernel_size[1]
             assert k % block_size == 0, "Kernel size must be a multiple of block size"
 
-    def _forward_pre_hook(mod, input):
+    def _forward_pre_hook(mod: nn.Module, input: Tuple[Tensor, ...]) -> None:
         # no noise for evaluation
         if mod.training:
             if not is_conv:

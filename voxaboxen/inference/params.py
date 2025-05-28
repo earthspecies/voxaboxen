@@ -1,17 +1,76 @@
-import argparse
-from voxaboxen.training.params import load_params
+"""
+Params for inference using trained model
+"""
 
-def parse_inference_args(inference_args):
+import argparse
+from typing import List, Union
+
+
+def parse_inference_args(
+    inference_args: Union[argparse.Namespace, List[str]],
+) -> argparse.Namespace:
+    """
+    Parse inference parameters from command-line arguments or a namespace.
+
+    Parameters
+    ----------
+    args : Union[argparse.Namespace, List[str]]
+        Either a pre-existing argparse.Namespace or a list of command-line arguments.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed arguments with project configuration.
+    """
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model-args-fp', type=str, required=True, help = "filepath of model params saved as a yaml")
-    parser.add_argument('--model-checkpoint-fp', type=str, default=None, help = "if passed, override default of final-model.pt")
-    parser.add_argument('--file-info-for-inference', type=str, required=True, help = "filepath of info csv listing filenames and filepaths of audio for inference")
-    parser.add_argument('--detection-threshold', type=float, default=0.5, help="detection peaks need to be at or above this threshold to make it into the exported selection table")
-    parser.add_argument('--classification-threshold', type=float, default=0.5, help="classification probability needs to be at or above this threshold to not be labeled as Unknown")
-    parser.add_argument('--comb-iou-threshold', type=float,default=0.5, help="iou threshold for combining fwd and bck predictions, when bidirectional==True")
-    parser.add_argument('--comb-discard-threshold', type=float, default=0.5, help="only keep combined detections above some threshold detection probability")
-    parser.add_argument('--disable-bidirectional', action='store_true')
+    parser.add_argument(
+        "--model-args-fp",
+        type=str,
+        required=True,
+        help="filepath of model params saved as a yaml",
+    )
+    parser.add_argument(
+        "--model-checkpoint-fp",
+        type=str,
+        default=None,
+        help="if passed, override default of final-model.pt",
+    )
+    parser.add_argument(
+        "--file-info-for-inference",
+        type=str,
+        required=True,
+        help="filepath of info csv listing filenames and "
+        "filepaths of audio for inference",
+    )
+    parser.add_argument(
+        "--detection-threshold",
+        type=float,
+        default=0.5,
+        help="detection peaks need to be at or above this threshold "
+        "to make it into the exported selection table",
+    )
+    parser.add_argument(
+        "--classification-threshold",
+        type=float,
+        default=0.5,
+        help="classification probability needs to be at or "
+        "above this threshold to not be labeled as Unknown",
+    )
+    parser.add_argument(
+        "--comb-iou-threshold",
+        type=float,
+        default=0.5,
+        help="iou threshold for combining fwd and bck "
+        "predictions, when bidirectional==True",
+    )
+    parser.add_argument(
+        "--comb-discard-threshold",
+        type=float,
+        default=0.5,
+        help="only keep combined detections above some threshold detection probability",
+    )
+    parser.add_argument("--disable-bidirectional", action="store_true")
 
     inference_args = parser.parse_args(inference_args)
     return inference_args
