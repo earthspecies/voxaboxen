@@ -66,4 +66,12 @@ def parse_project_args(
     )
 
     args = parser.parse_args(args)
+
+    for split in ["train", "val", "test"]:
+        if getattr(args, f"{split}_info_fp") is None:
+            setattr(
+                args,
+                f"{split}_info_fp",
+                os.path.join(args.data_dir, f"{split}_info.csv"),
+            )
     return args

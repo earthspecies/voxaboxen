@@ -31,6 +31,8 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
     """
     Full training and evaluation
 
+    Full training and evaluation
+
     Parameters
     ----------
     args : list of str or argparse.Namespace
@@ -74,7 +76,7 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
 
     if args.previous_checkpoint_fp is not None:
         print(f"loading model weights from {args.previous_checkpoint_fp}")
-        cp = torch.load(args.previous_checkpoint_fp)
+        cp = torch.load(args.previous_checkpoint_fp, weights_only=True)
         if "model_state_dict" in cp.keys():
             model.load_state_dict(cp["model_state_dict"])
         else:
