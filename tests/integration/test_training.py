@@ -8,9 +8,7 @@ from voxaboxen.training.train_model import train_model
 
 def main() -> None:
     args = [
-        "--train-info-fp=datasets/integration_test_data/train_info.csv",
-        "--val-info-fp=datasets/integration_test_data/val_info.csv",
-        "--test-info-fp=datasets/integration_test_data/test_info.csv",
+        "--data-dir=datasets/integration_test_data",
         "--project-dir=projects/integration_test",
     ]
     project_setup(args)

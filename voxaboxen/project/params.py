@@ -43,20 +43,28 @@ def parse_project_args(
     -------
     argparse.Namespace
         Parsed arguments with project configuration.
+
+    Raises
+    -------
+    ValueError
+        If train_info and test_info aren't passed, or don't exist at default locations.
     """
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "--train-info-fp",
         type=str,
-        required=True,
+        default=None,
         help="filepath of csv with train info",
     )
     parser.add_argument(
         "--val-info-fp", type=str, default=None, help="filepath of csv with val info"
     )
     parser.add_argument(
-        "--test-info-fp", type=str, required=True, help="filepath of csv with test info"
+        "--test-info-fp", type=str, default=None, help="filepath of csv with test info"
+    )
+    parser.add_argument(
+        "--data-dir", type=str, required=True, help="path to data directory"
     )
     parser.add_argument(
         "--project-dir",
@@ -69,6 +77,12 @@ def parse_project_args(
 
     for split in ["train", "val", "test"]:
         if getattr(args, f"{split}_info_fp") is None:
+            default_info_fp = os.path.join(args.data_dir, f"{split}_info.csv")
+            if not os.path.exists(default_info_fp):
+                if split == "val":
+                    continue
+                else:
+                    raise ValueError
             setattr(
                 args,
                 f"{split}_info_fp",
