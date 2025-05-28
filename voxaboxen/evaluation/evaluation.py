@@ -774,10 +774,10 @@ def combine_fwd_bck_preds(
         fen = fwd_matches["End Time (s)"].to_numpy()
         bbn = bck_matches["Begin Time (s)"].to_numpy()
         ben = bck_matches["End Time (s)"].to_numpy()
-        starts = fbn
-        ends = ben
-        ious = (np.minimum(fen, ben) - np.maximum(fbn, bbn)) / (
-            np.maximum(fen, ben) - np.minimum(fbn, bbn)
+        starts = (fbn + bbn) / 2
+        ends = (fen + ben) / 2
+        ious = ((fen + ben) - (fbn + bbn)) / (
+            2 * (np.maximum(fen, ben) - np.minimum(fbn, bbn))
         )
         probs = (
             1
@@ -1249,7 +1249,7 @@ def mean_average_precision(
     scores_by_class = {c: [] for c in label_mapping.keys()}
     experiment_output_dir = os.path.join(exp_dir, "outputs")
     if bidirectional:
-        comb_discard_threshes_to_sweep = [0.5] if is_test else np.linspace(0, 0.99, 10)
+        comb_discard_threshes_to_sweep = [0.5] if is_test else np.linspace(0, 0.99, 30)
         comb_iou_threshes_to_sweep = [0.5] if is_test else np.linspace(0.2, 0.9, 10)
     else:
         comb_discard_threshes_to_sweep = [0]
