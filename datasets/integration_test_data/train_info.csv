@@ -1,0 +1,2 @@
+fn,audio_fp,selection_table_fp
+2,datasets/integration_test_data/train_audio.wav,datasets/integration_test_data/train_audio.txt

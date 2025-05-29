@@ -1,0 +1,7 @@
+python main.py project-setup --train-info-fp=datasets/MT/formatted/train_info.csv --val-info-fp=datasets/MT/formatted/val_info.csv --test-info-fp=datasets/MT/formatted/test_info.csv --project-dir=projects/MT_experiment
+python main.py project-setup --train-info-fp=datasets/MT/formatted/train_info.csv --val-info-fp=datasets/MT/formatted/val_info.csv --test-info-fp=datasets/MT/formatted/test_info.csv --project-dir=projects/MT_experiment
+python main.py train-model --project-config-fp=projects/MT_experiment/project_config.yaml --name=test_bidir --lr=.00005 --batch-size=4 --n-epochs 1 --bidirectional -t --exists-strategy=overwrite
+python main.py train-model --project-config-fp=projects/MT_experiment/project_config.yaml --name=test_onedir --lr=.00005 --batch-size=4 --n-epochs 1 -t --exists-strategy=overwrite
+python main.py train-model --project-config-fp=projects/MT_experiment/project_config.yaml --name=test_segm --lr=.00005 --batch-size=4 --n-epochs 1 --segmentation-based -t --exists-strategy=overwrite
+python main.py train-model --project-config-fp=projects/powdermill_experiment/project_config.yaml --name=test_bidir --lr=.00005 --batch-size=4 --n-epochs 1 --bidirectional -t --exists-strategy=overwrite
+python main.py train-model --project-config-fp=projects/MT_experiment/project_config.yaml --name=demo --lr=.00005 --batch-size=4 --n-epochs 10 --bidirectional --exists-strategy=overwrite
