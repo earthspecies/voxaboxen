@@ -8,15 +8,20 @@ If you use this software in your research, please [cite it](CITATION.cff).
 
 ![19_AL_Naranja_1025_detect](https://github.com/earthspecies/voxaboxen/assets/72874445/c69439c8-509b-4732-8d69-3bb38658ec9a)
 
+### Read the [preprint](https://arxiv.org/pdf/2503.02389)!
+### Get the [data from the preprint](https://zenodo.org/records/15507508)!
+
 ## Installation
 
-Requires `torch > 2.0` and the corresponding version of torchaudio. Other requirements can be installed with `pip install -r requirements.txt`.
+With `uv`, Voxaboxen can be run using `uv run main.py`.
 
-Once cloned, Voxaboxen can be installed with `pip install -e .`.
+Alternatively, install dependencies with `pip install -r requirements.txt` and run using `python main.py`.
+
+To use the [BEATs encoder](https://arxiv.org/abs/2212.09058), you can obtain the weights from [here](https://1drv.ms/u/s!AqeByhGUtINrgcpj8ujXH1YUtxooEg?e=E9Ncea). By default, place this file in `weights`.
 
 ## Quick start
 
-Create a `train_info.csv` file with three columns:
+Create a directory for your data. Add to it a `train_info.csv` file with three columns:
 
 - `fn`: Unique filename associated with each audio file
 - `audio_fp`: Filepaths to audio files in train set
@@ -24,29 +29,44 @@ Create a `train_info.csv` file with three columns:
 
 Repeat this for the other folds of your dataset, creating `val_info.csv` and `test_info.csv`. Run project setup and model training following the template in the Example Usage below.
 
-Notes:
+*Notes:*
 - Audio will be automatically resampled to 16000 Hz mono, no resampling is necessary prior to training.
-- Selection tables are `.tsv` files. We only require the following columns: `Begin Time (s)`, `End Time (s)`, `Annotation`.
+- Selection tables are `.txt` files, with tab-separated columns. We only require the following columns: `Begin Time (s)`, `End Time (s)`, `Annotation`.
 
 ## Example usage:
 
-Get the preprocessed [Meerkat (MT) dataset](https://zenodo.org/record/6012310):
+Get the BEATs weights from the link above. Get the preprocessed [Meerkat (MT) dataset](https://zenodo.org/record/6012310):
 
-`cd datasets/MT; wget https://storage.googleapis.com/esp-public-files/voxaboxen-demo/formatted.zip; unzip formatted.zip; wget https://storage.googleapis.com/esp-public-files/voxaboxen-demo/original_readme_and_license.md`
+`mkdir datasets/MT_demo; wget https://storage.googleapis.com/esp-public-files/voxaboxen-demo/formatted.zip -P datasets/MT_demo; unzip datasets/MT_demo/formatted.zip -d datasets/MT_demo; wget https://storage.googleapis.com/esp-public-files/voxaboxen-demo/original_readme_and_license.md -P datasets/MT_demo`
 
 Project setup:
 
-`python main.py project-setup --train-info-fp=datasets/MT/formatted/train_info.csv --val-info-fp=datasets/MT/formatted/val_info.csv --test-info-fp=datasets/MT/formatted/test_info.csv --project-dir=projects/MT_experiment`
+`uv run main.py project-setup --data-dir=datasets/MT_demo/formatted --project-dir=projects/MT_demo_experiment`
 
 Train model:
 
-`python main.py train-model --project-config-fp=projects/MT_experiment/project_config.yaml --name=demo --lr=.00005 --batch-size=4`
+`uv run main.py train-model --project-config-fp=projects/MT_demo_experiment/project_config.yaml --name=demo --n-epochs=50 --batch-size=4 --encoder-type=beats --beats-checkpoint-fp=weights/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt --bidirectional`
 
 Use trained model to infer annotations:
 
-`python main.py inference --model-args-fp=projects/MT_experiment/demo/params.yaml --file-info-for-inference=datasets/MT/formatted/test_info.csv`
+`python main.py inference --model-args-fp=projects/MT_demo_experiment/demo/params.yaml --file-info-for-inference=datasets/MT_demo/formatted/test_info.csv`
 
-We provide a [Colab Notebook](https://colab.research.google.com/drive/1Qr1PQnw_bSUeXbvHSRuP91Pomxh1hfoi?usp=sharing) with more details about this process.
+## Reproduce the experiments
+
+Obtain the datasets from [here](https://zenodo.org/records/15507508). Place them in the `datasets` directory.
+
+For some datasets, events are above the 8kHz Nyquist frequency of the model. To get around this, we use slowed-down versions of the files. To create slowed-down versions, run `uv run scripts/make_slowed_version.py`
+
+The main experiments from the paper can be reproduced using the shell script `scripts/voxaboxen_experiments.sh`
+
+## Other features
+
+Here are some additional options that can be applied during training:
+
+- Flag `--stereo` accepts stereo audio. Order of channels matters; used for e.g. speaker diarization.
+- Flag `--bidirectional` predicts the ends of events in addition to the beginning, matches starts and ends based on IoU. May improve box regression.
+- Flag `--segmentation-based` switches to a frame-based approach. If used, we recommend putting `--rho=1`.
+- Flag `--mixup` applies mixup augmentation.
 
 ## Editing Project Config
 
@@ -59,15 +79,6 @@ After running `python main.py project-setup`, a `project_config.yaml` file will 
 3. `unknown_label`: This is set to `Unknown` by default. Any sound event labeled with the `unknown_label` will be treated as an event of interest, but the label type of the event will be treated as unknown. This may be desirable when there are vocalizations that are clearly audible, but are difficult for an annotator to identify to species. When the model is trained, it learns to predict a uniform distribution across possible label types whenever it encounters an event with the `unknown_label`. When the model is evaluated, it is not penalized for predicting the label of events which are annotated with the `unknown_label`. The `unknown_label` should not appear in the `label_set`.
 
 For example, say you annotate your audio with the labels Red-eyed Vireo `REVI`, Philidelphia Vireo`PHVI`, and Unsure `REVI/PHVI`. To reflect your uncertainty about `REVI/PHVI`, your `label_set` would include `REVI` and `PHVI`, and your `label_mapping` would include the pairs `REVI: REVI`, `PHVI: PHVI`, and `REVI/PHVI: Unknown`. Alternatively, you could group both types of Vireo together by making your `label_set` only include `Vireo`, and your `label_mapping` include `REVI: Vireo`, `PHVI: Vireo`, `REVI/PHVI: Vireo`.
-
-## Other features
-
-Here are some additional options that can be applied during training:
-
-- Flag `--stereo` accepts stereo audio. Order of channels matters; used for e.g. speaker diarization.
-- Flag `--bidirectional` predicts the ends of events in addition to the beginning, matches starts and ends based on IoU. May improve box regression.
-- Flag `--segmentation-based` switches to a frame-based approach. If used, we recommend putting `--rho=1`.
-- Flag `--mixup` applies mixup augmentation.
 
 ## The name
 

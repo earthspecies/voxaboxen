@@ -26,7 +26,7 @@ for dataset_dir in dataset_dirs:
         print(f"Dataset {dataset_dir} does not exist, skipping")
 
     print(f"Processing {dataset_dir}")
-    new_dataset_dir = dataset_dir + "_halftime"
+    new_dataset_dir = dataset_dir + "_slowed"
 
     if os.path.exists(new_dataset_dir):
         shutil.rmtree(new_dataset_dir)

@@ -51,7 +51,7 @@ def parse_args(
     # Data
     parser.add_argument("--project-config-fp", type=str, required=True)
     parser.add_argument(
-        "--clip-duration", type=float, default=6.0, help="clip duration, in seconds"
+        "--clip-duration", type=float, default=10.0, help="clip duration, in seconds"
     )
     parser.add_argument(
         "--clip-hop",
