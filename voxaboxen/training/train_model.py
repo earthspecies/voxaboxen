@@ -154,6 +154,8 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
                 label_mapping=args.label_mapping,
                 unknown_label=args.unknown_label,
                 bidirectional=args.bidirectional,
+                make_confusion_matrix=True,
+                label_set=args.label_set,
             )
             full_results[f"f1@{iou}"] = test_metrics
             summary_results[f"micro-f1@{iou}"] = test_metrics[best_pred_type]["micro"][

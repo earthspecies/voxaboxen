@@ -442,7 +442,7 @@ def val_epoch(
         - detection_threshold: detection threshold
         - experiment_output_dir: output directory
         - model_selection_iou: IoU threshold for matching during evaluation
-        - model_selection_class_threshold: class threshold
+        - model_selection_class_threshold: deprecated
         - comb_discard_thresh: discard threshold
         - label_mapping: label mappings
         - unknown_label: unknown label name
@@ -464,7 +464,7 @@ def val_epoch(
         output_dir=args.experiment_output_dir,
         iou=args.model_selection_iou,
         det_thresh=args.detection_threshold,
-        class_threshold=args.model_selection_class_threshold,
+        class_threshold=0.0,
         comb_discard_threshold=args.comb_discard_thresh,
         label_mapping=args.label_mapping,
         unknown_label=args.unknown_label,
