@@ -2,7 +2,6 @@
 Functions for creating confusion matrices
 """
 
-import argparse
 import os
 from typing import Dict, List, Tuple
 
@@ -16,7 +15,9 @@ from voxaboxen.evaluation.raven_utils import Clip
 def get_confusion_matrix(
     predictions_fp: str,
     annotations_fp: str,
-    args: argparse.Namespace,
+    label_set: list,
+    label_mapping: dict,
+    unknown_label: str,
     iou: float,
     class_threshold: float,
 ) -> Tuple[np.ndarray, List[str]]:
@@ -28,8 +29,13 @@ def get_confusion_matrix(
         path to predictions selection table
     annotations_fp : str
         path to annotations selection table
-    args : argparse.Namespace
-        Configuration arguments containing model parameters
+    label_set : list
+        list of labels (str) that are used
+    label_mapping: dict
+        keys are entries in the selection table Annotation column,
+        values are labels used by the model
+    unknown_label: str
+        name of the unknown label
     iou : float
         IoU value for matching predictions with annotations
     class_threshold : float
@@ -40,11 +46,11 @@ def get_confusion_matrix(
     confusion_matrix_labels : list
         list of str for confusion matrix labels
     """
-    c = Clip(label_set=args.label_set, unknown_label=args.unknown_label)
+    c = Clip(label_set=label_set, unknown_label=unknown_label)
 
     c.load_predictions(predictions_fp)
     c.threshold_class_predictions(class_threshold)
-    c.load_annotations(annotations_fp, label_mapping=args.label_mapping)
+    c.load_annotations(annotations_fp, label_mapping=label_mapping)
 
     confusion_matrix = {}
 

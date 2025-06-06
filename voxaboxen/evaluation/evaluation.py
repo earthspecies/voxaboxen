@@ -13,6 +13,11 @@ import torch
 import tqdm
 from scipy.signal import find_peaks, medfilt
 
+from voxaboxen.evaluation.conf_mats import (
+    get_confusion_matrix,
+    plot_confusion_matrix,
+    summarize_confusion_matrix,
+)
 from voxaboxen.evaluation.nms import nms, soft_nms
 from voxaboxen.evaluation.raven_utils import Clip
 from voxaboxen.model.model import rms_and_mixup
@@ -1116,6 +1121,8 @@ def evaluate_based_on_manifest(
     comb_iou_thresh: float = 0.5,
     bidirectional: bool = False,
     pred_types: Optional[Union[Tuple[str, ...], Sequence[str]]] = None,
+    make_confusion_matrix: bool = False,
+    label_set: Optional[List] = None,
 ) -> Tuple[Dict[str, Dict], None]:
     """
     Evaluate predictions using manifest file.
@@ -1147,18 +1154,35 @@ def evaluate_based_on_manifest(
         Whether model is bidirectional, by default False
     pred_types : tuple, optional
         Types of predictions to evaluate, by default None
+    make_confusion_matrix: bool
+        Whether to save confusion matrix
+    label_set : Optional[List]
+        List of labels, only used if make_confusion_matrix=True
 
     Returns
     -------
     metrics : dict
         Nested dictionary containing scores for each metric for each pred type
-    confusion_matrix: None
-        Deprecated; TODO re-implement
+    confusion_matrix: dict
+        confusion matrices for different pred types and fp's
+
+    Raises
+    -------
+    ValueError: if make_confusion_matrix is True and label_set is not passed
     """
 
+    if make_confusion_matrix and (label_set is None):
+        raise ValueError("Label Set required if make_confusion_matrix is true")
     if pred_types is None:
         pred_types = ("fwd", "bck", "comb", "match") if bidirectional else ("fwd",)
     metrics = {p: {} for p in pred_types}
+
+    if make_confusion_matrix:
+        conf_mats = {p: {} for p in pred_types}
+        conf_mat_labels = {}
+    else:
+        conf_mats = None
+        conf_mat_labels = None
 
     for _i, row in manifest.iterrows():
         fn = row["filename"]
@@ -1186,15 +1210,40 @@ def evaluate_based_on_manifest(
                 label_mapping,
                 unknown_label,
             )
+            if make_confusion_matrix:
+                conf_mats[pred_type][fn], conf_mat_labels[pred_type] = (
+                    get_confusion_matrix(
+                        preds_fp,
+                        annots_fp,
+                        label_set,
+                        label_mapping,
+                        unknown_label,
+                        iou,
+                        class_threshold,
+                    )
+                )
 
     # summarize and save metrics
+    conf_mat_summaries = {}
     for pred_type in pred_types:
         summary = summarize_metrics(metrics[pred_type])
         metrics[pred_type]["summary"] = summary
         macro, micro = macro_micro_f1_metrics(summary)
         metrics[pred_type]["macro"], metrics[pred_type]["micro"] = macro, micro
+        if make_confusion_matrix:
+            conf_mat_summaries[pred_type], confusion_matrix_labels = (
+                summarize_confusion_matrix(
+                    conf_mats[pred_type], conf_mat_labels[pred_type]
+                )
+            )
+            plot_confusion_matrix(
+                conf_mat_summaries[pred_type].astype(int),
+                confusion_matrix_labels,
+                output_dir,
+                name=f"cm_iou_{iou}_class_threshold_{class_threshold}_{pred_type}",
+            )
 
-    return metrics, None
+    return metrics, conf_mat_summaries
 
 
 def mean_average_precision(

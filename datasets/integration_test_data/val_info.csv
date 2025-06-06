@@ -1,2 +1,2 @@
-fn,audio_fp,selection_table_fp
-1,datasets/integration_test_data/val_audio.wav,datasets/integration_test_data/val_audio.txt
+,fn,audio_fp,selection_table_fp
+0,1,datasets/integration_test_data/val_audio.wav,datasets/integration_test_data/val_audio.txt
