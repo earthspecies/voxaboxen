@@ -1123,6 +1123,7 @@ def evaluate_based_on_manifest(
     pred_types: Optional[Union[Tuple[str, ...], Sequence[str]]] = None,
     make_confusion_matrix: bool = False,
     label_set: Optional[List] = None,
+    split: str = "",
 ) -> Tuple[Dict[str, Dict], None]:
     """
     Evaluate predictions using manifest file.
@@ -1158,6 +1159,8 @@ def evaluate_based_on_manifest(
         Whether to save confusion matrix
     label_set : Optional[List]
         List of labels, only used if make_confusion_matrix=True
+    split : str
+        Name of split (ie test or val)
 
     Returns
     -------
@@ -1240,7 +1243,7 @@ def evaluate_based_on_manifest(
                 conf_mat_summaries[pred_type].astype(int),
                 confusion_matrix_labels,
                 output_dir,
-                name=f"cm_iou_{iou}_class_threshold_{class_threshold}_{pred_type}",
+                name=f"cm_{split}_iou_{iou}_class_threshold_{class_threshold}_{pred_type}",
             )
 
     return metrics, conf_mat_summaries

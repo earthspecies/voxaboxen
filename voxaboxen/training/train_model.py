@@ -156,6 +156,7 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
                 bidirectional=args.bidirectional,
                 make_confusion_matrix=True,
                 label_set=args.label_set,
+                split=split,
             )
             full_results[f"f1@{iou}"] = test_metrics
             summary_results[f"micro-f1@{iou}"] = test_metrics[best_pred_type]["micro"][
@@ -166,41 +167,44 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
             ]
 
         print(f"Time to compute f1s: {time() - eval_starttime:.3f}s")
-        if args.is_test:
-            det_thresh_range = [0.5]
-        elif args.bidirectional:
-            # to make sure the lower range is covered,
-            # sweep fewer overall cus sweep other threshes too
-            det_thresh_range = np.concatenate(
-                [
-                    np.linspace(0.001, 0.2, args.n_map // 3),
-                    np.linspace(0.21, 0.7, args.n_map // 3),
-                ]
-            )
-        else:
-            det_thresh_range = np.linspace(0.01, 0.99, args.n_map)
-        manifests_by_thresh = predict_and_generate_manifest(
-            model, test_dataloader, args, det_thresh_range, verbose=False
-        )
 
-        map_starttime = time()
-        for iou in [0.5, 0.8]:
-            if split == "val" and iou == 0.8:
-                continue
-            (
-                summary_results[f"mean_ap@{iou}"],
-                full_results[f"mAP@{iou}"],
-                full_results[f"ap_by_class@{iou}"],
-            ) = mean_average_precision(
-                manifests_by_thresh=manifests_by_thresh,
-                label_mapping=args.label_mapping,
-                exp_dir=experiment_dir,
-                iou=iou,
-                pred_type=best_pred_type,
-                bidirectional=args.bidirectional,
-                comb_iou_thresh=best_comb_iou,
-                is_test=args.is_test,
+        if args.n_map > 0:
+            if args.is_test:
+                det_thresh_range = [0.5]
+            elif args.bidirectional:
+                # to make sure the lower range is covered,
+                # sweep fewer overall cus sweep other threshes too
+                det_thresh_range = np.concatenate(
+                    [
+                        np.linspace(0.001, 0.2, args.n_map // 3),
+                        np.linspace(0.21, 0.7, args.n_map // 3),
+                    ]
+                )
+            else:
+                det_thresh_range = np.linspace(0.01, 0.99, args.n_map)
+            manifests_by_thresh = predict_and_generate_manifest(
+                model, test_dataloader, args, det_thresh_range, verbose=False
             )
+
+            map_starttime = time()
+            for iou in [0.5, 0.8]:
+                if split == "val" and iou == 0.8:
+                    continue
+                (
+                    summary_results[f"mean_ap@{iou}"],
+                    full_results[f"mAP@{iou}"],
+                    full_results[f"ap_by_class@{iou}"],
+                ) = mean_average_precision(
+                    manifests_by_thresh=manifests_by_thresh,
+                    label_mapping=args.label_mapping,
+                    exp_dir=experiment_dir,
+                    iou=iou,
+                    pred_type=best_pred_type,
+                    bidirectional=args.bidirectional,
+                    comb_iou_thresh=best_comb_iou,
+                    is_test=args.is_test,
+                )
+            print(f"time to compute mAP: {time() - map_starttime:.3f}")
 
         with open(
             os.path.join(args.experiment_dir, f"{split}_full_results.json"), "w"
@@ -210,7 +214,6 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
         with open(os.path.join(args.experiment_dir, f"{split}_results.yaml"), "w") as f:
             yaml.dump(summary_results, f)
 
-        print(f"time to compute mAP: {time() - map_starttime:.3f}")
         print(" ".join(f"{k}: {v:.5f}" for k, v in summary_results.items()))
     shutil.rmtree(match_cache_dir)
     torch.save(model.state_dict(), os.path.join(args.experiment_dir, "final-model.pt"))

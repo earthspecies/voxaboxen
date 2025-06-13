@@ -275,7 +275,7 @@ def parse_args(
     parser.add_argument(
         "--n-map",
         type=int,
-        default=30,
+        default=0,
         help="number of detection_thresholds to sweep "
         "when calculating mean average precision",
     )
@@ -408,16 +408,15 @@ def check_config(args: argparse.Namespace) -> None:
         "Must pick clip duration to ensure no rounding errors during inference"
     )
     if args.segmentation_based and (args.rho != 1):
+        args.rho = 1
         import warnings
 
         warnings.warn(
-            "when using segmentation-based framework, recommend setting args.rho=1",
+            "setting args.rho=1 since using segmentation-based framework",
             stacklevel=2,
         )
     if args.bidirectional and args.segmentation_based:
-        raise ValueError(
-            "bidirectional and segmentation settings are not currently compatible"
-        )
+        raise ValueError("bidirectional and segmentation settings are not compatible")
     if args.encoder_type == "aves":
         assert args.scale_factor == 320, "AVES requires scale-factor == 320"
     elif args.encoder_type == "hubert_base":
