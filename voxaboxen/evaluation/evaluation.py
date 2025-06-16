@@ -1298,7 +1298,7 @@ def mean_average_precision(
     """
 
     # first loop through thresholds to gather all results
-    scores_by_class = {c: [] for c in label_mapping.keys()}
+    scores_by_class = {c: [] for c in label_set}
     experiment_output_dir = os.path.join(exp_dir, "outputs")
     if bidirectional:
         comb_discard_threshes_to_sweep = [0.5] if is_test else np.linspace(0, 0.99, 30)
@@ -1330,7 +1330,7 @@ def mean_average_precision(
 
     # now loop through classes to calculate APs
     ap_by_class = {}
-    map_results = {c: {} for c in label_mapping.keys()}
+    map_results = {c: {} for c in label_set}
     for c, sweep_ in scores_by_class.items():
         sweep = pd.DataFrame(sweep_)  # .sort_values('recall')
         # exclude cases where all TNs because they give weird f-scores
