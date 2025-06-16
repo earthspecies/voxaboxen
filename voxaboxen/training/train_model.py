@@ -166,6 +166,12 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
             summary_results[f"macro-f1@{iou}"] = test_metrics[best_pred_type]["macro"][
                 "f1"
             ]
+            summary_results[f"seg-micro-f1@{iou}"] = test_metrics[best_pred_type][
+                "micro"
+            ]["f1_seg"]
+            summary_results[f"seg-macro-f1@{iou}"] = test_metrics[best_pred_type][
+                "macro"
+            ]["f1_seg"]
 
         print(f"Time to compute f1s: {time() - eval_starttime:.3f}s")
 
