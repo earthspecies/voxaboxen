@@ -18,6 +18,7 @@ def main() -> None:
         "--name=test_bidir",
         "--lr=.00005",
         "--batch-size=1",
+        "--n-map=10",
         "--n-epochs",
         "1",
         "--bidirectional",

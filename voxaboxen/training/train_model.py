@@ -107,6 +107,7 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
                     comb_discard_threshold=comb_discard,
                     comb_iou_thresh=comb_iou,
                     label_mapping=args.label_mapping,
+                    label_set=args.label_set,
                     unknown_label=args.unknown_label,
                     bidirectional=args.bidirectional,
                     pred_types=(best_pred_type,),
@@ -152,10 +153,10 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
                 comb_discard_threshold=best_comb_discard,
                 comb_iou_thresh=best_comb_iou,
                 label_mapping=args.label_mapping,
+                label_set=args.label_set,
                 unknown_label=args.unknown_label,
                 bidirectional=args.bidirectional,
                 make_confusion_matrix=True,
-                label_set=args.label_set,
                 split=split,
             )
             full_results[f"f1@{iou}"] = test_metrics
@@ -165,6 +166,12 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
             summary_results[f"macro-f1@{iou}"] = test_metrics[best_pred_type]["macro"][
                 "f1"
             ]
+            summary_results[f"seg-micro-f1@{iou}"] = test_metrics[best_pred_type][
+                "micro"
+            ]["f1_seg"]
+            summary_results[f"seg-macro-f1@{iou}"] = test_metrics[best_pred_type][
+                "macro"
+            ]["f1_seg"]
 
         print(f"Time to compute f1s: {time() - eval_starttime:.3f}s")
 
@@ -197,6 +204,7 @@ def train_model(args: Union[argparse.Namespace, List[str]]) -> None:
                 ) = mean_average_precision(
                     manifests_by_thresh=manifests_by_thresh,
                     label_mapping=args.label_mapping,
+                    label_set=args.label_set,
                     exp_dir=experiment_dir,
                     iou=iou,
                     pred_type=best_pred_type,

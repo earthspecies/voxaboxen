@@ -467,6 +467,7 @@ def val_epoch(
         class_threshold=0.0,
         comb_discard_threshold=args.comb_discard_thresh,
         label_mapping=args.label_mapping,
+        label_set=args.label_set,
         unknown_label=args.unknown_label,
         bidirectional=args.bidirectional,
     )

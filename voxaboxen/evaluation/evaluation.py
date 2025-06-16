@@ -102,6 +102,7 @@ def get_metrics(
     class_threshold: float,
     duration: float,
     label_mapping: Dict[str, str],
+    label_set: list,
     unknown_label: str,
 ) -> Dict[str, Dict[str, int]]:
     """
@@ -123,6 +124,8 @@ def get_metrics(
         Duration of audio clip in seconds
     label_mapping : dict
         Mapping between annotation labels and model classes
+    label_set: list
+        List of labels used
     unknown_label : str
         Label to use for unknown classes
 
@@ -134,7 +137,6 @@ def get_metrics(
         from segmentation-based matching.
     """
 
-    label_set = list(label_mapping.keys())
     c = Clip(label_set=label_set, unknown_label=unknown_label)
     c.duration = duration
     c.load_predictions(predictions_fp)
@@ -1115,6 +1117,7 @@ def evaluate_based_on_manifest(
     iou: float,
     class_threshold: float,
     label_mapping: Dict[str, str],
+    label_set: List,
     unknown_label: str,
     det_thresh: float,
     comb_discard_threshold: float = 0,
@@ -1122,7 +1125,6 @@ def evaluate_based_on_manifest(
     bidirectional: bool = False,
     pred_types: Optional[Union[Tuple[str, ...], Sequence[str]]] = None,
     make_confusion_matrix: bool = False,
-    label_set: Optional[List] = None,
     split: str = "",
 ) -> Tuple[Dict[str, Dict], None]:
     """
@@ -1140,6 +1142,8 @@ def evaluate_based_on_manifest(
         Confidence threshold for class predictions
     label_mapping : dict
         Mapping between annotation labels and model classes
+    label_set : List
+        List of labels
     unknown_label : str
         Label to use for unknown classes
     det_thresh : float
@@ -1157,8 +1161,6 @@ def evaluate_based_on_manifest(
         Types of predictions to evaluate, by default None
     make_confusion_matrix: bool
         Whether to save confusion matrix
-    label_set : Optional[List]
-        List of labels, only used if make_confusion_matrix=True
     split : str
         Name of split (ie test or val)
 
@@ -1168,14 +1170,8 @@ def evaluate_based_on_manifest(
         Nested dictionary containing scores for each metric for each pred type
     confusion_matrix: dict
         confusion matrices for different pred types and fp's
-
-    Raises
-    -------
-    ValueError: if make_confusion_matrix is True and label_set is not passed
     """
 
-    if make_confusion_matrix and (label_set is None):
-        raise ValueError("Label Set required if make_confusion_matrix is true")
     if pred_types is None:
         pred_types = ("fwd", "bck", "comb", "match") if bidirectional else ("fwd",)
     metrics = {p: {} for p in pred_types}
@@ -1211,6 +1207,7 @@ def evaluate_based_on_manifest(
                 class_threshold,
                 duration,
                 label_mapping,
+                label_set,
                 unknown_label,
             )
             if make_confusion_matrix:
@@ -1252,6 +1249,7 @@ def evaluate_based_on_manifest(
 def mean_average_precision(
     manifests_by_thresh: Dict[float, pd.DataFrame],
     label_mapping: Dict[str, str],
+    label_set: List,
     exp_dir: str,
     iou: float = 0.5,
     pred_type: str = "fwd",
@@ -1269,6 +1267,8 @@ def mean_average_precision(
         Dictionary mapping thresholds to prediction manifests
     label_mapping : dict
         Mapping between annotation labels and model classes
+    label_set: list
+        List of labels used
     exp_dir : str
         Experiment directory
     iou : float, optional
@@ -1298,7 +1298,7 @@ def mean_average_precision(
     """
 
     # first loop through thresholds to gather all results
-    scores_by_class = {c: [] for c in label_mapping.keys()}
+    scores_by_class = {c: [] for c in label_set}
     experiment_output_dir = os.path.join(exp_dir, "outputs")
     if bidirectional:
         comb_discard_threshes_to_sweep = [0.5] if is_test else np.linspace(0, 0.99, 30)
@@ -1318,6 +1318,7 @@ def mean_average_precision(
                     comb_discard_threshold=cdt,
                     comb_iou_thresh=cit,
                     label_mapping=label_mapping,
+                    label_set=label_set,
                     unknown_label="Unknown",
                     bidirectional=bidirectional,
                     pred_types=(pred_type,),
@@ -1329,7 +1330,7 @@ def mean_average_precision(
 
     # now loop through classes to calculate APs
     ap_by_class = {}
-    map_results = {c: {} for c in label_mapping.keys()}
+    map_results = {c: {} for c in label_set}
     for c, sweep_ in scores_by_class.items():
         sweep = pd.DataFrame(sweep_)  # .sort_values('recall')
         # exclude cases where all TNs because they give weird f-scores
