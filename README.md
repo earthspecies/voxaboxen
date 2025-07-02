@@ -17,7 +17,7 @@ With `uv`, Voxaboxen can be run using `uv run main.py`.
 
 Alternatively, install dependencies with `pip install -r requirements.txt` and run using `python main.py`.
 
-To use the [BEATs encoder](https://arxiv.org/abs/2212.09058), you can obtain the weights from [here](https://1drv.ms/u/s!AqeByhGUtINrgcpj8ujXH1YUtxooEg?e=E9Ncea). By default, place this file in `weights`.
+To use the [BEATs encoder](https://arxiv.org/abs/2212.09058), you can obtain the weights from [here](https://1drv.ms/u/s!AqeByhGUtINrgcpj8ujXH1YUtxooEg?e=E9Ncea). To use the [Frame-ATST encoder](https://arxiv.org/abs/2306.04186), you can obtain the weights from [here](https://drive.google.com/file/d/1bGJSZWlAIIJ6GL5Id5dW0PTB72DL-QDQ/view?usp=sharing). Place these file in `weights`.
 
 ## Quick start
 
