@@ -226,9 +226,11 @@ def rms_and_mixup(
 
     if args.mixup and train:
         # TODO: For mixup, add in a check that there aren't extremely overlapping vocs
+        # TODO: Add mixup hyperparam
 
-        mask = torch.full((X.size(0), 1, 1), 0.5, device=X.device)
-        mask = torch.bernoulli(mask)
+        mask1 = torch.ones((X.size(0) // 2, 1, 1), device=X.device)
+        mask0 = torch.zeros((X.size(0) - X.size(0) // 2, 1, 1), device=X.device)
+        mask = torch.concatenate([mask0, mask1], dim=0)
 
         if len(X.size()) == 2:
             X_aug = torch.flip(X, (0,)) * mask[:, :, 0]
