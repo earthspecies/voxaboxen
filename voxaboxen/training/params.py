@@ -145,6 +145,8 @@ def parse_args(
         "--frame-atst-weight-fp", type=str, default="weights/atstframe_base.ckpt"
     )
     # BEATs
+    # Accepts the original BEATs checkpoint or a sound-event-detection FrameDetector
+    # checkpoint (auto-detected). For the SED backbone, run with --sr 32000.
     parser.add_argument(
         "--beats-checkpoint-fp",
         type=str,

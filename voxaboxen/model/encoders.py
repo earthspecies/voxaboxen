@@ -221,9 +221,34 @@ class BEATsEncoder(EncoderBase):
         from voxaboxen.model.beats import BEATs, BEATsConfig
 
         beats_ckpt = torch.load(args.beats_checkpoint_fp, map_location="cpu")
-        beats_cfg = BEATsConfig(beats_ckpt["cfg"])
+        if "cfg" in beats_ckpt:
+            beats_cfg = BEATsConfig(beats_ckpt["cfg"])
+            beats_state = beats_ckpt["model"]
+        else:
+            # Sound-event-detection FrameDetector checkpoint: keep only the BEATs
+            # backbone (SSL config; no "cfg" is stored), renaming pos_conv's weight_norm
+            # params to the weight_g/weight_v names this BEATs expects. Feed 32kHz audio.
+            beats_cfg = BEATsConfig(
+                {
+                    "input_patch_size": 16,
+                    "deep_norm": True,
+                    "gru_rel_pos": True,
+                    "relative_position_embedding": True,
+                    "max_distance": 800,
+                    "encoder_layerdrop": 0.05,
+                    "dropout_input": 0.1,
+                }
+            )
+            p = "encoder._model.backbone."
+            beats_state = {
+                k[len(p) :]
+                .replace(".parametrizations.weight.original0", ".weight_g")
+                .replace(".parametrizations.weight.original1", ".weight_v"): v
+                for k, v in beats_ckpt["model_state_dict"].items()
+                if k.startswith(p)
+            }
         self.beats = BEATs(beats_cfg)
-        self.beats.load_state_dict(beats_ckpt["model"])
+        self.beats.load_state_dict(beats_state)
         self.embedding_dim = self.beats.cfg.encoder_embed_dim
 
     def forward(self, x: Tensor) -> Tensor:
