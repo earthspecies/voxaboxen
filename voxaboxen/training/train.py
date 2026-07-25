@@ -154,8 +154,6 @@ def train(model: torch.nn.Module, args: argparse.Namespace) -> torch.nn.Module:
                     os.path.join(args.experiment_dir, "model.pt"),
                 )
 
-
-
     print("Done!")
 
     if best_f1 > 0:
