@@ -154,20 +154,7 @@ def train(model: torch.nn.Module, args: argparse.Namespace) -> torch.nn.Module:
                     os.path.join(args.experiment_dir, "model.pt"),
                 )
 
-            else:
-                checkpoint_dict = {
-                    "epoch": t,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "scheduler_state_dict": scheduler.state_dict(),
-                    "train_evals": train_evals,
-                    "val_evals": val_evals,
-                }
 
-                torch.save(
-                    checkpoint_dict,
-                    os.path.join(args.experiment_dir, "model.pt"),
-                )
 
     print("Done!")
 
